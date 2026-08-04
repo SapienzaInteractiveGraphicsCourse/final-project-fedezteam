@@ -13,6 +13,7 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Ludwig**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/ludwig-mario-kart-8-deluxe-be487b04ad6446e08b04d1b05ebb34b5)
 - **Morton**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/morton-mario-kart-8-deluxe-b8f6ab968f7a423f89593d13db42825d)
 - **Roy**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/roy-mario-kart-8-deluxe-a990835bfc994b61a58b669c7acad84e)
+- **Kamek**: Created by [taej11503](https://sketchfab.com/taej11503) — [Model Link](https://sketchfab.com/3d-models/mario-party-5-kamek-7affecb01c6346c59c3ab5a47d1d8dd5)
 
 ### Items, Blocks & Vehicles
 - **Brick Block**: Created by [Artise1](https://sketchfab.com/Artise1) — [Model Link](https://sketchfab.com/3d-models/mario-brick-block-a104c8ee588d4670ba5cd621bddb94c8)
@@ -20,3 +21,6 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Coin**: Created by [hellonintendo8](https://sketchfab.com/hellonintendo8) — [Model Link](https://sketchfab.com/3d-models/coin-2d814553c1f64fbd9550d4f7af25dd32)
 - **Fire Flower**: Created by [Yanez-Designs](https://sketchfab.com/Yanez-Designs) — [Model Link](https://sketchfab.com/3d-models/fire-flower-super-mario-bros-1465bc069efa437b999669c6db5a01ee)
 - **Go-Kart**: Created by [SamuelTea](https://sketchfab.com/SamuelTea) — [Model Link](https://sketchfab.com/3d-models/go-kart-2338810f0b1e444bace9bd7796b8c9e4)
+- **Star**: Created by [jkimmel694](https://sketchfab.com/jkimmel694) — [Model Link](https://sketchfab.com/3d-models/wii-mario-kart-wii-star-605d03622b334f4695ee7fa5a00d9dc9)
+- **Super Mushroom**: Created by [smarthug](https://sketchfab.com/smarthug) — [Model Link](https://sketchfab.com/3d-models/mario-super-mushroom-bfecb0aee2984ddca543ea90dcb270cc)
+- **Yoshi Egg**: Created by [Yanez-Designs](https://sketchfab.com/Yanez-Designs) — [Model Link](https://sketchfab.com/3d-models/yoshi-egg-2125c39434ed4b3696bdff0a0bdb6fb2)
