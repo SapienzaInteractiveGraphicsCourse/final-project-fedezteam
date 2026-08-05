@@ -44,6 +44,10 @@ const hudHeroName = document.getElementById('hud-hero-name');
 const btnMario = document.getElementById('btn-mario');
 const btnLuigi = document.getElementById('btn-luigi');
 
+// 4. Orologio per calcolare il Delta Time tra i frame, e risolvere 
+// eventuali problemi di frame rate variabile
+const clock = new THREE.Clock();
+
 // Seleziona Mario
 btnMario.addEventListener('click', () => {
   selectedCharacter = 'mario';
@@ -215,13 +219,14 @@ function equalizeLuigiScale() {
 const models = { mario: null, luigi: null };
 let player = null;
 
-const moveSpeed = 0.6;
-let velocityY = 0;
-const gravity = -0.015;
-const jumpStrength = 0.5;
-let isJumping = false;
+// Velocità espresse al SECONDO (non più per frame)
+const moveSpeed = 35;        // Unità spostate in 1 secondo
+const jumpStrength = 22;     // Forza dell'impulso verso l'alto
+const gravity = -60;         // Accelerazione di gravità verso il basso
 
-const groundY = 50;
+let velocityY = 0;
+let isJumping = false;
+const groundY = 50; //[cite: 2]
 
 // Carica Mario (Inalterato, orientamento nativo)
 loader.load(
@@ -273,70 +278,71 @@ window.addEventListener('keyup', (e) => {
 });
 
 // 6. Aggiornamento Scena e Telecamera
-function updateGame() {
+function updateGame(delta) {
 
   // --- TELECAMERA DURANTE I MENÙ ---
-  if (gameState === 'MENU_WELCOME' || gameState === 'MENU_NAME') {
-    menuCameraAngle += 0.005;
-    const radius = 25;
-    camera.position.x = -20 + Math.sin(menuCameraAngle) * radius;
-    camera.position.z = 250 + Math.cos(menuCameraAngle) * radius;
-    camera.position.y = groundY + 10;
-    camera.lookAt(-20, groundY + 2, 250);
+  if (gameState === 'MENU_WELCOME' || gameState === 'MENU_NAME') { //[cite: 2]
+    menuCameraAngle += 0.5 * delta; // Ruota a velocità costante
+    const radius = 25; //[cite: 2]
+    camera.position.x = -20 + Math.sin(menuCameraAngle) * radius; //[cite: 2]
+    camera.position.z = 250 + Math.cos(menuCameraAngle) * radius; //[cite: 2]
+    camera.position.y = groundY + 10; //[cite: 2]
+    camera.lookAt(-20, groundY + 2, 250); //[cite: 2]
     return;
   }
 
-  if (!player) return;
+  if (!player) return; //[cite: 2]
 
   // --- LOGICA DURANTE IL GIOCO ---
   let moved = false;
-  let targetRotation = player.rotation.y;
+  let targetRotation = player.rotation.y; //[cite: 2]
 
-  // --- MOVIMENTO ORIZZONTALE NATIVO ---
-  if (keys['w'] || keys['arrowup']) {
-    player.position.z -= moveSpeed;
-    targetRotation = -Math.PI / 2;   // ⬆️ AVANTI
+  // MOLTIPLICHIAMO IL MOVIMENTO PER DELTA
+  const actualMove = moveSpeed * delta;
+
+  if (keys['w'] || keys['arrowup']) { //[cite: 2]
+    player.position.z -= actualMove;
+    targetRotation = -Math.PI / 2; //[cite: 2]
     moved = true;
   }
-  if (keys['s'] || keys['arrowdown']) {
-    player.position.z += moveSpeed;
-    targetRotation = Math.PI / 2;    // ⬇️ INDIETRO
+  if (keys['s'] || keys['arrowdown']) { //[cite: 2]
+    player.position.z += actualMove;
+    targetRotation = Math.PI / 2; //[cite: 2]
     moved = true;
   }
-  if (keys['a'] || keys['arrowleft']) {
-    player.position.x -= moveSpeed;
-    targetRotation = 0;              // ⬅️ SINISTRA
+  if (keys['a'] || keys['arrowleft']) { //[cite: 2]
+    player.position.x -= actualMove;
+    targetRotation = 0; //[cite: 2]
     moved = true;
   }
-  if (keys['d'] || keys['arrowright']) {
-    player.position.x += moveSpeed;
-    targetRotation = Math.PI;        // ➡️ DESTRA
+  if (keys['d'] || keys['arrowright']) { //[cite: 2]
+    player.position.x += actualMove;
+    targetRotation = Math.PI; //[cite: 2]
     moved = true;
   }
 
   if (moved) {
-    player.rotation.y = targetRotation;
+    player.rotation.y = targetRotation; //[cite: 2]
   }
 
-  // Fisica Salto
-  if (isJumping || player.position.y > groundY) {
-    player.position.y += velocityY;
-    velocityY += gravity;
+  // --- FISICA SALTO CON DELTA TIME ---
+  if (isJumping || player.position.y > groundY) { //[cite: 2]
+    player.position.y += velocityY * delta;
+    velocityY += gravity * delta; // La gravità accelera nel tempo
 
-    if (player.position.y <= groundY) {
-      player.position.y = groundY;
-      velocityY = 0;
-      isJumping = false;
+    if (player.position.y <= groundY) { //[cite: 2]
+      player.position.y = groundY; //[cite: 2]
+      velocityY = 0; //[cite: 2]
+      isJumping = false; //[cite: 2]
     }
   }
 
   // Telecamera Inseguimento
-  camera.position.x = player.position.x;
-  camera.position.y = player.position.y + 4;
-  camera.position.z = player.position.z + 8;
-  camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+  camera.position.x = player.position.x; //[cite: 2]
+  camera.position.y = player.position.y + 4; //[cite: 2]
+  camera.position.z = player.position.z + 8; //[cite: 2]
+  camera.lookAt(player.position.x, player.position.y + 1, player.position.z); //[cite: 2]
 }
-
 // 7. Resize Finestra
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -345,10 +351,16 @@ window.addEventListener('resize', () => {
 });
 
 // 8. Game Loop
+// 8. Game Loop
 function animate() {
   requestAnimationFrame(animate);
-  updateGame();
-  renderer.render(scene, camera);
+
+  // Ottiene il tempo trascorso dall'ultimo frame (in secondi)
+  // Usiamo Math.min per evitare che il personaggio "salti" via se la scheda cambia scheda o lagga
+  const delta = Math.min(clock.getDelta(), 0.1);
+
+  updateGame(delta);
+  renderer.render(scene, camera); //[cite: 2]
 }
 
-animate();
+animate(); //[cite: 2]s
