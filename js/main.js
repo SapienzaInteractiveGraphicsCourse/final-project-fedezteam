@@ -40,6 +40,7 @@ const startBtn = document.getElementById('start-btn');
 const continueBtn = document.getElementById('continue-btn');
 const heroNameInput = document.getElementById('hero-name-input');
 const hudHeroName = document.getElementById('hud-hero-name');
+const hudCharIcon = document.getElementById('hud-char-icon');
 
 const btnMario = document.getElementById('btn-mario');
 const btnLuigi = document.getElementById('btn-luigi');
@@ -76,13 +77,20 @@ function startGame() {
   const defaultName = selectedCharacter === 'mario' ? 'MARIO' : 'LUIGI';
   hudHeroName.textContent = enteredName !== '' ? enteredName : defaultName;
 
+  // 🖼️ Imposta l'icona nell'HUD a seconda del personaggio scelto
+  if (hudCharIcon) {
+    hudCharIcon.src = selectedCharacter === 'mario' 
+      ? 'assets/images/mario-icon.png' 
+      : 'assets/images/luigi-icon.png';
+  }
+
+  // Cambia il colore del nome (Rosso per Mario, Verde per Luigi)
+  hudHeroName.style.color = selectedCharacter === 'mario' ? '#e52521' : '#43b047';
+
   if (models[selectedCharacter]) {
     player = models[selectedCharacter];
     player.position.set(-20, groundY, 250);
-    
-    // 🔄 ORIENTAMENTO NATIVO DI MARIO (Guarda in avanti verso l'interno mappa)
-    player.rotation.y = -Math.PI / 2; 
-    
+    player.rotation.y = -Math.PI / 2;
     scene.add(player);
   }
 
