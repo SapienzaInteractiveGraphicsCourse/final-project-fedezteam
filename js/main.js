@@ -1,8 +1,8 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // 1. Scena, Telecamera e Renderer
-const canvas = document.querySelector('#webgl-canvas');
+const canvas = document.querySelector("#webgl-canvas");
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 
@@ -10,7 +10,7 @@ const camera = new THREE.PerspectiveCamera(
   60,
   window.innerWidth / window.innerHeight,
   1,
-  1000
+  1000,
 );
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -28,64 +28,66 @@ dirLight.castShadow = true;
 scene.add(dirLight);
 
 // 3. Gestione Stati e Interfaccia
-let gameState = 'MENU_WELCOME'; // 'MENU_WELCOME', 'MENU_NAME', 'PLAYING'
-let selectedCharacter = 'mario'; // 'mario' oppure 'luigi'
+let gameState = "MENU_WELCOME"; // 'MENU_WELCOME', 'MENU_NAME', 'PLAYING'
+let selectedCharacter = "mario"; // 'mario' oppure 'luigi'
 let menuCameraAngle = 0;
 
-const welcomeScreen = document.getElementById('welcome-screen');
-const nameScreen = document.getElementById('name-screen');
-const hud = document.getElementById('hud');
+const welcomeScreen = document.getElementById("welcome-screen");
+const nameScreen = document.getElementById("name-screen");
+const hud = document.getElementById("hud");
 
-const startBtn = document.getElementById('start-btn');
-const continueBtn = document.getElementById('continue-btn');
-const heroNameInput = document.getElementById('hero-name-input');
-const hudHeroName = document.getElementById('hud-hero-name');
-const hudCharIcon = document.getElementById('hud-char-icon');
+const startBtn = document.getElementById("start-btn");
+const continueBtn = document.getElementById("continue-btn");
+const heroNameInput = document.getElementById("hero-name-input");
+const hudHeroName = document.getElementById("hud-hero-name");
+const hudCharIcon = document.getElementById("hud-char-icon");
 
-const btnMario = document.getElementById('btn-mario');
-const btnLuigi = document.getElementById('btn-luigi');
+const btnMario = document.getElementById("btn-mario");
+const btnLuigi = document.getElementById("btn-luigi");
 
-// 4. Orologio per calcolare il Delta Time tra i frame, e risolvere 
+// 4. Orologio per calcolare il Delta Time tra i frame, e risolvere
 // eventuali problemi di frame rate variabile
 const clock = new THREE.Clock();
 
 // Seleziona Mario
-btnMario.addEventListener('click', () => {
-  selectedCharacter = 'mario';
-  btnMario.className = 'char-card selected-mario';
-  btnLuigi.className = 'char-card';
+btnMario.addEventListener("click", () => {
+  selectedCharacter = "mario";
+  btnMario.className = "char-card selected-mario";
+  btnLuigi.className = "char-card";
 });
 
 // Seleziona Luigi
-btnLuigi.addEventListener('click', () => {
-  selectedCharacter = 'luigi';
-  btnLuigi.className = 'char-card selected-luigi';
-  btnMario.className = 'char-card';
+btnLuigi.addEventListener("click", () => {
+  selectedCharacter = "luigi";
+  btnLuigi.className = "char-card selected-luigi";
+  btnMario.className = "char-card";
 });
 
 // Step 1 -> Step 2
-startBtn.addEventListener('click', () => {
-  gameState = 'MENU_NAME';
-  welcomeScreen.style.display = 'none';
-  nameScreen.style.display = 'flex';
+startBtn.addEventListener("click", () => {
+  gameState = "MENU_NAME";
+  welcomeScreen.style.display = "none";
+  nameScreen.style.display = "flex";
   heroNameInput.focus();
 });
 
 // Step 2 -> Avvio Gioco
 function startGame() {
   const enteredName = heroNameInput.value.trim().toUpperCase();
-  const defaultName = selectedCharacter === 'mario' ? 'MARIO' : 'LUIGI';
-  hudHeroName.textContent = enteredName !== '' ? enteredName : defaultName;
+  const defaultName = selectedCharacter === "mario" ? "MARIO" : "LUIGI";
+  hudHeroName.textContent = enteredName !== "" ? enteredName : defaultName;
 
   // 🖼️ Imposta l'icona nell'HUD a seconda del personaggio scelto
   if (hudCharIcon) {
-    hudCharIcon.src = selectedCharacter === 'mario' 
-      ? 'assets/images/mario-icon.png' 
-      : 'assets/images/luigi-icon.png';
+    hudCharIcon.src =
+      selectedCharacter === "mario"
+        ? "assets/images/mario-icon.png"
+        : "assets/images/luigi-icon.png";
   }
 
   // Cambia il colore del nome (Rosso per Mario, Verde per Luigi)
-  hudHeroName.style.color = selectedCharacter === 'mario' ? '#e52521' : '#43b047';
+  hudHeroName.style.color =
+    selectedCharacter === "mario" ? "#e52521" : "#43b047";
 
   if (models[selectedCharacter]) {
     player = models[selectedCharacter];
@@ -94,16 +96,16 @@ function startGame() {
     scene.add(player);
   }
 
-  gameState = 'PLAYING';
-  nameScreen.style.display = 'none';
-  hud.style.display = 'flex';
+  gameState = "PLAYING";
+  nameScreen.style.display = "none";
+  hud.style.display = "flex";
 }
 
-continueBtn.addEventListener('click', startGame);
+continueBtn.addEventListener("click", startGame);
 
-heroNameInput.addEventListener('keydown', (e) => {
+heroNameInput.addEventListener("keydown", (e) => {
   e.stopPropagation();
-  if (e.key === 'Enter') {
+  if (e.key === "Enter") {
     startGame();
   }
 });
@@ -120,22 +122,24 @@ function setupModelProperties(model) {
       child.receiveShadow = true;
 
       if (child.material) {
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        const materials = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
 
         materials.forEach((mat) => {
           const matName = mat.name.toLowerCase();
 
           // 2. GESTIONE OCCHI (Sia bulbo 'eye_m' che pupilla 'eye_m_0')
-          if (matName.includes('eye')) {
+          if (matName.includes("eye")) {
             mat.visible = true;
-            mat.transparent = true;  // Essenziale affinché la pupilla non copra il bianco attorno a sé
-            mat.depthWrite = false;  // Evita che il bianco e la pupilla si compenetrino (bug grafico)
-            mat.alphaTest = 0.1;     // Ritaglia i bordi trasparenti della texture
-            
+            mat.transparent = true; // Essenziale affinché la pupilla non copra il bianco attorno a sé
+            mat.depthWrite = false; // Evita che il bianco e la pupilla si compenetrino (bug grafico)
+            mat.alphaTest = 0.1; // Ritaglia i bordi trasparenti della texture
+
             // LA MAGIA È QUI: Disattiviamo le ombre per gli occhi!
             // Era l'ombra della pupilla proiettata sull'occhio a farlo sembrare "chiuso".
-            child.castShadow = false; 
-          } 
+            child.castShadow = false;
+          }
           // 3. RESTO DEL CORPO (Pelle, scarpe, guscio solidi)
           else {
             mat.visible = true;
@@ -156,7 +160,7 @@ function setupModelProperties(model) {
   });
 }
 // --- CARICAMENTO MAPPA ---
-const mapPath = 'assets/models/Others/map.glb';
+const mapPath = "assets/models/Others/map.glb";
 
 loader.load(
   mapPath,
@@ -183,13 +187,13 @@ loader.load(
     scene.add(map);
   },
   undefined,
-  (error) => console.error('Errore caricamento mappa:', error)
+  (error) => console.error("Errore caricamento mappa:", error),
 );
 
 // --- CARICAMENTO YOSHI ---
 let yoshiModel = null;
 loader.load(
-  'assets/models/Super_Mario/Mounts/yoshi_ride.glb',
+  "assets/models/Super_Mario/Mounts/yoshi_ride.glb",
   (gltf) => {
     yoshiModel = gltf.scene;
     setupModelProperties(yoshiModel);
@@ -199,10 +203,10 @@ loader.load(
     yoshiModel.rotation.y = 0; // Orientato verso il giocatore
 
     scene.add(yoshiModel);
-    console.log('Yoshi caricato nella mappa!');
+    console.log("Yoshi caricato nella mappa!");
   },
   undefined,
-  (error) => console.error('Errore caricamento Yoshi:', error)
+  (error) => console.error("Errore caricamento Yoshi:", error),
 );
 
 // Funzione per calcolare l'altezza esatta di un modello 3D
@@ -220,7 +224,9 @@ function equalizeLuigiScale() {
 
   const scaleFactor = marioHeight / luigiHeight;
   models.luigi.scale.set(scaleFactor, scaleFactor, scaleFactor);
-  console.log(`Luigi scalato con successo! Fattore calcolato: ${scaleFactor.toFixed(4)}`);
+  console.log(
+    `Luigi scalato con successo! Fattore calcolato: ${scaleFactor.toFixed(4)}`,
+  );
 }
 
 // --- CARICAMENTO PERSONAGGI (MARIO E LUIGI) ---
@@ -228,9 +234,9 @@ const models = { mario: null, luigi: null };
 let player = null;
 
 // Velocità espresse al SECONDO (non più per frame)
-const moveSpeed = 35;        // Unità spostate in 1 secondo
-const jumpStrength = 22;     // Forza dell'impulso verso l'alto
-const gravity = -60;         // Accelerazione di gravità verso il basso
+const moveSpeed = 35; // Unità spostate in 1 secondo
+const jumpStrength = 22; // Forza dell'impulso verso l'alto
+const gravity = -60; // Accelerazione di gravità verso il basso
 
 let velocityY = 0;
 let isJumping = false;
@@ -238,39 +244,39 @@ const groundY = 50; //[cite: 2]
 
 // Carica Mario (Inalterato, orientamento nativo)
 loader.load(
-  'assets/models/Super_Mario/Main_Characters/mario.glb',
+  "assets/models/Super_Mario/Main_Characters/mario.glb",
   (gltf) => {
     models.mario = gltf.scene;
-    console.log('Mario caricato!');
+    console.log("Mario caricato!");
     equalizeLuigiScale();
   },
   undefined,
-  (error) => console.error('Errore caricamento Mario:', error)
+  (error) => console.error("Errore caricamento Mario:", error),
 );
 
 // Carica Luigi (Inserito in un gruppo ruotato di -90° per pareggiarlo a Mario)
 loader.load(
-  'assets/models/Super_Mario/Main_Characters/luigi.glb',
+  "assets/models/Super_Mario/Main_Characters/luigi.glb",
   (gltf) => {
     const luigiGroup = new THREE.Group();
     gltf.scene.rotation.y = -Math.PI / 2; // Allinea la direzione nativa di Luigi a quella di Mario
     luigiGroup.add(gltf.scene);
 
     models.luigi = luigiGroup;
-    console.log('Luigi caricato e allineato a Mario!');
+    console.log("Luigi caricato e allineato a Mario!");
     equalizeLuigiScale();
   },
   undefined,
-  (error) => console.error('Errore caricamento Luigi:', error)
+  (error) => console.error("Errore caricamento Luigi:", error),
 );
 
 // 5. Input Tastiera per il Gioco
 const keys = {};
 
-window.addEventListener('keydown', (e) => {
-  if (gameState !== 'PLAYING') return;
+window.addEventListener("keydown", (e) => {
+  if (gameState !== "PLAYING") return;
 
-  if (e.code === 'Space' || e.key === ' ') {
+  if (e.code === "Space" || e.key === " ") {
     e.preventDefault();
     if (!isJumping && player) {
       velocityY = jumpStrength;
@@ -281,15 +287,15 @@ window.addEventListener('keydown', (e) => {
   keys[e.key.toLowerCase()] = true;
 });
 
-window.addEventListener('keyup', (e) => {
+window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
 });
 
 // 6. Aggiornamento Scena e Telecamera
 function updateGame(delta) {
-
   // --- TELECAMERA DURANTE I MENÙ ---
-  if (gameState === 'MENU_WELCOME' || gameState === 'MENU_NAME') { //[cite: 2]
+  if (gameState === "MENU_WELCOME" || gameState === "MENU_NAME") {
+    //[cite: 2]
     menuCameraAngle += 0.5 * delta; // Ruota a velocità costante
     const radius = 25; //[cite: 2]
     camera.position.x = -20 + Math.sin(menuCameraAngle) * radius; //[cite: 2]
@@ -308,22 +314,26 @@ function updateGame(delta) {
   // MOLTIPLICHIAMO IL MOVIMENTO PER DELTA
   const actualMove = moveSpeed * delta;
 
-  if (keys['w'] || keys['arrowup']) { //[cite: 2]
+  if (keys["w"] || keys["arrowup"]) {
+    //[cite: 2]
     player.position.z -= actualMove;
     targetRotation = -Math.PI / 2; //[cite: 2]
     moved = true;
   }
-  if (keys['s'] || keys['arrowdown']) { //[cite: 2]
+  if (keys["s"] || keys["arrowdown"]) {
+    //[cite: 2]
     player.position.z += actualMove;
     targetRotation = Math.PI / 2; //[cite: 2]
     moved = true;
   }
-  if (keys['a'] || keys['arrowleft']) { //[cite: 2]
+  if (keys["a"] || keys["arrowleft"]) {
+    //[cite: 2]
     player.position.x -= actualMove;
     targetRotation = 0; //[cite: 2]
     moved = true;
   }
-  if (keys['d'] || keys['arrowright']) { //[cite: 2]
+  if (keys["d"] || keys["arrowright"]) {
+    //[cite: 2]
     player.position.x += actualMove;
     targetRotation = Math.PI; //[cite: 2]
     moved = true;
@@ -334,11 +344,13 @@ function updateGame(delta) {
   }
 
   // --- FISICA SALTO CON DELTA TIME ---
-  if (isJumping || player.position.y > groundY) { //[cite: 2]
+  if (isJumping || player.position.y > groundY) {
+    //[cite: 2]
     player.position.y += velocityY * delta;
     velocityY += gravity * delta; // La gravità accelera nel tempo
 
-    if (player.position.y <= groundY) { //[cite: 2]
+    if (player.position.y <= groundY) {
+      //[cite: 2]
       player.position.y = groundY; //[cite: 2]
       velocityY = 0; //[cite: 2]
       isJumping = false; //[cite: 2]
@@ -352,13 +364,12 @@ function updateGame(delta) {
   camera.lookAt(player.position.x, player.position.y + 1, player.position.z); //[cite: 2]
 }
 // 7. Resize Finestra
-window.addEventListener('resize', () => {
+window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// 8. Game Loop
 // 8. Game Loop
 function animate() {
   requestAnimationFrame(animate);
@@ -372,3 +383,4 @@ function animate() {
 }
 
 animate(); //[cite: 2]s
+
