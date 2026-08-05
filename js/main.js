@@ -99,6 +99,33 @@ heroNameInput.addEventListener('keydown', (e) => {
 // 4. Loader dei Modelli 3D
 const loader = new GLTFLoader();
 
+// Helper per configurare ombre, materiali opachi e spazio colore sRGB
+function setupModelProperties(model) {
+  model.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+
+      if (child.material) {
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+
+        materials.forEach((mat) => {
+          mat.transparent = false;
+          mat.opacity = 1.0;
+          mat.depthWrite = true;
+          mat.alphaTest = 0.5;
+
+          if (mat.map) {
+            mat.map.colorSpace = THREE.SRGBColorSpace;
+          }
+
+          mat.needsUpdate = true;
+        });
+      }
+    }
+  });
+}
+
 // --- CARICAMENTO MAPPA ---
 const mapPath = 'assets/models/Others/map.glb';
 
@@ -130,6 +157,25 @@ loader.load(
   (error) => console.error('Errore caricamento mappa:', error)
 );
 
+// --- CARICAMENTO YOSHI ---
+let yoshiModel = null;
+loader.load(
+  'assets/models/Super_Mario/Mounts/yoshi_ride.glb',
+  (gltf) => {
+    yoshiModel = gltf.scene;
+    setupModelProperties(yoshiModel);
+
+    // Posizionamento Yoshi nella mappa vicino allo spawn del personaggio
+    yoshiModel.position.set(-20, groundY, 245);
+    yoshiModel.rotation.y = 0; // Orientato verso il giocatore
+
+    scene.add(yoshiModel);
+    console.log('Yoshi caricato nella mappa!');
+  },
+  undefined,
+  (error) => console.error('Errore caricamento Yoshi:', error)
+);
+
 // Funzione per calcolare l'altezza esatta di un modello 3D
 function getModelHeight(model) {
   const box = new THREE.Box3().setFromObject(model);
@@ -144,7 +190,6 @@ function equalizeLuigiScale() {
   const luigiHeight = getModelHeight(models.luigi);
 
   // Calcola il fattore di scala esatto
-  // Multiplo * 1.08 se vuoi che Luigi sia leggermente più alto di Mario come nei giochi originali
   const scaleFactor = marioHeight / luigiHeight;
 
   models.luigi.scale.set(scaleFactor, scaleFactor, scaleFactor);
