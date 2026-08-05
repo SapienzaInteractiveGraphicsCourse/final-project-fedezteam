@@ -103,6 +103,7 @@ const loader = new GLTFLoader();
 function setupModelProperties(model) {
   model.traverse((child) => {
     if (child.isMesh) {
+      // 1. OMBRE DI BASE
       child.castShadow = true;
       child.receiveShadow = true;
 
@@ -110,11 +111,28 @@ function setupModelProperties(model) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
 
         materials.forEach((mat) => {
-          mat.transparent = false;
-          mat.opacity = 1.0;
-          mat.depthWrite = true;
-          mat.alphaTest = 0.5;
+          const matName = mat.name.toLowerCase();
 
+          // 2. GESTIONE OCCHI (Sia bulbo 'eye_m' che pupilla 'eye_m_0')
+          if (matName.includes('eye')) {
+            mat.visible = true;
+            mat.transparent = true;  // Essenziale affinché la pupilla non copra il bianco attorno a sé
+            mat.depthWrite = false;  // Evita che il bianco e la pupilla si compenetrino (bug grafico)
+            mat.alphaTest = 0.1;     // Ritaglia i bordi trasparenti della texture
+            
+            // LA MAGIA È QUI: Disattiviamo le ombre per gli occhi!
+            // Era l'ombra della pupilla proiettata sull'occhio a farlo sembrare "chiuso".
+            child.castShadow = false; 
+          } 
+          // 3. RESTO DEL CORPO (Pelle, scarpe, guscio solidi)
+          else {
+            mat.visible = true;
+            mat.transparent = false;
+            mat.depthWrite = true;
+            mat.alphaTest = 0.5;
+          }
+
+          // Colori vividi
           if (mat.map) {
             mat.map.colorSpace = THREE.SRGBColorSpace;
           }
@@ -125,7 +143,6 @@ function setupModelProperties(model) {
     }
   });
 }
-
 // --- CARICAMENTO MAPPA ---
 const mapPath = 'assets/models/Others/map.glb';
 
