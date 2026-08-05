@@ -9,7 +9,7 @@ scene.background = new THREE.Color(0x87ceeb);
 const camera = new THREE.PerspectiveCamera(
   60,
   window.innerWidth / window.innerHeight,
-  1,    // Aumentato da 0.1 a 1 per risolvere il flickering dei livelli
+  1,
   1000
 );
 
@@ -27,71 +27,180 @@ dirLight.position.set(10, 20, 10);
 dirLight.castShadow = true;
 scene.add(dirLight);
 
-// 3. Loader dei Modelli 3D
+// 3. Gestione Stati e Interfaccia
+let gameState = 'MENU_WELCOME'; // 'MENU_WELCOME', 'MENU_NAME', 'PLAYING'
+let selectedCharacter = 'mario'; // 'mario' oppure 'luigi'
+let menuCameraAngle = 0;
+
+const welcomeScreen = document.getElementById('welcome-screen');
+const nameScreen = document.getElementById('name-screen');
+const hud = document.getElementById('hud');
+
+const startBtn = document.getElementById('start-btn');
+const continueBtn = document.getElementById('continue-btn');
+const heroNameInput = document.getElementById('hero-name-input');
+const hudHeroName = document.getElementById('hud-hero-name');
+
+const btnMario = document.getElementById('btn-mario');
+const btnLuigi = document.getElementById('btn-luigi');
+
+// Seleziona Mario
+btnMario.addEventListener('click', () => {
+  selectedCharacter = 'mario';
+  btnMario.className = 'char-card selected-mario';
+  btnLuigi.className = 'char-card';
+});
+
+// Seleziona Luigi
+btnLuigi.addEventListener('click', () => {
+  selectedCharacter = 'luigi';
+  btnLuigi.className = 'char-card selected-luigi';
+  btnMario.className = 'char-card';
+});
+
+// Step 1 -> Step 2
+startBtn.addEventListener('click', () => {
+  gameState = 'MENU_NAME';
+  welcomeScreen.style.display = 'none';
+  nameScreen.style.display = 'flex';
+  heroNameInput.focus();
+});
+
+// Step 2 -> Avvio Gioco
+function startGame() {
+  const enteredName = heroNameInput.value.trim().toUpperCase();
+  const defaultName = selectedCharacter === 'mario' ? 'MARIO' : 'LUIGI';
+  hudHeroName.textContent = enteredName !== '' ? enteredName : defaultName;
+
+  if (models[selectedCharacter]) {
+    player = models[selectedCharacter];
+    player.position.set(-20, groundY, 250);
+    
+    // 🔄 ORIENTAMENTO INIZIALE: Math.PI fa guardare il personaggio in avanti (verso -Z)
+    player.rotation.y = Math.PI; 
+    
+    scene.add(player);
+  }
+
+  gameState = 'PLAYING';
+  nameScreen.style.display = 'none';
+  hud.style.display = 'flex';
+}
+
+continueBtn.addEventListener('click', startGame);
+
+heroNameInput.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') {
+    startGame();
+  }
+});
+
+// 4. Loader dei Modelli 3D
 const loader = new GLTFLoader();
 
 // --- CARICAMENTO MAPPA ---
-const mapPath = 'assets/models/Others/map.glb'; 
+const mapPath = 'assets/models/Others/map.glb';
 
 loader.load(
   mapPath,
   (gltf) => {
     const map = gltf.scene;
+    const newScale = 0.2;
+    map.scale.set(newScale, newScale, newScale);
+    map.position.set(0, 0, 0);
 
-    // Scala la mappa (aggiusta il valore se serve)
-    const newScale = 0.2; 
-    map.scale.set(newScale, newScale, newScale);    map.position.set(0, 0, 0);
-
-    // CORREZIONE MATERIALI E TRASPARENZE
     map.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
 
         if (child.material) {
-          // Mantiene la corretta trasparenza per acqua, erba e dettagli
           child.material.depthWrite = true;
-          
-          // Se il materiale ha una mappa alpha o trasparenze
           if (child.material.transparent || child.material.alphaTest > 0) {
-            child.material.alphaTest = 0.2; // Rimuove lo sfondo trasparente senza creare blocchi solidi
+            child.material.alphaTest = 0.2;
           }
         }
       }
     });
 
     scene.add(map);
-    console.log('Mappa corretta!');
   },
   undefined,
-  (error) => console.error('Errore nel caricamento della mappa:', error)
+  (error) => console.error('Errore caricamento mappa:', error)
 );
 
-// --- CARICAMENTO MARIO ---
-let mario = null;
+// Funzione per calcolare l'altezza esatta di un modello 3D
+function getModelHeight(model) {
+  const box = new THREE.Box3().setFromObject(model);
+  return box.max.y - box.min.y;
+}
+
+// Funzione per pareggiare la scala di Luigi a quella di Mario
+function equalizeLuigiScale() {
+  if (!models.mario || !models.luigi) return; // Aspetta che entrambi siano caricati
+
+  const marioHeight = getModelHeight(models.mario);
+  const luigiHeight = getModelHeight(models.luigi);
+
+  // Calcola il fattore di scala esatto
+  // Multiplo * 1.08 se vuoi che Luigi sia leggermente più alto di Mario come nei giochi originali
+  const scaleFactor = marioHeight / luigiHeight;
+
+  models.luigi.scale.set(scaleFactor, scaleFactor, scaleFactor);
+  console.log(`Luigi scalato con successo! Fattore calcolato: ${scaleFactor.toFixed(4)}`);
+}
+
+// --- CARICAMENTO PERSONAGGI (MARIO E LUIGI) ---
+const models = { mario: null, luigi: null };
+let player = null; // Il personaggio attivo in gioco
+
 const moveSpeed = 0.6;
-const marioPath = 'assets/models/Super_Mario/Main_Characters/mario.glb';
+let velocityY = 0;
+const gravity = -0.015;
+const jumpStrength = 0.5;
+let isJumping = false;
 
+const groundY = 50;
+
+// Carica Mario
 loader.load(
-  marioPath,
+  'assets/models/Super_Mario/Main_Characters/mario.glb',
   (gltf) => {
-    mario = gltf.scene;
-    
-    mario.position.set(-20, 50, 250); 
-
-    mario.rotation.y = -Math.PI / 2;
-    
-    scene.add(mario);
+    models.mario = gltf.scene;
     console.log('Mario caricato!');
+    equalizeLuigiScale(); // Tenta il calcolo della scala
   },
   undefined,
-  (error) => console.error('Errore nel caricamento di Mario:', error)
+  (error) => console.error('Errore caricamento Mario:', error)
 );
 
-// 4. Gestione Input Tastiera
+// Carica Luigi
+loader.load(
+  'assets/models/Super_Mario/Main_Characters/luigi.glb',
+  (gltf) => {
+    models.luigi = gltf.scene;
+    console.log('Luigi caricato!');
+    equalizeLuigiScale(); // Tenta il calcolo della scala
+  },
+  undefined,
+  (error) => console.error('Errore caricamento Luigi:', error)
+);
+
+// 5. Input Tastiera per il Gioco
 const keys = {};
 
 window.addEventListener('keydown', (e) => {
+  if (gameState !== 'PLAYING') return;
+
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    if (!isJumping && player) {
+      velocityY = jumpStrength;
+      isJumping = true;
+    }
+  }
+
   keys[e.key.toLowerCase()] = true;
 });
 
@@ -99,56 +208,82 @@ window.addEventListener('keyup', (e) => {
   keys[e.key.toLowerCase()] = false;
 });
 
-// 5. Movimento e Telecamera
-function updatePlayer() {
-  if (!mario) return;
+// 6. Aggiornamento Scena e Telecamera
+function updateGame() {
 
+  // --- TELECAMERA DURANTE I MENÙ ---
+  if (gameState === 'MENU_WELCOME' || gameState === 'MENU_NAME') {
+    menuCameraAngle += 0.005;
+    const radius = 25;
+    // La telecamera gira attorno al punto di spawn
+    camera.position.x = -20 + Math.sin(menuCameraAngle) * radius;
+    camera.position.z = 250 + Math.cos(menuCameraAngle) * radius;
+    camera.position.y = groundY + 10;
+    camera.lookAt(-20, groundY + 2, 250);
+    return;
+  }
+
+  if (!player) return;
+
+  // --- LOGICA DURANTE IL GIOCO ---
   let moved = false;
-  let targetRotation = mario.rotation.y;
+  let targetRotation = player.rotation.y;
 
   if (keys['w'] || keys['arrowup']) {
-    mario.position.z -= moveSpeed;
+    player.position.z -= moveSpeed;
     targetRotation = -Math.PI / 2;
     moved = true;
   }
   if (keys['s'] || keys['arrowdown']) {
-    mario.position.z += moveSpeed;
+    player.position.z += moveSpeed;
     targetRotation = Math.PI / 2;
     moved = true;
   }
   if (keys['a'] || keys['arrowleft']) {
-    mario.position.x -= moveSpeed;
+    player.position.x -= moveSpeed;
     targetRotation = 0;
     moved = true;
   }
   if (keys['d'] || keys['arrowright']) {
-    mario.position.x += moveSpeed;
+    player.position.x += moveSpeed;
     targetRotation = Math.PI;
     moved = true;
   }
 
   if (moved) {
-    mario.rotation.y = targetRotation;
+    player.rotation.y = targetRotation;
   }
 
-  // Telecamera inseguimento
-  camera.position.x = mario.position.x;
-  camera.position.y = mario.position.y + 3;
-  camera.position.z = mario.position.z + 6;
-  camera.lookAt(mario.position.x, mario.position.y + 1, mario.position.z);
+  // Fisica Salto
+  if (isJumping || player.position.y > groundY) {
+    player.position.y += velocityY;
+    velocityY += gravity;
+
+    if (player.position.y <= groundY) {
+      player.position.y = groundY;
+      velocityY = 0;
+      isJumping = false;
+    }
+  }
+
+  // Telecamera Inseguimento
+  camera.position.x = player.position.x;
+  camera.position.y = player.position.y + 4;
+  camera.position.z = player.position.z + 8;
+  camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
 }
 
-// 6. Resize Finestra
+// 7. Resize Finestra
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// 7. Game Loop
+// 8. Game Loop
 function animate() {
   requestAnimationFrame(animate);
-  updatePlayer();
+  updateGame();
   renderer.render(scene, camera);
 }
 
