@@ -76,8 +76,8 @@ function startGame() {
     player = models[selectedCharacter];
     player.position.set(-20, groundY, 250);
     
-    // 🔄 ORIENTAMENTO INIZIALE: Math.PI fa guardare il personaggio in avanti (verso -Z)
-    player.rotation.y = Math.PI; 
+    // 🔄 ORIENTAMENTO NATIVO DI MARIO (Guarda in avanti verso l'interno mappa)
+    player.rotation.y = -Math.PI / 2; 
     
     scene.add(player);
   }
@@ -184,21 +184,19 @@ function getModelHeight(model) {
 
 // Funzione per pareggiare la scala di Luigi a quella di Mario
 function equalizeLuigiScale() {
-  if (!models.mario || !models.luigi) return; // Aspetta che entrambi siano caricati
+  if (!models.mario || !models.luigi) return;
 
   const marioHeight = getModelHeight(models.mario);
   const luigiHeight = getModelHeight(models.luigi);
 
-  // Calcola il fattore di scala esatto
   const scaleFactor = marioHeight / luigiHeight;
-
   models.luigi.scale.set(scaleFactor, scaleFactor, scaleFactor);
   console.log(`Luigi scalato con successo! Fattore calcolato: ${scaleFactor.toFixed(4)}`);
 }
 
 // --- CARICAMENTO PERSONAGGI (MARIO E LUIGI) ---
 const models = { mario: null, luigi: null };
-let player = null; // Il personaggio attivo in gioco
+let player = null;
 
 const moveSpeed = 0.6;
 let velocityY = 0;
@@ -208,25 +206,29 @@ let isJumping = false;
 
 const groundY = 50;
 
-// Carica Mario
+// Carica Mario (Inalterato, orientamento nativo)
 loader.load(
   'assets/models/Super_Mario/Main_Characters/mario.glb',
   (gltf) => {
     models.mario = gltf.scene;
     console.log('Mario caricato!');
-    equalizeLuigiScale(); // Tenta il calcolo della scala
+    equalizeLuigiScale();
   },
   undefined,
   (error) => console.error('Errore caricamento Mario:', error)
 );
 
-// Carica Luigi
+// Carica Luigi (Inserito in un gruppo ruotato di -90° per pareggiarlo a Mario)
 loader.load(
   'assets/models/Super_Mario/Main_Characters/luigi.glb',
   (gltf) => {
-    models.luigi = gltf.scene;
-    console.log('Luigi caricato!');
-    equalizeLuigiScale(); // Tenta il calcolo della scala
+    const luigiGroup = new THREE.Group();
+    gltf.scene.rotation.y = -Math.PI / 2; // Allinea la direzione nativa di Luigi a quella di Mario
+    luigiGroup.add(gltf.scene);
+
+    models.luigi = luigiGroup;
+    console.log('Luigi caricato e allineato a Mario!');
+    equalizeLuigiScale();
   },
   undefined,
   (error) => console.error('Errore caricamento Luigi:', error)
@@ -260,7 +262,6 @@ function updateGame() {
   if (gameState === 'MENU_WELCOME' || gameState === 'MENU_NAME') {
     menuCameraAngle += 0.005;
     const radius = 25;
-    // La telecamera gira attorno al punto di spawn
     camera.position.x = -20 + Math.sin(menuCameraAngle) * radius;
     camera.position.z = 250 + Math.cos(menuCameraAngle) * radius;
     camera.position.y = groundY + 10;
@@ -274,24 +275,25 @@ function updateGame() {
   let moved = false;
   let targetRotation = player.rotation.y;
 
+  // --- MOVIMENTO ORIZZONTALE NATIVO ---
   if (keys['w'] || keys['arrowup']) {
     player.position.z -= moveSpeed;
-    targetRotation = -Math.PI / 2;
+    targetRotation = -Math.PI / 2;   // ⬆️ AVANTI
     moved = true;
   }
   if (keys['s'] || keys['arrowdown']) {
     player.position.z += moveSpeed;
-    targetRotation = Math.PI / 2;
+    targetRotation = Math.PI / 2;    // ⬇️ INDIETRO
     moved = true;
   }
   if (keys['a'] || keys['arrowleft']) {
     player.position.x -= moveSpeed;
-    targetRotation = 0;
+    targetRotation = 0;              // ⬅️ SINISTRA
     moved = true;
   }
   if (keys['d'] || keys['arrowright']) {
     player.position.x += moveSpeed;
-    targetRotation = Math.PI;
+    targetRotation = Math.PI;        // ➡️ DESTRA
     moved = true;
   }
 
