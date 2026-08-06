@@ -106,6 +106,7 @@ assetLoader.loadAll(assetsToLoad).then((assets) => {
   const luigiGroup = new THREE.Group();
   luigiRawModel.rotation.y = -Math.PI / 2;
   luigiGroup.add(luigiRawModel);
+  //rawModels.luigi = luigiGroup;
   rawModels.luigi = luigiGroup;
 
   equalizeLuigiScale();
