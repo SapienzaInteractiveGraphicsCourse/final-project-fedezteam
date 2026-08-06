@@ -1,51 +1,33 @@
+import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
+
 export default class PhysicsEngine {
   constructor(options = {}) {
-    this.gravity = options.gravity || -60;
-    this.jumpStrength = options.jumpStrength || 22;
-    this.groundY = options.groundY || 50;
-    
-    // 🔍 Aggiungiamo la soglia di caduta (di default sotto al terreno)
-    this.fallThreshold = options.fallThreshold || 35;
+    this.world = new CANNON.World();
+    // Aumentiamo leggermente la gravità per renderla più "platformer" (meno fluttuante)
+    this.world.gravity.set(0, options.gravity || -30, 0);
 
-    this.velocityY = 0;
-    this.isJumping = false;
+    // Creiamo un materiale di base per evitare rimbalzi strani tra player e pavimento
+    this.defaultMaterial = new CANNON.Material("default");
+    const contactMaterial = new CANNON.ContactMaterial(
+      this.defaultMaterial,
+      this.defaultMaterial,
+      { friction: 0.1, restitution: 0.0 }
+    );
+    this.world.addContactMaterial(contactMaterial);
+
+    this.fallThreshold = options.fallThreshold || -20;
   }
 
-  jump() {
-    if (!this.isJumping) {
-      this.velocityY = this.jumpStrength;
-      this.isJumping = true;
-    }
+  // Avanzamento del mondo fisico. Da chiamare ad ogni frame prima di renderizzare
+  update(delta) {
+    // Cannon.js preferisce un time-step fisso (es. 1/60 di secondo)
+    this.world.step(1 / 60, delta, 3);
   }
 
-  // 🔍 Metodo per gestire il burrone / caduta nel vuoto
-  checkVoidFall(entity, onRespawn) {
-    if (!entity) return;
-
-    if (entity.position.y < this.fallThreshold) {
-      // Azzera la fisica per evitare rimbalzi o problemi allo spawn
-      this.velocityY = 0;
-      this.isJumping = false;
-
-      // Esegue il respawn (es. riposiziona il player e toglie una vita)
-      if (onRespawn) {
-        onRespawn();
-      }
-    }
-  }
-
-  update(entity, delta) {
-    if (!entity) return;
-
-    if (this.isJumping || entity.position.y > this.groundY) {
-      entity.position.y += this.velocityY * delta;
-      this.velocityY += this.gravity * delta;
-
-      if (entity.position.y <= this.groundY) {
-        entity.position.y = this.groundY;
-        this.velocityY = 0;
-        this.isJumping = false;
-      }
+  // Semplificato: controlla solo se la Y del giocatore scende sotto la soglia
+  checkVoidFall(playerPosition, onRespawn) {
+    if (playerPosition && playerPosition.y < this.fallThreshold) {
+      if (onRespawn) onRespawn();
     }
   }
 }

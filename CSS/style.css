@@ -1,0 +1,224 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Press Start 2P', cursive, sans-serif;
+  user-select: none;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #87ceeb !important; /* Forza lo stesso azzurro del cielo */
+}
+
+#webgl-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  z-index: 1;
+}
+
+/* --- UI OVERLAY --- */
+#ui-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: transparent !important;
+}
+
+/* PULSANTI AZIONE (START / CONTINUE) */
+.btn-retro {
+  padding: 20px 50px;
+  font-size: 1.2rem;
+  color: white;
+  background: #43b047;
+  border: 5px solid #fff;
+  border-radius: 14px;
+  cursor: pointer;
+  box-shadow: 0 8px 0 #286e2b, 0 10px 20px rgba(0, 0, 0, 0.4);
+  transition: all 0.1s ease;
+  pointer-events: auto;
+}
+
+.btn-retro:hover {
+  transform: scale(1.06);
+  background: #4de052;
+}
+
+.btn-retro:active {
+  transform: translateY(4px);
+  box-shadow: 0 3px 0 #286e2b;
+}
+
+/* BOX MENÙ */
+.menu-card {
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.85);
+  border: 5px solid #fff;
+  border-radius: 20px;
+  padding: 45px 40px;
+  max-width: 850px;
+  width: 92%;
+  text-align: center;
+  color: white;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* WELCOME SCREEN */
+#welcome-screen h1 {
+  font-size: 2.4rem;
+  color: #e52521;
+  text-shadow: 4px 4px 0px #fbd000, 6px 6px 0px #000;
+  margin-bottom: 25px;
+  line-height: 1.4;
+}
+
+#welcome-screen p {
+  font-size: 0.8rem;
+  line-height: 1.8;
+  color: #fff;
+  margin-bottom: 35px;
+}
+
+/* SELEZIONE PERSONAGGIO */
+#name-screen {
+  display: none;
+}
+
+.subtitle {
+  font-size: 0.7rem;
+  color: #fbd000;
+  margin-bottom: 12px;
+}
+
+#name-screen h2 {
+  font-size: 1.3rem;
+  color: #fff;
+  line-height: 1.4;
+  margin-bottom: 25px;
+}
+
+.char-selector {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 35px;
+  width: 100%;
+  justify-content: center;
+}
+
+.char-card {
+  flex: 1;
+  padding: 25px 20px;
+  min-height: 260px;
+  background: rgba(30, 30, 30, 0.9);
+  border: 5px solid #555;
+  border-radius: 18px;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  transition: all 0.2s ease;
+}
+
+.char-card img {
+  width: 170px;
+  height: 170px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.8));
+  transition: transform 0.2s ease;
+}
+
+.char-card:hover img {
+  transform: scale(1.12);
+}
+
+.char-card.selected-mario {
+  border-color: #e52521;
+  background: rgba(139, 0, 0, 0.88);
+  color: #fff;
+  box-shadow: 0 0 25px rgba(229, 37, 33, 0.7);
+  transform: scale(1.05);
+}
+
+.char-card.selected-luigi {
+  border-color: #43b047;
+  background: rgba(30, 89, 33, 0.88);
+  color: #fff;
+  box-shadow: 0 0 25px rgba(67, 176, 71, 0.7);
+  transform: scale(1.05);
+}
+
+.input-group {
+  width: 100%;
+  margin-bottom: 35px;
+}
+
+#hero-name-input {
+  width: 100%;
+  padding: 16px 20px;
+  font-size: 1rem;
+  border: 4px solid #fbd000;
+  border-radius: 10px;
+  background: #000;
+  color: #fff;
+  outline: none;
+  text-align: center;
+}
+
+/* --- HUD PERFETTA E TRASPARENTE --- */
+#hud {
+  display: none;
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  width: calc(100% - 40px);
+  justify-content: space-between;
+  align-items: flex-start;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.hud-item {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 3px solid #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: white;
+  font-size: 0.85rem;
+  text-shadow: 2px 2px 0px #000;
+}
+
+#hud-char-icon {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
