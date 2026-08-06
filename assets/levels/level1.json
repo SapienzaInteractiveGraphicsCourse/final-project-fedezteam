@@ -1,0 +1,7 @@
+{
+  "name": "Procedural Arena 50x50",
+  "spawnPoint": { "x": 0, "y": 2, "z": 0 },
+  "yoshiSpawn": { "x": 0, "y": 2, "z": 0 },
+  "gridSize": 50,
+  "spacing": 0
+}
