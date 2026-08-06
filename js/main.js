@@ -65,6 +65,7 @@ function updateGame(delta) {
     renderer.camera.position.x = -20 + Math.sin(menuCameraAngle) * radius;
     renderer.camera.position.z = 250 + Math.cos(menuCameraAngle) * radius;
     renderer.camera.position.y = physics.groundY + 10;
+    // renderer.camera.lookAt(-20, physics.groundY + 2, 250);
     renderer.camera.lookAt(-20, physics.groundY + 2, 250);
     return;
   }
