@@ -1,68 +1,53 @@
 import * as THREE from 'three';
 
-export default class Player {
-  constructor(mesh, moveSpeed = 35) {
+export default class Yoshi {
+  constructor(mesh) {
     this.mesh = mesh;
-    this.moveSpeed = moveSpeed;
+    this.isRidden = false; // Stato per verificare se Yoshi viene cavalcato
   }
 
   /**
-   * Imposta la posizione iniziale nello spazio 3D
+   * Posiziona Yoshi nella mappa
    */
   spawn(x, y, z) {
+    if (!this.mesh) return;
     this.mesh.position.set(x, y, z);
-    this.mesh.rotation.y = Math.PI*2; // Orientamento frontale (verso -Z)
+    this.mesh.rotation.y = 0; // Orientato di fronte rispetto allo spawn
   }
 
   /**
-   * Aggiorna il movimento orizzontale e il salto
+   * Aggiornamento di Yoshi nel Game Loop
+   * Accetta facoltativamente input o player senza andare in errore se uno dei due manca
    */
-  update(delta, input, physics) {
+  update(delta, inputOrPlayer, playerRef) {
     if (!this.mesh) return;
 
-    let moved = false;
-    let targetRotation = this.mesh.rotation.y;
-    const actualMove = this.moveSpeed * delta;
+    // Gestione flessibile dei parametri (se il secondo argomento è il player)
+    const player = playerRef || (inputOrPlayer && inputOrPlayer.mesh ? inputOrPlayer : null);
+    const input = (inputOrPlayer && typeof inputOrPlayer.isPressed === 'function') ? inputOrPlayer : null;
 
-    // Controllo direzioni da InputManager
-    if (input.isPressed("w") || input.isPressed("arrowup")) {
-      this.mesh.position.z -= actualMove;
-      targetRotation = -Math.PI / 2;
-      moved = true;
-    }
-    if (input.isPressed("s") || input.isPressed("arrowdown")) {
-      this.mesh.position.z += actualMove;
-      targetRotation = Math.PI / 2;
-      moved = true;
-    }
-    if (input.isPressed("a") || input.isPressed("arrowleft")) {
-      this.mesh.position.x -= actualMove;
-      targetRotation = 0;
-      moved = true;
-    }
-    if (input.isPressed("d") || input.isPressed("arrowright")) {
-      this.mesh.position.x += actualMove;
-      targetRotation = Math.PI;
-      moved = true;
+    // Piccola animazione d'attesa (Idle): Yoshi galleggia/respira leggermente se non è cavalcato
+    if (!this.isRidden) {
+      this.mesh.position.y += Math.sin(Date.now() * 0.003) * 0.01;
     }
 
-    if (moved) {
-      this.mesh.rotation.y = targetRotation;
+    // Se Yoshi deve essere controllato da tastiera quando cavalcato
+    if (this.isRidden && input) {
+      const moveSpeed = 40 * delta;
+      
+      if (input.isPressed("w") || input.isPressed("arrowup")) {
+        this.mesh.position.z -= moveSpeed;
+      }
+      if (input.isPressed("s") || input.isPressed("arrowdown")) {
+        this.mesh.position.z += moveSpeed;
+      }
     }
-
-    // Innesco Salto
-    if (input.isPressed("space") || input.isPressed(" ")) {
-      physics.jump();
-    }
-
-    // Applicazione Fisica (Gravità e Terreno)
-    physics.update(this.mesh, delta);
   }
 
   /**
-   * Getter di comodo per recuperare la posizione X, Y, Z
+   * Getter per recuperare la posizione di Yoshi
    */
   get position() {
-    return this.mesh.position;
+    return this.mesh ? this.mesh.position : new THREE.Vector3();
   }
 }
