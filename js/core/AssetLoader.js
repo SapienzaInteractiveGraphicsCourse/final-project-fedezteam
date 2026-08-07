@@ -20,20 +20,17 @@ export default class AssetLoader {
             : [child.material];
 
           materials.forEach((mat) => {
-            const matName = mat.name.toLowerCase();
+            const matName = mat.name ? mat.name.toLowerCase() : "";
 
             // 2. GESTIONE OCCHI (Sia bulbo 'eye_m' che pupilla 'eye_m_0')
             if (matName.includes("eye")) {
               mat.visible = true;
-              mat.transparent = true; // Essenziale affinché la pupilla non copra il bianco attorno a sé
-              mat.depthWrite = false; // Evita che il bianco e la pupilla si compenetrino (bug grafico)
-              mat.alphaTest = 0.1; // Ritaglia i bordi trasparenti della texture
-
-              // LA MAGIA È QUI: Disattiviamo le ombre per gli occhi!
-              // Era l'ombra della pupilla proiettata sull'occhio a farlo sembrare "chiuso".
-              child.castShadow = false;
+              mat.transparent = true; 
+              mat.depthWrite = false; 
+              mat.alphaTest = 0.1; 
+              child.castShadow = false; // Disattiva ombre interne all'occhio
             }
-            // 3. RESTO DEL CORPO (Pelle, scarpe, guscio solidi)
+            // 3. RESTO DEL CORPO
             else {
               mat.visible = true;
               mat.transparent = false;
@@ -59,9 +56,7 @@ export default class AssetLoader {
         path,
         (gltf) => {
           const model = gltf.scene;
-
           this.setupModelProperties(model);
-
           this.assets[key] = model;
           resolve(model);
         },
@@ -69,10 +64,10 @@ export default class AssetLoader {
         (error) => {
           console.error(
             `Errore durante il caricamento del modello ${key} da ${path}:`,
-            error,
+            error
           );
           reject(error);
-        },
+        }
       );
     });
   }
