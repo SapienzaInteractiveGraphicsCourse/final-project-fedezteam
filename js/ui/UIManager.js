@@ -15,11 +15,13 @@ export default class UIManager {
     this.btnLuigi = document.getElementById("btn-luigi");
 
     // 2. Stato dell'interfaccia
-    this.gameState = "MENU_WELCOME"; // 'MENU_WELCOME', 'MENU_NAME', 'PLAYING'
-    this.selectedCharacter = "mario"; // 'mario' oppure 'luigi'
+    this.gameState = "MENU_WELCOME"; 
+    this.selectedCharacter = "mario"; 
 
-    // Callback per avvisare main.js quando il gioco inizia
+    // Callback per avvisare main.js
     this.onStartCallback = null;
+    this.onSelectCallback = null;
+    this.onWelcomeStartCallback = null; // 🔊 Callback per il click su START iniziale
 
     // 3. Inizializzazione Listener
     this._setupListeners();
@@ -31,6 +33,8 @@ export default class UIManager {
       this.selectedCharacter = "mario";
       this.btnMario.className = "char-card selected-mario";
       this.btnLuigi.className = "char-card";
+      
+      if (this.onSelectCallback) this.onSelectCallback("mario");
     });
 
     // Selezione Luigi
@@ -38,21 +42,28 @@ export default class UIManager {
       this.selectedCharacter = "luigi";
       this.btnLuigi.className = "char-card selected-luigi";
       this.btnMario.className = "char-card";
+
+      if (this.onSelectCallback) this.onSelectCallback("luigi");
     });
 
-    // Step 1 -> Step 2 (Welcome -> Name)
+    // Step 1 -> Step 2 (Welcome -> Name/Character)
     this.startBtn.addEventListener("click", () => {
       this.gameState = "MENU_NAME";
       this.welcomeScreen.style.display = "none";
       this.nameScreen.style.display = "flex";
       this.heroNameInput.focus();
+
+      // 🔊 Notifica main.js di far partire la BGM al primo click
+      if (this.onWelcomeStartCallback) {
+        this.onWelcomeStartCallback();
+      }
     });
 
     // Step 2 -> Avvio Gioco
     this.continueBtn.addEventListener("click", () => this._triggerStart());
 
     this.heroNameInput.addEventListener("keydown", (e) => {
-      e.stopPropagation(); // Evita che il tasto Invio scatti la tastiera di gioco
+      e.stopPropagation();
       if (e.key === "Enter") {
         this._triggerStart();
       }
@@ -90,8 +101,16 @@ export default class UIManager {
   }
 
   /**
-   * Permette a main.js di registrare una funzione da eseguire all'inizio del gioco
+   * Permette a main.js di registrare l'avvio della BGM appena si clicca START
    */
+  onWelcomeStart(callback) {
+    this.onWelcomeStartCallback = callback;
+  }
+
+  onCharacterSelect(callback) {
+    this.onSelectCallback = callback;
+  }
+
   onGameStart(callback) {
     this.onStartCallback = callback;
   }
