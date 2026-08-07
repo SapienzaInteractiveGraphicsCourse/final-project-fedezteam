@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 
 export default class Player {
-  // Passiamo il PhysicsEngine nel costruttore per poter inserire il player nel mondo
   constructor(mesh, physicsEngine, moveSpeed = 15, jumpVelocity = 15) {
     this.mesh = mesh;
     this.physicsEngine = physicsEngine;
@@ -10,39 +9,49 @@ export default class Player {
     this.jumpVelocity = jumpVelocity;
     
     this.body = null;
-    this.canJump = false; // Flag vitale per impedire i doppi salti in aria
+    this.canJump = false; 
+    this.radius = 1; // Raggio della sfera di collisione fisica
+
+    if (this.mesh) {
+      this.mesh.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+    }
   }
 
   spawn(x, y, z) {
+    if (!this.mesh) return;
+
     // 1. Setup Three.js (Grafica)
     this.mesh.position.set(x, y, z);
-    this.mesh.rotation.y = Math.PI * 1.5;
-
-    // 2. Setup Cannon-es (Fisica)
-    // Una sfera è ottima per i platformer 3D perché scivola bene sugli spigoli
-    const radius = 1; 
-    const shape = new CANNON.Sphere(radius);
     
+    // 2. Setup Cannon-es (Fisica)
+    const shape = new CANNON.Sphere(this.radius);
+    
+    // Alza il centro della sfera di 'radius' affinché l'origine ai piedi (Y=0) tocchi il suolo
     this.body = new CANNON.Body({
-      mass: 5, // Massa > 0 lo rende un oggetto dinamico (soggetto a gravità)
-      position: new CANNON.Vec3(x, y, z),
+      mass: 5,
+      position: new CANNON.Vec3(x, y + this.radius, z),
       shape: shape,
-      material: this.physicsEngine.defaultMaterial,
-      fixedRotation: true // Essenziale: impedisce al giocatore di "rotolare" fisicamente come una palla
+      material: this.physicsEngine?.defaultMaterial,
+      fixedRotation: true // Impedisce al personaggio di rotolare
     });
 
-    // 3. Listener per atterraggi (reset del salto)
+    // 3. Listener per azzerare il salto all'atterraggio
     this.body.addEventListener("collide", (e) => {
       const contactNormal = new CANNON.Vec3();
       e.contact.ni.negate(contactNormal);
-      // Se urtiamo qualcosa che punta verso l'alto (Y > 0), siamo sul pavimento
       if (contactNormal.dot(new CANNON.Vec3(0, 1, 0)) > 0.5) {
         this.canJump = true;
       }
     });
 
-    // Inseriamo il corpo nel mondo
-    this.physicsEngine.world.addBody(this.body);
+    if (this.physicsEngine && this.physicsEngine.world) {
+      this.physicsEngine.world.addBody(this.body);
+    }
   }
 
   update(delta, input) {
@@ -75,25 +84,28 @@ export default class Player {
       moved = true;
     }
 
-    // 2. Applica Velocità (Manteniamo intatta la Y per non interferire con la gravità)
+    // 2. Applica Velocità
     this.body.velocity.x = moveX;
     this.body.velocity.z = moveZ;
 
-    // Aggiorna la rotazione grafica
+    // Aggiorna rotazione grafica
     if (moved) this.mesh.rotation.y = targetRotation;
 
-    // 3. Gestione Salto
+    // 3. Salto
     if ((input.isPressed("space") || input.isPressed(" ")) && this.canJump) {
       this.body.velocity.y = this.jumpVelocity;
       this.canJump = false;
     }
 
-    // 4. SINCRONIZZAZIONE (Il Core dell'Engine)
-    // Copiamo le coordinate calcolate da Cannon.js e le applichiamo al modello 3D
-    this.mesh.position.copy(this.body.position);
+    // 4. Sincronizzazione Grafica <-> Fisica (Applica il delta del raggio)
+    this.mesh.position.set(
+      this.body.position.x,
+      this.body.position.y - (this.radius + 0.3), // Piccolo offset per evitare che il modello affondi nel terreno
+      this.body.position.z
+    );
   }
 
   get position() {
-    return this.mesh.position;
+    return this.mesh ? this.mesh.position : new THREE.Vector3();
   }
 }
