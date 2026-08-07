@@ -6,6 +6,32 @@ export default class AudioManager {
     this.currentCharacter = 'mario'; // Default
     // 🔴 Toggle per alternare il primo e il secondo suono del salto
     this.jumpToggle = false;
+
+    // Volumi predefiniti (da 0 a 1)
+    this.bgmVolume = 0.35;
+    this.sfxVolume = 0.6;
+  }
+
+  /**
+   * Regola il volume della Musica (0 - 1)
+   */
+  setBGMVolume(volume) {
+    this.bgmVolume = volume;
+    if (this.bgm) {
+      this.bgm.volume = this.bgmVolume;
+    }
+  }
+
+  /**
+   * Regola il volume degli Effetti Sonori (0 - 1)
+   */
+  setSFXVolume(volume) {
+    this.sfxVolume = volume;
+    for (const key in this.sounds) {
+      if (this.sounds[key]) {
+        this.sounds[key].volume = this.sfxVolume;
+      }
+    }
   }
 
   /**
@@ -51,21 +77,20 @@ export default class AudioManager {
    * Riproduce l'effetto sonoro. 
    * Cerca prima l'audio specifico (es. 'mario_jump'), altrimenti usa quello generico ('star').
    */
-playSFX(name) {
-    if (this.isMuted) return;
-
+  playSFX(name) {
+    if (this.isMuted || this.sfxVolume === 0) return;
     let soundKey = name;
 
-// 1. Se il suono esiste con il nome esatto (es. 'mario_selected'), usa quello
+    // 1. Se il suono esiste con il nome esatto (es. 'mario_selected'), usa quello
     if (this.sounds[name]) {
       soundKey = name;
-    } 
+    }
     // 2. Alternanza dei due suoni per il salto
     else if (name === 'jump') {
       const suffix = this.jumpToggle ? '2' : '1';
       this.jumpToggle = !this.jumpToggle;
       soundKey = `${this.currentCharacter}_jump${suffix}`;
-    } 
+    }
     // 3. Altrimenti aggiunge automaticamente il prefisso del personaggio (es. 'selected' -> 'mario_selected')
     else {
       const charSpecificName = `${this.currentCharacter}_${name}`;
@@ -78,6 +103,6 @@ playSFX(name) {
 
     const soundClone = this.sounds[soundKey].cloneNode();
     soundClone.volume = this.sounds[soundKey].volume;
-    soundClone.play().catch(() => {});
+    soundClone.play().catch(() => { });
   }
 }

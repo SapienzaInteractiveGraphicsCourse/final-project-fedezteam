@@ -186,22 +186,37 @@ html, body {
   text-align: center;
 }
 
-/* --- HUD PERFETTA E TRASPARENTE --- */
+/* --- HUD TRASPARENTE A COLONNA (ANGOLO IN ALTO A SINISTRA) --- */
 #hud {
   display: none;
   position: absolute;
   top: 20px;
   left: 20px;
-  right: 20px;
-  width: calc(100% - 40px);
-  justify-content: space-between;
-  align-items: flex-start;
+  right: auto !important;              /* Rimuove il vincolo a destra */
+  width: auto !important;              /* Impedisce all'HUD di allargarsi a tutto schermo */
+  flex-direction: column !important;   /* Dispone Profilo sopra e Stats sotto */
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 10px;
   background: transparent !important;
-  background-color: transparent !important;
   border: none !important;
   box-shadow: none !important;
   pointer-events: none;
   z-index: 100;
+}
+
+/* Profilo Giocatore */
+.hud-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Riga Statistiche (Monete + Vite affiancate sotto il nome) */
+.hud-stats-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .hud-item {
@@ -218,7 +233,203 @@ html, body {
 }
 
 #hud-char-icon {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
+}
+
+/* --- PULSANTE PAUSA / SETTINGS IN GIOCO --- */
+.pause-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  border: 3px solid #fff;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  z-index: 100;
+  pointer-events: auto;
+  box-shadow: 0 4px 0 #000;
+  transition: transform 0.1s ease, background 0.2s ease;
+}
+
+.pause-btn:hover {
+  background: #e52521;
+  transform: scale(1.05);
+}
+
+.pause-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #000;
+}
+
+/* OVERLAY SCURO A SCHERMO INTERO (Blocca tutti i click sotto) */
+.pause-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.65); /* Sfondo scuro oscurante */
+  backdrop-filter: blur(5px); /* Sfocatura del gioco sotto */
+  z-index: 200; /* Inserito sopra qualsiasi altro elemento */
+  display: flex;
+  justify-content: flex-end; /* Allinea il pannello a destra */
+  align-items: flex-start;
+  padding: 70px 20px 20px 20px;
+  pointer-events: auto; /* Intercetta ed evita click sul gioco/menu sottostanti */
+}
+
+.pause-overlay.hidden {
+  display: none !important;
+}
+
+/* --- PANNELLO IMPOSTAZIONI RETRO --- */
+.settings-panel {
+  width: 380px;
+  background: rgba(0, 0, 0, 0.95);
+  border: 5px solid #fff;
+  border-radius: 16px;
+  padding: 24px 20px;
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-panel.hidden {
+  display: none !important;
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.settings-header h2 {
+  font-size: 1rem;
+  color: #fbd000;
+  text-shadow: 2px 2px 0px #000;
+  margin: 0;
+}
+
+.close-btn {
+  background: #e52521;
+  border: 2px solid #fff;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.55rem;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #8b0000;
+}
+
+.close-btn:hover {
+  background: #ff3b30;
+}
+
+.close-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #8b0000;
+}
+
+/* REGOLATORI VOLUME (SLIDER) */
+.setting-item {
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-item label {
+  font-size: 0.65rem;
+  color: #fff;
+}
+
+.slider-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.slider-group input[type="range"] {
+  flex: 1;
+  accent-color: #fbd000;
+  cursor: pointer;
+  height: 8px;
+  background: #333;
+  border-radius: 4px;
+  border: 1px solid #fff;
+}
+
+.slider-group span {
+  font-size: 0.65rem;
+  width: 45px;
+  text-align: right;
+  color: #fbd000;
+}
+
+.settings-divider {
+  border: 0;
+  height: 2px;
+  background: #555;
+  margin: 16px 0;
+}
+
+/* SEZIONE COMANDI DI GIOCO */
+.controls-section h3 {
+  font-size: 0.7rem;
+  color: #43b047;
+  text-shadow: 1px 1px 0px #000;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.control-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.keys-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.key-row {
+  display: flex;
+  gap: 4px;
+}
+
+.key-badge {
+  background: #fff;
+  color: #000;
+  font-size: 0.65rem;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 2px solid #000;
+  box-shadow: 0 3px 0 #aaa;
+  font-weight: bold;
+}
+
+.key-badge.wide {
+  width: auto;
+  padding: 0 16px;
+}
+
+.control-label {
+  font-size: 0.65rem;
+  color: #fff;
 }
