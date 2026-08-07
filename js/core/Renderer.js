@@ -52,37 +52,35 @@ export default class RendererManager {
     this.setupResize();
   }
 
-  setupLights() {
+setupLights() {
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     this.scene.add(ambientLight);
 
-    // 1. Salva la luce in `this.dirLight` così è accessibile dall'update
     this.dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    this.dirLight.position.set(30, 50, 30);
+    
+    // Posiziona la luce in alto a lato, ma falla puntare SEMPRE al centro (0,0,0)
+    this.dirLight.position.set(40, 60, 40);
+    this.dirLight.target.position.set(0, 0, 0); 
     this.dirLight.castShadow = true;
 
-    // ➔ FIX FONDAMENTALE: aggiungi SIA la luce SIA il suo target alla scena
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
 
-    // 2. Area delle ombre (60x60 copre un raggio più ampio attorno a Mario)
-    const d = 60; 
+
+    const d = 100; 
     this.dirLight.shadow.camera.left = -d;
     this.dirLight.shadow.camera.right = d;
     this.dirLight.shadow.camera.top = d;
     this.dirLight.shadow.camera.bottom = -d;
 
-    // 3. Profondità della visuale della luce
     this.dirLight.shadow.camera.near = 0.5;
-    this.dirLight.shadow.camera.far = 150;
+    this.dirLight.shadow.camera.far = 180; // Aumentato per coprire la diagonale della mappa
 
-    // 4. Risoluzione Mappa Ombre
     this.dirLight.shadow.mapSize.width = 2048;
     this.dirLight.shadow.mapSize.height = 2048;
 
-    // 5. Fix per incollare le ombre al terreno ed evitare artefatti
     this.dirLight.shadow.bias = -0.0005;
-    this.dirLight.shadow.normalBias = 0.03;
+    this.dirLight.shadow.normalBias = 0.05; // Ridotto per evitare artefatti
   }
 
   setupResize() {

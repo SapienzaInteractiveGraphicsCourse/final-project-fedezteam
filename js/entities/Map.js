@@ -123,7 +123,7 @@ export default class Map extends EntityManager {
           const plant = flowerGlb.scene.clone();
 
           // ➔ MODIFICA QUI: Imposta y a -0.15 (o -0.2) invece di 0
-          plant.position.set(posX, -0.15, posZ);
+          plant.position.set(posX, -0.6, posZ);
 
           plant.traverse((child) => {
             if (child.isMesh) {
