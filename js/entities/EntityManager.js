@@ -8,7 +8,10 @@ export default class EntityManager {
     this.map = null;
     this.yoshi = null;
     this.player = null;
-    this.entities = []; 
+    this.entities = [];
+
+    // 🔴 FLAG: tiene traccia se lo spazio era già premuto nel frame precedente
+    this.spaceWasPressed = false;
   }
 
   setMap(mapEntity) {
@@ -44,19 +47,31 @@ export default class EntityManager {
     }
   }
 
-update(delta, input, ui) {
-    // 1. Prima facciamo avanzare l'intero mondo fisico
+  update(delta, input, ui, audio) {
+    // 1. Avanzamento fisica
     if (this.physicsEngine) {
       this.physicsEngine.update(delta);
     }
 
     if (!this.player) return;
 
-    // 2. Aggiorniamo le logiche e gli input del giocatore
+    // 🔊 GESTIONE SUONO SALTO SINGOLO
+    const isSpaceDown = input && (input.isPressed("space") || input.isPressed(" "));
+
+    // Il suono parte SOLO se lo spazio è premuto ADESSO e NON era premuto il frame prima
+    if (isSpaceDown && !this.spaceWasPressed) {
+      if (!this.player.isJumping) {
+        if (audio && audio.playSFX) audio.playSFX('jump');
+      }
+    }
+
+    // Salva lo stato di Spazio per il prossimo frame
+    this.spaceWasPressed = isSpaceDown;
+
+    // 2. Aggiornamento Player
     this.player.update(delta, input);
 
-    // ➔ 2.5 AGGIORNAMENTO LUCE DINAMICA
-    // Recupera la luce da RendererManager o dalla classe corrente
+    // 2.5 Luce dinamica
     const dirLight = this.dirLight || (this.rendererManager && this.rendererManager.dirLight);
     
     if (dirLight) {
@@ -71,10 +86,11 @@ update(delta, input, ui) {
       dirLight.target.updateMatrixWorld();
     }
 
-    // 3. Controlliamo se il giocatore è caduto fuori dalla mappa
+    // 3. Caduta nel vuoto
     if (this.physicsEngine && this.physicsEngine.checkVoidFall) {
       this.physicsEngine.checkVoidFall(this.player.position, () => {
-        // Logica di Respawn
+        if (audio && audio.playSFX) audio.playSFX('fall');
+        
         this.player.body.position.set(-20, 10, 250); 
         this.player.body.velocity.set(0, 0, 0);
         
@@ -82,9 +98,10 @@ update(delta, input, ui) {
       });
     }
 
-    // 4. Aggiorniamo mappa ed entità rimanenti
+    // 4. Mappa e altre entità
     if (this.map && this.map.update) {
       this.map.update(this.player, () => {
+        if (audio && audio.playSFX) audio.playSFX('coin');
         if (ui && ui.addCoin) ui.addCoin();
       });
     }

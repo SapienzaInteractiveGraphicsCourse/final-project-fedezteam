@@ -4,18 +4,37 @@ import GameLoop from "./core/GameLoop.js";
 import InputManager from "./core/InputManager.js";
 import UIManager from "./ui/UIManager.js";
 import PhysicsEngine from "./physics/PhysicsEngine.js";
+import AudioManager from "./core/AudioManager.js";
 import Yoshi from "./entities/Yoshi.js";
 import Map from "./entities/Map.js";
 import EntityManager from "./entities/EntityManager.js";
 import * as THREE from "three";
 
-// 1. CREAZIONE MODULI CORE, UI E FISICA
+// 1. CREAZIONE MODULI CORE
 const renderer = new RendererManager("#webgl-canvas");
 const assetLoader = new AssetLoader();
 const input = new InputManager();
 const ui = new UIManager();
 
-// Inizializzazione pulita del motore fisico Cannon-es
+// 🔊 Inizializzazione AudioManager e precaricamento audio generici e specifici
+const audio = new AudioManager();
+audio.load('bgm', 'assets/audio/overworld_bgm.mp3', true);
+audio.load('coin', 'assets/audio/coin_collect.wav');
+
+// Suoni Selezione Personaggio
+audio.load('mario_selected', 'assets/audio/mario_selected.wav');
+audio.load('luigi_selected', 'assets/audio/luigi_selected.wav');
+
+// Suoni specifici per Mario
+audio.load('mario_jump1', 'assets/audio/mario_jump1.wav');
+audio.load('mario_jump2', 'assets/audio/mario_jump2.wav');
+audio.load('mario_fall', 'assets/audio/mario_fall.wav');
+
+// Suoni specifici per Luigi
+audio.load('luigi_jump1', 'assets/audio/luigi_jump1.wav');
+audio.load('luigi_jump2', 'assets/audio/luigi_jump2.wav');
+audio.load('luigi_fall', 'assets/audio/luigi_fall.wav');
+
 const physics = new PhysicsEngine({
   gravity: -35,
   fallThreshold: -20
@@ -23,7 +42,7 @@ const physics = new PhysicsEngine({
 
 // FIX FONDAMENTALE: Passiamo SIA la scena CHE l'istanza di fisica ad EntityManager
 const entityManager = new EntityManager(renderer.scene, physics);
-let mapEntity = null; // Riferimento globale per la mappa
+let mapEntity = null;
 
 // 2. VARIABILI DI STATO E HELPER
 let menuCameraAngle = 0;
@@ -41,8 +60,21 @@ function equalizeLuigiScale() {
   rawModels.luigi.scale.set(scaleFactor, scaleFactor, scaleFactor);
 }
 
-// 3. EVENTO AVVIO GIOCO DA MENU UI
+// 🔊 1. La musica parte SUBITO al click sul primo tasto START
+ui.onWelcomeStart(() => {
+  audio.playBGM();
+});
+
+// 🔊 2. Suono di selezione della carta personaggio ("mario_selected" / "luigi_selected")
+ui.onCharacterSelect((character) => {
+  audio.setCharacter(character);
+  audio.playSFX('selected');
+});
+
+// 3. Spawna il personaggio ed entra in partita
 ui.onGameStart(({ character }) => {
+  audio.setCharacter(character);
+
   if (!rawModels[character]) return;
 
   // Leggiamo lo spawnPoint caricato dal JSON della mappa
@@ -57,7 +89,7 @@ ui.onGameStart(({ character }) => {
   }
 });
 
-// 4. LOGICA DI AGGIORNAMENTO DEL GIOCO
+// 3. LOGICA DI AGGIORNAMENTO
 function updateGame(delta) {
   // Telecamera nei menu
   if (ui.gameState === "MENU_WELCOME" || ui.gameState === "MENU_NAME") {
@@ -72,8 +104,7 @@ function updateGame(delta) {
 
   if (!entityManager.player) return;
 
-  // Aggiornamento entità (il delta e l'input bastano, la fisica è interna a EntityManager)
-  entityManager.update(delta, input, ui);
+  entityManager.update(delta, input, ui, audio);
 
   // Telecamera inseguimento (legge la posizione della mesh sincronizzata con Cannon-es)
   const playerPos = entityManager.player.mesh.position;
@@ -83,7 +114,7 @@ function updateGame(delta) {
   renderer.camera.lookAt(playerPos.x, playerPos.y + 1, playerPos.z);
 }
 
-// 5. CARICAMENTO BATCH ASSET E AVVIO GAME LOOP
+// 4. CARICAMENTO ASSET E AVVIO LOOP
 const assetsToLoad = {
   mario: "assets/models/Super_Mario/Main_Characters/mario.glb",
   luigi: "assets/models/Super_Mario/Main_Characters/luigi.glb",
