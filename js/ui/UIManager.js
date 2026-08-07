@@ -1,6 +1,6 @@
 export default class UIManager {
   constructor() {
-    // Elementi principali
+    // Elementi Schermate
     this.welcomeScreen = document.getElementById("welcome-screen");
     this.nameScreen = document.getElementById("name-screen");
     this.hud = document.getElementById("hud");
@@ -11,23 +11,34 @@ export default class UIManager {
     this.hudHeroName = document.getElementById("hud-hero-name");
     this.hudCharIcon = document.getElementById("hud-char-icon");
 
-    this.btnMario = document.getElementById("btn-mario");
-    this.btnLuigi = document.getElementById("btn-luigi");
+    // Elementi Contatori HUD
+    this.coinsCountEl = document.getElementById("coins-count");
+    this.livesCountEl = document.getElementById("lives-count");
+    this.starsCountEl = document.getElementById("stars-count");
 
-    // Elementi Menu Pausa / Settings
+    // Elementi Menu Pausa
     this.pauseBtn = document.getElementById("pause-btn");
     this.closeSettingsBtn = document.getElementById("close-settings-btn");
-    this.pauseOverlay = document.getElementById("pause-overlay"); // 👈 Overlay scuro
-    this.settingsTitle = document.getElementById("settings-title"); // 👈 Titolo dinamico
+    this.pauseOverlay = document.getElementById("pause-overlay");
+    this.settingsTitle = document.getElementById("settings-title");
     this.bgmSlider = document.getElementById("bgm-slider");
     this.sfxSlider = document.getElementById("sfx-slider");
     this.bgmValText = document.getElementById("bgm-val");
     this.sfxValText = document.getElementById("sfx-val");
 
-    // Stato
+    // Selezione Personaggio
+    this.btnMario = document.getElementById("btn-mario");
+    this.btnLuigi = document.getElementById("btn-luigi");
+
+    // Stato del Gioco e Contatori
     this.gameState = "MENU_WELCOME"; 
     this.selectedCharacter = "mario"; 
     this.isPaused = false;
+    
+    this.coins = 0;
+    this.lives = 4;
+    this.stars = 0;
+    this.maxStars = 5;
 
     // Callbacks
     this.onStartCallback = null;
@@ -55,7 +66,6 @@ export default class UIManager {
       if (this.onSelectCallback) this.onSelectCallback("luigi");
     });
 
-    // Step 1 -> Step 2
     this.startBtn.addEventListener("click", () => {
       this.gameState = "MENU_NAME";
       this.welcomeScreen.style.display = "none";
@@ -96,13 +106,27 @@ export default class UIManager {
     });
   }
 
+  // Metodi per aggiornare le risorse in tempo reale
+  addCoin(amount = 1) {
+    this.coins += amount;
+    if (this.coinsCountEl) this.coinsCountEl.textContent = this.coins;
+  }
+
+  addStar(amount = 1) {
+    this.stars += amount;
+    if (this.starsCountEl) this.starsCountEl.textContent = `${this.stars}/${this.maxStars}`;
+  }
+
+  removeLife(amount = 1) {
+    this.lives = Math.max(0, this.lives - amount);
+    if (this.livesCountEl) this.livesCountEl.textContent = this.lives;
+  }
+
   toggleSettings() {
     this.isPaused = !this.isPaused;
-
     if (this.isPaused) {
-      // 🏷️ Cambia il titolo in base alla fase del gioco
       if (this.settingsTitle) {
-        this.settingsTitle.textContent = this.gameState === "PLAYING" ? "Pause" : "Settings";
+        this.settingsTitle.textContent = "Settings";
       }
       this.pauseOverlay.classList.remove("hidden");
     } else {
@@ -133,7 +157,7 @@ export default class UIManager {
     }
 
     this.nameScreen.style.display = "none";
-    this.hud.style.display = "flex";
+    this.hud.style.display = "block";
 
     if (this.onStartCallback) {
       this.onStartCallback({

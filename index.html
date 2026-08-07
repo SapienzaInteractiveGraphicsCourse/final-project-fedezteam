@@ -59,22 +59,42 @@
       <button id="continue-btn" class="btn-retro">CONTINUE</button>
     </div>
 
-    <!-- HUD CON ICONA PERSONAGGIO, MONETE E VITE SOTTO IL NOME -->
+    <!-- HUD DISTRIBUITA NEGLI ANGOLI -->
     <div id="hud">
-      <!-- Profilo (Icona + Nome) -->
-      <div class="hud-item hud-profile">
-        <img id="hud-char-icon" src="assets/images/mario-icon.png" alt="Hero Icon">
-        <span id="hud-hero-name" style="color: #43b047;">MARIO</span>
+      <!-- ANGOLO IN ALTO A SINISTRA: Profilo (con Box) + Stelle (Senza Box) -->
+      <div class="hud-top-left">
+        <div class="hud-profile">
+          <img id="hud-char-icon" src="assets/images/mario-icon.png" alt="Hero Icon">
+          <span id="hud-hero-name" style="color: #43b047;">MARIO</span>
+        </div>
+        
+        <div class="hud-stat-clean">
+          <img class="hud-icon-lg" src="assets/images/star-icon.png" alt="Star" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+          <span class="emoji-fallback-lg" style="display:none;">⭐</span>
+          <span id="stars-count" style="color: #fbd000;">0/5</span>
+        </div>
       </div>
 
-      <!-- Riga Statistiche sotto il nome -->
-      <div class="hud-stats-row">
-        <div class="hud-item">COINS: <span id="coins-count" style="color: #fbd000;">0</span></div>
-        <div class="hud-item">LIVES: <span id="lives-count" style="color: #e52521;">3</span></div>
+      <!-- ANGOLO IN BASSO A SINISTRA: Vite / Fungo (Senza Box) -->
+      <div class="hud-bottom-left">
+        <div class="hud-stat-clean">
+          <img class="hud-icon-lg" src="assets/images/mushroom-icon.png" alt="Mushroom" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+          <span class="emoji-fallback-lg" style="display:none;">🍄</span>
+          <span class="count-prefix">x</span>
+          <span id="lives-count" style="color: #e52521;">4</span>
+        </div>
+      </div>
+
+      <!-- ANGOLO IN BASSO A DESTRA: Monete (Senza Box) -->
+      <div class="hud-bottom-right">
+        <div class="hud-stat-clean">
+          <img class="hud-icon-lg" src="assets/images/coin-icon.png" alt="Coin" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+          <span class="emoji-fallback-lg" style="display:none;">🪙</span>
+          <span class="count-prefix">x</span>
+          <span id="coins-count" style="color: #fbd000;">0</span>
+        </div>
       </div>
     </div>
-
-  </div>
 
   <script type="module" src="js/main.js"></script>
 
@@ -83,9 +103,12 @@
 
 <!-- Overlay scuro a schermo intero con dentro il pannello -->
 <div id="pause-overlay" class="pause-overlay hidden">
+  
+  <!-- 🔴 Tasto RESUME posizionato nell'angolo in alto a destra (al posto di Settings) -->
+  <button id="close-settings-btn" class="resume-btn">Resume</button>
+
   <div id="settings-panel" class="settings-panel">
     <div class="settings-header">
-      <button id="close-settings-btn" class="close-btn">Resume</button>
       <h2 id="settings-title">Settings</h2>
     </div>
 

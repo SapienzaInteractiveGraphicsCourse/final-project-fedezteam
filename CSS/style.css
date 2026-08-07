@@ -186,18 +186,16 @@ html, body {
   text-align: center;
 }
 
-/* --- HUD TRASPARENTE A COLONNA (ANGOLO IN ALTO A SINISTRA) --- */
+/* --- HUD TRASPARENTE A SCHERMO INTERO --- */
 #hud {
   display: none;
   position: absolute;
-  top: 20px;
-  left: 20px;
-  right: auto !important;              /* Rimuove il vincolo a destra */
-  width: auto !important;              /* Impedisce all'HUD di allargarsi a tutto schermo */
-  flex-direction: column !important;   /* Dispone Profilo sopra e Stats sotto */
-  align-items: flex-start !important;
-  justify-content: flex-start !important;
-  gap: 10px;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -205,24 +203,38 @@ html, body {
   z-index: 100;
 }
 
-/* Profilo Giocatore */
+/* Posizionamento Angoli */
+.hud-top-left {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: flex-start;
+}
+
+.hud-bottom-left {
+  position: absolute;
+  bottom: 25px;
+  left: 25px;
+  display: flex;
+  align-items: center;
+}
+
+.hud-bottom-right {
+  position: absolute;
+  bottom: 25px;
+  right: 25px;
+  display: flex;
+  align-items: center;
+}
+
+/* 1. Unico Box Rimanente: Profilo Giocatore (Icona + Nome) */
 .hud-profile {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Riga Statistiche (Monete + Vite affiancate sotto il nome) */
-.hud-stats-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.hud-item {
-  background: rgba(0, 0, 0, 0.6);
-  padding: 10px 18px;
-  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 8px 16px;
+  border-radius: 10px;
   border: 3px solid #fff;
   display: flex;
   align-items: center;
@@ -230,12 +242,54 @@ html, body {
   color: white;
   font-size: 0.85rem;
   text-shadow: 2px 2px 0px #000;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+#hud img {
+  max-width: 48px !important;
+  max-height: 48px !important;
+  width: 48px !important;
+  height: 48px !important;
+  object-fit: contain;
+  display: inline-block;
 }
 
 #hud-char-icon {
+  max-width: 44px !important;
+  max-height: 44px !important;
+  width: 44px !important;
+  height: 44px !important;
+}
+
+.hud-stat-clean {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 3px 3px 0px #000, -1px -1px 0px #000, 1px -1px 0px #000, -1px 1px 0px #000;
+}
+
+.count-prefix {
+  color: #fff;
+  font-size: 1.2rem;
+  margin-right: 2px;
+  text-shadow: 3px 3px 0px #000;
+}
+
+/* Icone e Emoji Ingrandite */
+.hud-icon-lg {
   width: 48px;
   height: 48px;
   object-fit: contain;
+  filter: drop-shadow(3px 3px 0px #000);
+}
+
+.emoji-fallback-lg {
+  font-size: 2.2rem;
+  line-height: 1;
+  filter: drop-shadow(3px 3px 0px #000);
 }
 
 /* --- PULSANTE PAUSA / SETTINGS IN GIOCO --- */
@@ -273,21 +327,49 @@ html, body {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.65); /* Sfondo scuro oscurante */
-  backdrop-filter: blur(5px); /* Sfocatura del gioco sotto */
-  z-index: 200; /* Inserito sopra qualsiasi altro elemento */
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(5px);
+  z-index: 200;
   display: flex;
-  justify-content: flex-end; /* Allinea il pannello a destra */
+  justify-content: flex-end;
   align-items: flex-start;
-  padding: 70px 20px 20px 20px;
-  pointer-events: auto; /* Intercetta ed evita click sul gioco/menu sottostanti */
+  padding: 75px 20px 20px 20px; /* Spazio in alto per non coprire col pannello */
+  pointer-events: auto;
 }
 
 .pause-overlay.hidden {
   display: none !important;
 }
 
-/* --- PANNELLO IMPOSTAZIONI RETRO --- */
+/* 🔴 TASTO RESUME (In alto a destra, sopra il tasto Settings oscurato) */
+.resume-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: #e52521;
+  color: #fff;
+  border: 3px solid #fff;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 201;
+  box-shadow: 0 4px 0 #8b0000;
+  transition: transform 0.1s ease, background 0.2s ease;
+}
+
+.resume-btn:hover {
+  background: #ff3b30;
+  transform: scale(1.05);
+}
+
+.resume-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #8b0000;
+}
+
+/* PANNELLO IMPOSTAZIONI */
 .settings-panel {
   width: 380px;
   background: rgba(0, 0, 0, 0.95);
@@ -300,42 +382,19 @@ html, body {
   flex-direction: column;
 }
 
-.settings-panel.hidden {
-  display: none !important;
-}
-
 .settings-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center; /* Titolo centrato */
   align-items: center;
   margin-bottom: 20px;
 }
 
 .settings-header h2 {
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: #fbd000;
   text-shadow: 2px 2px 0px #000;
   margin: 0;
-}
-
-.close-btn {
-  background: #e52521;
-  border: 2px solid #fff;
-  color: #fff;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 0.55rem;
-  cursor: pointer;
-  box-shadow: 0 3px 0 #8b0000;
-}
-
-.close-btn:hover {
-  background: #ff3b30;
-}
-
-.close-btn:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #8b0000;
+  text-align: center;
 }
 
 /* REGOLATORI VOLUME (SLIDER) */
