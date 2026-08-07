@@ -60,6 +60,15 @@ function equalizeLuigiScale() {
   rawModels.luigi.scale.set(scaleFactor, scaleFactor, scaleFactor);
 }
 
+// 🔊 Controllo volume BGM e SFX dal menù Impostazioni
+ui.onBGMVolumeChange = (volume) => {
+  audio.setBGMVolume(volume);
+};
+
+ui.onSFXVolumeChange = (volume) => {
+  audio.setSFXVolume(volume);
+};
+
 // 🔊 1. La musica parte SUBITO al click sul primo tasto START
 ui.onWelcomeStart(() => {
   audio.playBGM();
@@ -102,7 +111,8 @@ function updateGame(delta) {
     return;
   }
 
-  if (!entityManager.player) return;
+  // ⏸️ Se il gioco è in pausa o il player non è ancora spawnato, congeliamo l'aggiornamento
+  if (ui.isPaused || !entityManager.player) return;
 
   entityManager.update(delta, input, ui, audio);
 

@@ -1,6 +1,6 @@
 export default class UIManager {
   constructor() {
-    // 1. Selezione Elementi DOM
+    // Elementi principali
     this.welcomeScreen = document.getElementById("welcome-screen");
     this.nameScreen = document.getElementById("name-screen");
     this.hud = document.getElementById("hud");
@@ -14,60 +14,100 @@ export default class UIManager {
     this.btnMario = document.getElementById("btn-mario");
     this.btnLuigi = document.getElementById("btn-luigi");
 
-    // 2. Stato dell'interfaccia
+    // Elementi Menu Pausa / Settings
+    this.pauseBtn = document.getElementById("pause-btn");
+    this.closeSettingsBtn = document.getElementById("close-settings-btn");
+    this.pauseOverlay = document.getElementById("pause-overlay"); // 👈 Overlay scuro
+    this.settingsTitle = document.getElementById("settings-title"); // 👈 Titolo dinamico
+    this.bgmSlider = document.getElementById("bgm-slider");
+    this.sfxSlider = document.getElementById("sfx-slider");
+    this.bgmValText = document.getElementById("bgm-val");
+    this.sfxValText = document.getElementById("sfx-val");
+
+    // Stato
     this.gameState = "MENU_WELCOME"; 
     this.selectedCharacter = "mario"; 
+    this.isPaused = false;
 
-    // Callback per avvisare main.js
+    // Callbacks
     this.onStartCallback = null;
     this.onSelectCallback = null;
-    this.onWelcomeStartCallback = null; // 🔊 Callback per il click su START iniziale
+    this.onWelcomeStartCallback = null;
+    this.onBGMVolumeChange = null;
+    this.onSFXVolumeChange = null;
 
-    // 3. Inizializzazione Listener
     this._setupListeners();
   }
 
   _setupListeners() {
-    // Selezione Mario
+    // Selezione Personaggio
     this.btnMario.addEventListener("click", () => {
       this.selectedCharacter = "mario";
       this.btnMario.className = "char-card selected-mario";
       this.btnLuigi.className = "char-card";
-      
       if (this.onSelectCallback) this.onSelectCallback("mario");
     });
 
-    // Selezione Luigi
     this.btnLuigi.addEventListener("click", () => {
       this.selectedCharacter = "luigi";
       this.btnLuigi.className = "char-card selected-luigi";
       this.btnMario.className = "char-card";
-
       if (this.onSelectCallback) this.onSelectCallback("luigi");
     });
 
-    // Step 1 -> Step 2 (Welcome -> Name/Character)
+    // Step 1 -> Step 2
     this.startBtn.addEventListener("click", () => {
       this.gameState = "MENU_NAME";
       this.welcomeScreen.style.display = "none";
       this.nameScreen.style.display = "flex";
       this.heroNameInput.focus();
-
-      // 🔊 Notifica main.js di far partire la BGM al primo click
-      if (this.onWelcomeStartCallback) {
-        this.onWelcomeStartCallback();
-      }
+      if (this.onWelcomeStartCallback) this.onWelcomeStartCallback();
     });
 
-    // Step 2 -> Avvio Gioco
     this.continueBtn.addEventListener("click", () => this._triggerStart());
 
     this.heroNameInput.addEventListener("keydown", (e) => {
       e.stopPropagation();
-      if (e.key === "Enter") {
-        this._triggerStart();
+      if (e.key === "Enter") this._triggerStart();
+    });
+
+    // ⚙️ APERTURA / CHIUSURA OVERLAY PAUSA
+    this.pauseBtn.addEventListener("click", () => this.toggleSettings());
+    this.closeSettingsBtn.addEventListener("click", () => this.toggleSettings());
+
+    // Toggle Pausa tramite ESC o P
+    window.addEventListener("keydown", (e) => {
+      if ((e.key === "Escape" || e.key.toLowerCase() === "p") && this.gameState === "PLAYING") {
+        this.toggleSettings();
       }
     });
+
+    // Slider volumi
+    this.bgmSlider.addEventListener("input", (e) => {
+      const val = e.target.value;
+      this.bgmValText.textContent = `${val}%`;
+      if (this.onBGMVolumeChange) this.onBGMVolumeChange(val / 100);
+    });
+
+    this.sfxSlider.addEventListener("input", (e) => {
+      const val = e.target.value;
+      this.sfxValText.textContent = `${val}%`;
+      if (this.onSFXVolumeChange) this.onSFXVolumeChange(val / 100);
+    });
+  }
+
+  toggleSettings() {
+    this.isPaused = !this.isPaused;
+
+    if (this.isPaused) {
+      // 🏷️ Cambia il titolo in base alla fase del gioco
+      if (this.settingsTitle) {
+        this.settingsTitle.textContent = this.gameState === "PLAYING" ? "Pause" : "Settings";
+      }
+      this.pauseOverlay.classList.remove("hidden");
+    } else {
+      this.pauseOverlay.classList.add("hidden");
+    }
   }
 
   _triggerStart() {
@@ -75,7 +115,6 @@ export default class UIManager {
     const defaultName = this.selectedCharacter === "mario" ? "MARIO" : "LUIGI";
     const finalName = enteredName !== "" ? enteredName : defaultName;
 
-    // Aggiorna l'HUD
     this.hudHeroName.textContent = finalName;
     if (this.hudCharIcon) {
       this.hudCharIcon.src =
@@ -86,12 +125,16 @@ export default class UIManager {
     this.hudHeroName.style.color =
       this.selectedCharacter === "mario" ? "#e52521" : "#43b047";
 
-    // Mostra l'HUD e nasconde il menu
     this.gameState = "PLAYING";
+    
+    // 🏷️ Cambia la scritta del pulsante in alto a destra quando parte la partita
+    if (this.pauseBtn) {
+      this.pauseBtn.textContent = "☰ Pause";
+    }
+
     this.nameScreen.style.display = "none";
     this.hud.style.display = "flex";
 
-    // Notifica main.js
     if (this.onStartCallback) {
       this.onStartCallback({
         character: this.selectedCharacter,
@@ -100,18 +143,7 @@ export default class UIManager {
     }
   }
 
-  /**
-   * Permette a main.js di registrare l'avvio della BGM appena si clicca START
-   */
-  onWelcomeStart(callback) {
-    this.onWelcomeStartCallback = callback;
-  }
-
-  onCharacterSelect(callback) {
-    this.onSelectCallback = callback;
-  }
-
-  onGameStart(callback) {
-    this.onStartCallback = callback;
-  }
+  onWelcomeStart(cb) { this.onWelcomeStartCallback = cb; }
+  onCharacterSelect(cb) { this.onSelectCallback = cb; }
+  onGameStart(cb) { this.onStartCallback = cb; }
 }

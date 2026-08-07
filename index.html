@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -20,12 +21,13 @@
     }
   </script>
 </head>
+
 <body>
 
   <canvas id="webgl-canvas"></canvas>
 
   <div id="ui-layer">
-    
+
     <!-- STEP 1: WELCOME SCREEN -->
     <div id="welcome-screen" class="menu-card">
       <h1>SUPER MARIO 3D</h1>
@@ -57,14 +59,16 @@
       <button id="continue-btn" class="btn-retro">CONTINUE</button>
     </div>
 
-    <!-- HUD CON ICONA PERSONAGGIO -->
+    <!-- HUD CON ICONA PERSONAGGIO, MONETE E VITE SOTTO IL NOME -->
     <div id="hud">
-      <div class="hud-item">
+      <!-- Profilo (Icona + Nome) -->
+      <div class="hud-item hud-profile">
         <img id="hud-char-icon" src="assets/images/mario-icon.png" alt="Hero Icon">
         <span id="hud-hero-name" style="color: #43b047;">MARIO</span>
       </div>
 
-      <div style="display: flex; gap: 10px;">
+      <!-- Riga Statistiche sotto il nome -->
+      <div class="hud-stats-row">
         <div class="hud-item">COINS: <span id="coins-count" style="color: #fbd000;">0</span></div>
         <div class="hud-item">LIVES: <span id="lives-count" style="color: #e52521;">3</span></div>
       </div>
@@ -74,5 +78,66 @@
 
   <script type="module" src="js/main.js"></script>
 
+<!-- Pulsante in alto a destra -->
+<button id="pause-btn" class="pause-btn">☰ Pause</button>
+
+<!-- Overlay scuro a schermo intero con dentro il pannello -->
+<div id="pause-overlay" class="pause-overlay hidden">
+  <div id="settings-panel" class="settings-panel">
+    <div class="settings-header">
+      <button id="close-settings-btn" class="close-btn">Resume</button>
+      <h2 id="settings-title">Settings</h2>
+    </div>
+
+    <div class="settings-body">
+      <!-- Regolazione Volume Musica -->
+      <div class="setting-item">
+        <label for="bgm-slider">Music volume</label>
+        <div class="slider-group">
+          <input type="range" id="bgm-slider" min="0" max="100" value="35">
+          <span id="bgm-val">35%</span>
+        </div>
+      </div>
+
+      <!-- Regolazione Volume Effetti Sonori -->
+      <div class="setting-item">
+        <label for="sfx-slider">SFX volume</label>
+        <div class="slider-group">
+          <input type="range" id="sfx-slider" min="0" max="100" value="60">
+          <span id="sfx-val">60%</span>
+        </div>
+      </div>
+
+      <hr class="settings-divider">
+
+      <!-- Schema Comandi di Gioco -->
+      <div class="controls-section">
+        <h3>CONTROLS</h3>
+
+        <!-- Movimento WASD -->
+        <div class="control-row">
+          <div class="keys-group">
+            <div class="key-row"><span class="key-badge">W</span></div>
+            <div class="key-row">
+              <span class="key-badge">A</span>
+              <span class="key-badge">S</span>
+              <span class="key-badge">D</span>
+            </div>
+          </div>
+          <span class="control-label">MOVE</span>
+        </div>
+
+        <!-- Salto SPACE -->
+        <div class="control-row">
+          <div class="keys-group">
+            <span class="key-badge wide">SPACE</span>
+          </div>
+          <span class="control-label">JUMP</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
+
 </html>
