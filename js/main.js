@@ -67,7 +67,6 @@ ui.onSFXVolumeChange = (volume) => {
 };
 
 // 🔊 1. La musica parte SUBITO al click sul primo tasto START
-=======
 // Callbacks UI
 
 ui.onWelcomeStart(() => {
