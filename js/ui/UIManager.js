@@ -50,20 +50,29 @@ export default class UIManager {
     this._setupListeners();
   }
 
-  _setupListeners() {
-    // Selezione Personaggio
+_setupListeners() {
+    // Selezione Mario
     this.btnMario.addEventListener("click", () => {
-      this.selectedCharacter = "mario";
-      this.btnMario.className = "char-card selected-mario";
-      this.btnLuigi.className = "char-card";
-      if (this.onSelectCallback) this.onSelectCallback("mario");
+      // 🔊 Riproduce il suono e aggiorna lo stato SOLO se Mario NON era già selezionato
+      if (this.selectedCharacter !== "mario") {
+        this.selectedCharacter = "mario";
+        this.btnMario.className = "char-card selected-mario";
+        this.btnLuigi.className = "char-card";
+        
+        if (this.onSelectCallback) this.onSelectCallback("mario");
+      }
     });
 
+    // Selezione Luigi
     this.btnLuigi.addEventListener("click", () => {
-      this.selectedCharacter = "luigi";
-      this.btnLuigi.className = "char-card selected-luigi";
-      this.btnMario.className = "char-card";
-      if (this.onSelectCallback) this.onSelectCallback("luigi");
+      // 🔊 Riproduce il suono e aggiorna lo stato SOLO se Luigi NON era già selezionato
+      if (this.selectedCharacter !== "luigi") {
+        this.selectedCharacter = "luigi";
+        this.btnLuigi.className = "char-card selected-luigi";
+        this.btnMario.className = "char-card";
+
+        if (this.onSelectCallback) this.onSelectCallback("luigi");
+      }
     });
 
     this.startBtn.addEventListener("click", () => {

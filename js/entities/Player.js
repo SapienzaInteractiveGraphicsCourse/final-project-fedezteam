@@ -54,7 +54,7 @@ export default class Player {
     }
   }
 
-  update(delta, input) {
+  update(delta, input, audio) {
     if (!this.mesh || !this.body) return;
 
     let moveX = 0;
@@ -91,13 +91,18 @@ export default class Player {
     // Aggiorna rotazione grafica
     if (moved) this.mesh.rotation.y = targetRotation;
 
-    // 3. Salto
+    // 3. Salto (Si attiva SOLO se il personaggio toccava terra!)
     if ((input.isPressed("space") || input.isPressed(" ")) && this.canJump) {
       this.body.velocity.y = this.jumpVelocity;
-      this.canJump = false;
+      this.canJump = false; // Imposta subito a false in modo da bloccare salti ed effetti audio successivi in volo
+
+      // 🔊 Suono riprodotto SOLO quando il salto avviene effettivamente
+      if (audio && audio.playSFX) {
+        audio.playSFX('jump');
+      }
     }
 
-    // 4. Sincronizzazione Grafica <-> Fisica (Applica il delta del raggio)
+    // 4. Sincronizzazione Grafica <-> Fisica
     this.mesh.position.set(
       this.body.position.x,
       this.body.position.y - (this.radius + 0.3), // Piccolo offset per evitare che il modello affondi nel terreno

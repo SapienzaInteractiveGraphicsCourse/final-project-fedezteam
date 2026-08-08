@@ -55,21 +55,8 @@ export default class EntityManager {
 
     if (!this.player) return;
 
-    // 🔊 GESTIONE SUONO SALTO SINGOLO
-    const isSpaceDown = input && (input.isPressed("space") || input.isPressed(" "));
-
-    // Il suono parte SOLO se lo spazio è premuto ADESSO e NON era premuto il frame prima
-    if (isSpaceDown && !this.spaceWasPressed) {
-      if (!this.player.isJumping) {
-        if (audio && audio.playSFX) audio.playSFX('jump');
-      }
-    }
-
-    // Salva lo stato di Spazio per il prossimo frame
-    this.spaceWasPressed = isSpaceDown;
-
-    // 2. Aggiornamento Player
-    this.player.update(delta, input);
+    // 2. Aggiornamento Player (passiamo anche l'oggetto audio)
+    this.player.update(delta, input, audio);
 
     // 2.5 Luce dinamica
     const dirLight = this.dirLight || (this.rendererManager && this.rendererManager.dirLight);
