@@ -95,72 +95,92 @@
         </div>
       </div>
     </div>
+  </div>
 
   <script type="module" src="js/main.js"></script>
 
-<!-- Pulsante in alto a destra -->
-<button id="pause-btn" class="pause-btn">☰ Pause</button>
+  <!-- Pulsante in alto a destra -->
+  <button id="pause-btn" class="pause-btn">☰ Pause</button>
 
-<!-- Overlay scuro a schermo intero con dentro il pannello -->
-<div id="pause-overlay" class="pause-overlay hidden">
-  
-  <!-- 🔴 Tasto RESUME posizionato nell'angolo in alto a destra (al posto di Settings) -->
-  <button id="close-settings-btn" class="resume-btn">Resume</button>
+  <!-- Overlay scuro a schermo intero con dentro il pannello -->
+  <div id="pause-overlay" class="pause-overlay hidden">
+    
+    <!-- 🔴 Tasto RESUME posizionato nell'angolo in alto a destra (al posto di Settings) -->
+    <button id="close-settings-btn" class="resume-btn">Resume</button>
 
-  <div id="settings-panel" class="settings-panel">
-    <div class="settings-header">
-      <h2 id="settings-title">Settings</h2>
-    </div>
-
-    <div class="settings-body">
-      <!-- Regolazione Volume Musica -->
-      <div class="setting-item">
-        <label for="bgm-slider">Music volume</label>
-        <div class="slider-group">
-          <input type="range" id="bgm-slider" min="0" max="100" value="35">
-          <span id="bgm-val">35%</span>
-        </div>
+    <div id="settings-panel" class="settings-panel">
+      <div class="settings-header">
+        <h2 id="settings-title">Settings</h2>
       </div>
 
-      <!-- Regolazione Volume Effetti Sonori -->
-      <div class="setting-item">
-        <label for="sfx-slider">SFX volume</label>
-        <div class="slider-group">
-          <input type="range" id="sfx-slider" min="0" max="100" value="60">
-          <span id="sfx-val">60%</span>
+      <div class="settings-body">
+        <!-- Regolazione Volume Musica -->
+        <div class="setting-item">
+          <label for="bgm-slider">Music volume</label>
+          <div class="slider-group">
+            <input type="range" id="bgm-slider" min="0" max="100" value="35">
+            <span id="bgm-val">35%</span>
+          </div>
         </div>
-      </div>
 
-      <hr class="settings-divider">
+        <!-- Regolazione Volume Effetti Sonori -->
+        <div class="setting-item">
+          <label for="sfx-slider">SFX volume</label>
+          <div class="slider-group">
+            <input type="range" id="sfx-slider" min="0" max="100" value="60">
+            <span id="sfx-val">60%</span>
+          </div>
+        </div>
 
-      <!-- Schema Comandi di Gioco -->
-      <div class="controls-section">
-        <h3>CONTROLS</h3>
+        <hr class="settings-divider">
 
-        <!-- Movimento WASD -->
-        <div class="control-row">
-          <div class="keys-group">
-            <div class="key-row"><span class="key-badge">W</span></div>
-            <div class="key-row">
-              <span class="key-badge">A</span>
-              <span class="key-badge">S</span>
-              <span class="key-badge">D</span>
+        <!-- Schema Comandi di Gioco -->
+        <div class="controls-section">
+          <h3>CONTROLS</h3>
+
+          <!-- Movimento WASD -->
+          <div class="control-row">
+            <div class="keys-group">
+              <div class="key-row"><span class="key-badge">W</span></div>
+              <div class="key-row">
+                <span class="key-badge">A</span>
+                <span class="key-badge">S</span>
+                <span class="key-badge">D</span>
+              </div>
             </div>
+            <span class="control-label">MOVE</span>
           </div>
-          <span class="control-label">MOVE</span>
-        </div>
 
-        <!-- Salto SPACE -->
-        <div class="control-row">
-          <div class="keys-group">
-            <span class="key-badge wide">SPACE</span>
+          <!-- Scatto SHIFT -->
+          <div class="control-row">
+            <div class="keys-group">
+              <span class="key-badge wide">SHIFT</span>
+            </div>
+            <span class="control-label">SPRINT</span>
           </div>
-          <span class="control-label">JUMP</span>
+
+          <!-- Salto SPACE -->
+          <div class="control-row">
+            <div class="keys-group">
+              <span class="key-badge wide">SPACE</span>
+            </div>
+            <span class="control-label">JUMP</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
-</div>
+
+  <!-- OVERLAY GAME OVER -->
+  <div id="game-over-screen" class="game-over-overlay hidden">
+    <div class="menu-card game-over-card">
+      <h1 class="game-over-title">GAME OVER</h1>
+      <p>YOU RAN OUT OF LIVES!</p>
+      <img id="game-over-img" src="assets/images/gameover.png" alt="Game Over" onerror="this.style.display='none';">
+
+      <button id="restart-btn" class="btn-retro btn-red">RESTART GAME</button>
+    </div>
+  </div>
 </body>
 
 </html>

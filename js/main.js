@@ -18,8 +18,14 @@ const ui = new UIManager();
 
 // 🔊 Inizializzazione AudioManager e audio
 const audio = new AudioManager();
+ui.setAudio(audio);
+
 audio.load('bgm', 'assets/audio/overworld_bgm.mp3', true);
+audio.load('pause', 'assets/audio/menu_pause.wav');
 audio.load('coin', 'assets/audio/coin_collect.wav');
+audio.load('star', 'assets/audio/star_collect.wav');
+audio.load('mushroom', 'assets/audio/1up.wav');
+audio.load('gameover', 'assets/audio/gameover.mp3');
 
 audio.load('mario_selected', 'assets/audio/mario_selected.wav');
 audio.load('luigi_selected', 'assets/audio/luigi_selected.wav');

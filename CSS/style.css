@@ -492,3 +492,73 @@ html, body {
   font-size: 0.65rem;
   color: #fff;
 }
+
+/* --- OVERLAY GAME OVER --- */
+.game-over-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(6px);
+  z-index: 300;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.game-over-overlay.hidden {
+  display: none !important;
+}
+
+.game-over-card {
+  width: 580px !important;
+  max-width: 90vw;
+  padding: 35px 40px !important;
+  text-align: center;
+  border: 4px solid #e52521 !important;
+  box-shadow: 0 0 35px rgba(229, 37, 33, 0.7) !important;
+}
+
+.game-over-title {
+  font-size: 2.2rem;
+  color: #e52521;
+  text-shadow: 3px 3px 0px #000;
+  margin-bottom: 15px;
+  animation: pulse-red 1.2s infinite alternate ease-in-out;
+}
+
+.game-over-card img,
+#game-over-img {
+  max-width: 320px !important;
+  max-height: 250px !important;
+  width: 100%;
+  height: auto;
+  margin: 25px auto !important;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 0 15px rgba(229, 37, 33, 0.6));
+}
+
+@keyframes pulse-red {
+  0% {
+    transform: scale(1);
+    text-shadow: 3px 3px 0px #000, 0 0 10px #e52521;
+  }
+  100% {
+    transform: scale(1.06);
+    text-shadow: 3px 3px 0px #000, 0 0 25px #e52521;
+  }
+}
+
+.btn-red {
+  background-color: #e52521 !important;
+  box-shadow: 0 4px 0 #8b0000 !important;
+  margin-top: 15px;
+}
+
+.btn-red:hover {
+  background-color: #ff3b30 !important;
+}

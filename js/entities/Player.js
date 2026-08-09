@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 
 export default class Player {
-  constructor(mesh, physicsEngine, moveSpeed = 15, jumpVelocity = 15) {
+  constructor(mesh, physicsEngine, moveSpeed = 11, jumpVelocity = 11) {
     this.mesh = mesh;
     this.physicsEngine = physicsEngine;
-    this.moveSpeed = moveSpeed;
+    this.moveSpeed = moveSpeed;           // Velocità di camminata standard
+    this.sprintMultiplier = 1.5;         // ⚡ Moltiplicatore per lo scatto (16,5 di velocità)
     this.jumpVelocity = jumpVelocity;
     
     this.body = null;
@@ -57,41 +58,49 @@ export default class Player {
   update(delta, input, audio) {
     if (!this.mesh || !this.body) return;
 
-    let moveX = 0;
-    let moveZ = 0;
-    let targetRotation = this.mesh.rotation.y;
-    let moved = false;
+    let inputX = 0;
+    let inputZ = 0;
 
-    // 1. Gestione Input
+    // 1. Rilevamento Input (Assi X e Z)
     if (input.isPressed("w") || input.isPressed("arrowup")) {
-      moveZ -= this.moveSpeed;
-      targetRotation = -Math.PI / 2;
-      moved = true;
+      inputZ -= 1;
     }
     if (input.isPressed("s") || input.isPressed("arrowdown")) {
-      moveZ += this.moveSpeed;
-      targetRotation = Math.PI / 2;
-      moved = true;
+      inputZ += 1;
     }
     if (input.isPressed("a") || input.isPressed("arrowleft")) {
-      moveX -= this.moveSpeed;
-      targetRotation = 0;
-      moved = true;
+      inputX -= 1;
     }
     if (input.isPressed("d") || input.isPressed("arrowright")) {
-      moveX += this.moveSpeed;
-      targetRotation = Math.PI;
-      moved = true;
+      inputX += 1;
     }
 
-    // 2. Applica Velocità
+    // ⚡ 2. Controllo Tasto Scatto (SHIFT)
+    const isSprinting = input.isPressed("shift") || input.isPressed("shiftleft") || input.isPressed("shiftright");
+    const activeSpeed = isSprinting ? (this.moveSpeed * this.sprintMultiplier) : this.moveSpeed;
+
+    let moveX = 0;
+    let moveZ = 0;
+
+    // 3. Calcolo Direzione e Velocità Diagonale Bilanciata
+    if (inputX !== 0 || inputZ !== 0) {
+      const isDiagonal = inputX !== 0 && inputZ !== 0;
+      
+      const diagonalFactor = isDiagonal ? (1.18 / Math.sqrt(2)) : 1;
+
+      moveX = inputX * activeSpeed * diagonalFactor;
+      moveZ = inputZ * activeSpeed * diagonalFactor;
+
+      // Rotazione precisa verso la direzione di movimento
+      const targetRotation = Math.atan2(inputZ, -inputX);
+      this.mesh.rotation.y = targetRotation;
+    }
+
+    // 4. Applica Velocità alla Fisica
     this.body.velocity.x = moveX;
     this.body.velocity.z = moveZ;
 
-    // Aggiorna rotazione grafica
-    if (moved) this.mesh.rotation.y = targetRotation;
-
-    // 3. Salto (Si attiva SOLO se il personaggio toccava terra!)
+    // 5. Salto (solo se toccava terra)
     if ((input.isPressed("space") || input.isPressed(" ")) && this.canJump) {
       this.body.velocity.y = this.jumpVelocity;
       this.canJump = false; // Imposta subito a false in modo da bloccare salti ed effetti audio successivi in volo
@@ -102,7 +111,7 @@ export default class Player {
       }
     }
 
-    // 4. Sincronizzazione Grafica <-> Fisica
+    // 6. Sincronizzazione Grafica <-> Fisica
     this.mesh.position.set(
       this.body.position.x,
       this.body.position.y - (this.radius + 0.3), // Piccolo offset per evitare che il modello affondi nel terreno
