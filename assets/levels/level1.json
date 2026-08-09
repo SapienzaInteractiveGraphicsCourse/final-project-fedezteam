@@ -1,7 +1,15 @@
 {
-  "name": "Procedural Arena 50x50",
-  "spawnPoint": { "x": 0, "y": 2, "z": 0 },
-  "yoshiSpawn": { "x": 0, "y": 2, "z": 0 },
-  "gridSize": 50,
-  "spacing": 0
+  "name": "Procedural Arena 100x100",
+  "playerSpawn": { "x": 0, "y": 2, "z": 0 },
+  "yoshiSpawn": { "x": 4, "y": -0.2, "z": 2 },
+  "stars": [
+    { "x": -30, "y": 2, "z": -30 },
+    { "x": 30, "y": 2, "z": -30 },
+    { "x": -30, "y": 2, "z": 30 },
+    { "x": 30, "y": 2, "z": 30 },
+    { "x": 0, "y": 2, "z": -40 }
+  ],
+  "mushrooms": [
+    { "x": 10, "y": 1.5, "z": -10 }
+  ]
 }
