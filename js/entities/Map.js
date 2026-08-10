@@ -59,7 +59,7 @@ export default class Map extends EntityManager {
 
     // FISICA
     const groundShape = new CANNON.Box(
-      new CANNON.Vec3(arenaSize / 2, 0.5, arenaSize / 2)
+      new CANNON.Vec3(arenaSize / 2, 0.5, arenaSize / 2),
     );
     const groundBody = new CANNON.Body({
       mass: 0,
@@ -86,9 +86,13 @@ export default class Map extends EntityManager {
     let mushroomGlb = null;
 
     try {
-      mushroomGlb = await this.loader.loadAsync("assets/models/Super_Mario/Items/mushroom.glb");
+      mushroomGlb = await this.loader.loadAsync(
+        "assets/models/Super_Mario/Items/mushroom.glb",
+      );
     } catch (e) {
-      console.warn("Modello mushroom.glb non trovato. Creo fungo geometrico di fallback.");
+      console.warn(
+        "Modello mushroom.glb non trovato. Creo fungo geometrico di fallback.",
+      );
     }
 
     const positions = mushroomPositions || [{ x: 10, y: 1.5, z: -10 }];
@@ -102,8 +106,16 @@ export default class Map extends EntityManager {
       } else {
         // Fallback: Fungo geometrico composto da cappello rosso e gambo bianco
         const group = new THREE.Group();
-        
-        const capGeo = new THREE.SphereGeometry(1, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+
+        const capGeo = new THREE.SphereGeometry(
+          1,
+          16,
+          16,
+          0,
+          Math.PI * 2,
+          0,
+          Math.PI / 2,
+        );
         const capMat = new THREE.MeshStandardMaterial({ color: 0xe52521 });
         const cap = new THREE.Mesh(capGeo, capMat);
         cap.position.y = 0.5;
@@ -130,7 +142,7 @@ export default class Map extends EntityManager {
       this.mushrooms.push({
         mesh: mushroomMesh,
         position: mushroomMesh.position,
-        collected: false
+        collected: false,
       });
     });
   }
@@ -139,9 +151,13 @@ export default class Map extends EntityManager {
     let starGlb = null;
 
     try {
-      starGlb = await this.loader.loadAsync("assets/models/Super_Mario/Items/star.glb");
+      starGlb = await this.loader.loadAsync(
+        "assets/models/Super_Mario/Items/star.glb",
+      );
     } catch (e) {
-      console.warn("Modello star.glb non trovato. Creo stella geometrica dorata di fallback.");
+      console.warn(
+        "Modello star.glb non trovato. Creo stella geometrica dorata di fallback.",
+      );
     }
 
     const positions = starPositions || [
@@ -149,7 +165,7 @@ export default class Map extends EntityManager {
       { x: 30, y: 2, z: -30 },
       { x: -30, y: 2, z: 30 },
       { x: 30, y: 2, z: 30 },
-      { x: 0, y: 2, z: -40 }
+      { x: 0, y: 2, z: -40 },
     ];
 
     positions.forEach((pos) => {
@@ -165,7 +181,7 @@ export default class Map extends EntityManager {
           emissive: 0xffa500,
           emissiveIntensity: 0.4,
           metalness: 0.8,
-          roughness: 0.2
+          roughness: 0.2,
         });
         starMesh = new THREE.Mesh(geo, mat);
         starMesh.position.set(pos.x, pos.y + 0.5, pos.z);
@@ -182,7 +198,7 @@ export default class Map extends EntityManager {
       this.stars.push({
         mesh: starMesh,
         position: starMesh.position,
-        collected: false
+        collected: false,
       });
     });
   }
@@ -192,13 +208,17 @@ export default class Map extends EntityManager {
     let coinGlb = null;
 
     try {
-      flowerGlb = await this.loader.loadAsync("assets/models/Super_Mario/Map/flower1.glb");
+      flowerGlb = await this.loader.loadAsync(
+        "assets/models/Super_Mario/Map/flower1.glb",
+      );
     } catch (e) {
       console.warn("Modello flower1.glb non trovato, salto le piante.");
     }
 
     try {
-      coinGlb = await this.loader.loadAsync("assets/models/Super_Mario/Items/coin.glb");
+      coinGlb = await this.loader.loadAsync(
+        "assets/models/Super_Mario/Items/coin.glb",
+      );
     } catch (e) {
       console.warn("Modello coin.glb non trovato, salto le monete.");
     }
@@ -248,17 +268,28 @@ export default class Map extends EntityManager {
     if (!player) return;
 
     const playerPos = player.position;
-
+    const coinRadiusSq = this.coinCollectRadius * this.coinCollectRadius;
     // 🪙 1. Monete (Ruotano)
     for (const coin of this.coins) {
       if (coin.collected) continue;
 
       coin.mesh.rotation.y += 0.04;
 
-      const distance = playerPos.distanceTo(coin.position);
-      if (distance <= this.coinCollectRadius) {
+      const distanceSq = playerPos.distanceToSquared(coin.position);
+
+      if (distanceSq <= coinRadiusSq) {
         coin.collected = true;
         this.scene.remove(coin.mesh);
+        coin.mesh.traverse((child) => {
+        if (child.isMesh) {
+            child.geometry.dispose();
+            if (Array.isArray(child.material)) {
+                child.material.forEach(mat => mat.dispose());
+            } else {
+                child.material.dispose();
+            }
+        }
+    });
         if (onCoinCollected) onCoinCollected();
       }
     }

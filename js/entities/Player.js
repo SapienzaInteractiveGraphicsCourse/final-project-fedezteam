@@ -1,16 +1,16 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 
 export default class Player {
   constructor(mesh, physicsEngine, moveSpeed = 11, jumpVelocity = 11) {
     this.mesh = mesh;
     this.physicsEngine = physicsEngine;
-    this.moveSpeed = moveSpeed;           // Velocità di camminata standard
-    this.sprintMultiplier = 1.5;         // ⚡ Moltiplicatore per lo scatto (16,5 di velocità)
+    this.moveSpeed = moveSpeed; // Velocità di camminata standard
+    this.sprintMultiplier = 1.5; // ⚡ Moltiplicatore per lo scatto (16,5 di velocità)
     this.jumpVelocity = jumpVelocity;
-    
+
     this.body = null;
-    this.canJump = false; 
+    this.canJump = false;
     this.radius = 1; // Raggio della sfera di collisione fisica
 
     if (this.mesh) {
@@ -28,24 +28,28 @@ export default class Player {
 
     // 1. Setup Three.js (Grafica)
     this.mesh.position.set(x, y, z);
-    
+
     // 2. Setup Cannon-es (Fisica)
     const shape = new CANNON.Sphere(this.radius);
-    
+
     // Alza il centro della sfera di 'radius' affinché l'origine ai piedi (Y=0) tocchi il suolo
     this.body = new CANNON.Body({
       mass: 5,
       position: new CANNON.Vec3(x, y + this.radius, z),
       shape: shape,
       material: this.physicsEngine?.defaultMaterial,
-      fixedRotation: true // Impedisce al personaggio di rotolare
+      fixedRotation: true, // Impedisce al personaggio di rotolare
     });
 
     // 3. Listener per azzerare il salto all'atterraggio
+    const contactNormal = new CANNON.Vec3();
+    const upAxis = new CANNON.Vec3(0, 1, 0);
+
     this.body.addEventListener("collide", (e) => {
-      const contactNormal = new CANNON.Vec3();
       e.contact.ni.negate(contactNormal);
-      if (contactNormal.dot(new CANNON.Vec3(0, 1, 0)) > 0.5) {
+
+      // Usa le variabili pre-allocate invece di usare 'new'
+      if (contactNormal.dot(upAxis) > 0.5) {
         this.canJump = true;
       }
     });
@@ -76,8 +80,13 @@ export default class Player {
     }
 
     // ⚡ 2. Controllo Tasto Scatto (SHIFT)
-    const isSprinting = input.isPressed("shift") || input.isPressed("shiftleft") || input.isPressed("shiftright");
-    const activeSpeed = isSprinting ? (this.moveSpeed * this.sprintMultiplier) : this.moveSpeed;
+    const isSprinting =
+      input.isPressed("shift") ||
+      input.isPressed("shiftleft") ||
+      input.isPressed("shiftright");
+    const activeSpeed = isSprinting
+      ? this.moveSpeed * this.sprintMultiplier
+      : this.moveSpeed;
 
     let moveX = 0;
     let moveZ = 0;
@@ -85,8 +94,8 @@ export default class Player {
     // 3. Calcolo Direzione e Velocità Diagonale Bilanciata
     if (inputX !== 0 || inputZ !== 0) {
       const isDiagonal = inputX !== 0 && inputZ !== 0;
-      
-      const diagonalFactor = isDiagonal ? (1.18 / Math.sqrt(2)) : 1;
+
+      const diagonalFactor = isDiagonal ? 1.18 / Math.sqrt(2) : 1;
 
       moveX = inputX * activeSpeed * diagonalFactor;
       moveZ = inputZ * activeSpeed * diagonalFactor;
@@ -107,7 +116,7 @@ export default class Player {
 
       // 🔊 Suono riprodotto SOLO quando il salto avviene effettivamente
       if (audio && audio.playSFX) {
-        audio.playSFX('jump');
+        audio.playSFX("jump");
       }
     }
 
@@ -115,7 +124,7 @@ export default class Player {
     this.mesh.position.set(
       this.body.position.x,
       this.body.position.y - (this.radius + 0.3), // Piccolo offset per evitare che il modello affondi nel terreno
-      this.body.position.z
+      this.body.position.z,
     );
   }
 
