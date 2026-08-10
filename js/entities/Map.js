@@ -19,7 +19,6 @@ export default class Map extends EntityManager {
     this.stars = [];
     this.starCollectRadius = 2.8;
 
-    // 🍄 Gestione Funghi
     this.mushrooms = [];
     this.mushroomCollectRadius = 2.5;
   }
@@ -39,7 +38,7 @@ export default class Map extends EntityManager {
 
     // PAVIMENTO
     const textureLoader = new THREE.TextureLoader();
-    const grassTexture = textureLoader.load("assets/textures/grass.png");
+    const grassTexture = textureLoader.load("assets/textures/field/grass2.jpg");
 
     grassTexture.wrapS = THREE.RepeatWrapping;
     grassTexture.wrapT = THREE.RepeatWrapping;
@@ -50,7 +49,7 @@ export default class Map extends EntityManager {
     const floorMaterial = new THREE.MeshStandardMaterial({
       map: grassTexture,
       color: 0xffffff,
-      roughness: 0.9,
+      roughness: 1,
     });
 
     const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);

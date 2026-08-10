@@ -105,4 +105,14 @@ export default class AudioManager {
     soundClone.volume = this.sounds[soundKey].volume;
     soundClone.play().catch(() => { });
   }
+  // Per fermare un SFX e riportarlo all'inizio
+stopSFX(key) {
+  const sound = this.sounds[key]; // o dove salvi gli Audio/PositionalAudio
+  if (sound) {
+    sound.stop(); // Se usi Three.js Audio
+    // Oppure se usi HTML5 Audio standard:
+    // sound.pause();
+    // sound.currentTime = 0;
+  }
+}
 }

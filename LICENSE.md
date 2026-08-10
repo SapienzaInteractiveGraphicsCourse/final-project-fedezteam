@@ -5,7 +5,7 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 ### Characters & Enemies
 - **Mario**: Created by [gaddiellartey2010](https://sketchfab.com/gaddiellartey2010) — [Model Link](https://sketchfab.com/3d-models/mario-802b20551cef40c0a19462f92d40a1b1)
 - **Luigi**: Created by [kingston.shamily](https://sketchfab.com/kingston.shamily) — [Model Link](https://sketchfab.com/3d-models/luigi-9fb92a86975446e8970bc99cee522b02)
-- **Yoshi**: Created by [Andres.Fco.Corbacho.Bueno](https://sketchfab.com/Andres.Fco.Corbacho.Bueno) — [Model Link](https://sketchfab.com/3d-models/yoshi-363820d7add148c2ae08d7ca599e5bb3)
+- **Yoshi**: Original model created by [Andres.Fco.Corbacho.Bueno](https://sketchfab.com/Andres.Fco.Corbacho.Bueno) ([Model Link](https://sketchfab.com/3d-models/yoshi-363820d7add148c2ae08d7ca599e5bb3)) — **Personally modified using Blender** to suit the needs of the project.
 - **Toad**: Created by [jakobhenerey2023](https://sketchfab.com/jakobhenerey2023) — [Model Link](https://sketchfab.com/3d-models/toad-d6a9f85aecd245fcb75f7d0f7a2f9f95)
 - **Bowser**: Created by [the_shatel](https://sketchfab.com/the_shatel) — [Model Link](https://sketchfab.com/3d-models/bowser-fa17f94ae350416f86c35db7c0e129c3)
 - **Bowser Jr.**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/bowser-jr-mario-kart-8-deluxe-8fd1397374a04d499ab4bd5bf90ffeac)
@@ -24,3 +24,6 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Star**: Created by [jkimmel694](https://sketchfab.com/jkimmel694) — [Model Link](https://sketchfab.com/3d-models/wii-mario-kart-wii-star-605d03622b334f4695ee7fa5a00d9dc9)
 - **Super Mushroom**: Created by [smarthug](https://sketchfab.com/smarthug) — [Model Link](https://sketchfab.com/3d-models/mario-super-mushroom-bfecb0aee2984ddca543ea90dcb270cc)
 - **Yoshi Egg**: Created by [Yanez-Designs](https://sketchfab.com/Yanez-Designs) — [Model Link](https://sketchfab.com/3d-models/yoshi-egg-2125c39434ed4b3696bdff0a0bdb6fb2)
+
+### Textures & Environments
+- **Skyboxes**: Provided by [Kenney](https://kenney.nl/assets/skyboxes)

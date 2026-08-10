@@ -1,84 +1,54 @@
 import RendererManager from "./core/Renderer.js";
-import AssetLoader from "./core/AssetLoader.js";
+import AssetLoader from "./core/AssetLoad/AssetLoader.js";
+import {initGameModels } from "./core/AssetLoad/assetConfig.js";
 import GameLoop from "./core/GameLoop.js";
 import InputManager from "./core/InputManager.js";
 import UIManager from "./ui/UIManager.js";
 import PhysicsEngine from "./physics/PhysicsEngine.js";
-import AudioManager from "./core/AudioManager.js";
+import AudioManager from "./core/Audio/AudioManager.js";
+import {initGameAudio} from "./core/Audio/soundConfig.js";
 import Yoshi from "./entities/Yoshi.js";
 import Map from "./entities/Map.js";
 import EntityManager from "./entities/EntityManager.js";
 import * as THREE from "three";
 
-// 1. CREAZIONE MODULI CORE
+// 1. CORE MODULES
 const renderer = new RendererManager("#webgl-canvas");
 const assetLoader = new AssetLoader();
 const input = new InputManager();
 const ui = new UIManager();
 
-// 🔊 Inizializzazione AudioManager e audio
 const audio = new AudioManager();
-ui.setAudio(audio);
-
-audio.load('bgm', 'assets/audio/overworld_bgm.mp3', true);
-audio.load('pause', 'assets/audio/menu_pause.wav');
-audio.load('coin', 'assets/audio/coin_collect.wav');
-audio.load('star', 'assets/audio/star_collect.wav');
-audio.load('mushroom', 'assets/audio/1up.wav');
-audio.load('gameover', 'assets/audio/gameover.mp3');
-
-audio.load('mario_selected', 'assets/audio/mario_selected.wav');
-audio.load('luigi_selected', 'assets/audio/luigi_selected.wav');
-
-audio.load('mario_jump1', 'assets/audio/mario_jump1.wav');
-audio.load('mario_jump2', 'assets/audio/mario_jump2.wav');
-audio.load('mario_fall', 'assets/audio/mario_fall.wav');
-
-audio.load('luigi_jump1', 'assets/audio/luigi_jump1.wav');
-audio.load('luigi_jump2', 'assets/audio/luigi_jump2.wav');
-audio.load('luigi_fall', 'assets/audio/luigi_fall.wav');
+initGameAudio(audio);
 
 const physics = new PhysicsEngine({
   gravity: -35,
-  fallThreshold: -20
+  fallThreshold: -200 
 });
 
 const entityManager = new EntityManager(renderer.scene, physics);
 let mapEntity = null;
 
-// 2. VARIABILI DI STATO
+// 2. STATE VARIABLES
 let menuCameraAngle = 0;
 const rawModels = { mario: null, luigi: null };
 
-
-function equalizeLuigiScale() {
-  if (!rawModels.mario || !rawModels.luigi) return;
-  const boxMario = new THREE.Box3().setFromObject(rawModels.mario);
-  const marioHeight = boxMario.max.y - boxMario.min.y;
-
-  const boxLuigi = new THREE.Box3().setFromObject(rawModels.luigi);
-  const luigiHeight = boxLuigi.max.y - boxLuigi.min.y;
-
-  const scaleFactor = marioHeight / luigiHeight;
-  rawModels.luigi.scale.set(scaleFactor, scaleFactor, scaleFactor);
-}
-
-// 🔊 Controllo volume BGM e SFX dal menù Impostazioni
+// Volume Controls
 ui.onBGMVolumeChange = (volume) => {
   audio.setBGMVolume(volume);
 };
-
 ui.onSFXVolumeChange = (volume) => {
   audio.setSFXVolume(volume);
 };
 
-// 🔊 1. La musica parte SUBITO al click sul primo tasto START
-// Callbacks UI
+// On start click, play background music
 
 ui.onWelcomeStart(() => {
   audio.playBGM();
 });
 
+
+//3. UI
 ui.onCharacterSelect((character) => {
   audio.setCharacter(character);
   audio.playSFX('selected');
@@ -98,7 +68,7 @@ ui.onGameStart(({ character }) => {
   }
 });
 
-// 3. LOGICA DI AGGIORNAMENTO
+// 4. GAME LOOP
 function updateGame(delta) {
   if (ui.gameState === "MENU_WELCOME" || ui.gameState === "MENU_NAME") {
     menuCameraAngle += 0.5 * delta;
@@ -110,12 +80,12 @@ function updateGame(delta) {
     return;
   }
 
-  // ⏸️ Se il gioco è in pausa o il player non è ancora spawnato, congeliamo l'aggiornamento
+  // If player is dead or game is paused, skip updating entities
   if (ui.isPaused || !entityManager.player) return;
 
   entityManager.update(delta, input, ui, audio);
 
-  // Inseguimento Telecamera
+  // Camera follows the player behind and slightly above
   const playerPos = entityManager.player.mesh.position;
   renderer.camera.position.x = playerPos.x;
   renderer.camera.position.y = playerPos.y + 4;
@@ -123,22 +93,17 @@ function updateGame(delta) {
   renderer.camera.lookAt(playerPos.x, playerPos.y + 1, playerPos.z);
 }
 
-// 4. CARICAMENTO PERCORSI NUOVI MODEL GLTF
-const assetsToLoad = {
-  mario: "assets/models/Super_Mario/Main_Characters/MarioGLTF/mario.gltf",
-  luigi: "assets/models/Super_Mario/Main_Characters/LuigiGLTF/Luigi.gltf",
-  yoshi: "assets/models/Super_Mario/Main_Characters/YoshiGLTF/yoshi.gltf",
-};
-
-assetLoader
-  .loadAll(assetsToLoad)
+// 5. ASSET LOADING 
+// (GLTF Models)
+// assets is the result of the loaded models, which will be used to spawn entities in the game
+initGameModels(assetLoader)
   .then(async (assets) => {
-    // 1. Carica mappa
+    // 1. Map loading
     mapEntity = new Map(physics);
     await mapEntity.loadLevel("./assets/levels/level1.json");
     entityManager.setMap(mapEntity);
 
-    // 2. Spawna Yoshi con il modello aggiornato
+    // 2. Yoshi Spawn point
     if (mapEntity.yoshiSpawn) {
       const ySpawn = mapEntity.yoshiSpawn;
       const yoshiEntity = new Yoshi(assets.yoshi, physics);
@@ -146,11 +111,11 @@ assetLoader
       entityManager.setYoshi(yoshiEntity);
     }
 
-    // 3. Assegna i modelli di Mario e Luigi direttamente
+    // 3. Assign loaded models to rawModels for later use
     rawModels.mario = assets.mario;
     rawModels.luigi = assets.luigi;
 
-    // 4. Avvia il loop di gioco
+    // 4. Start the game loop
     const gameLoop = new GameLoop(renderer, updateGame);
     gameLoop.start();
   })

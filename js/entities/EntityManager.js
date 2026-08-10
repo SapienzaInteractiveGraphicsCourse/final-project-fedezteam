@@ -1,7 +1,6 @@
 import Player from "./Player.js";
 
 export default class EntityManager {
-  // Aggiunto il physicsEngine nel costruttore per distribuirlo dove serve
   constructor(scene, physicsEngine) {
     this.scene = scene;
     this.physicsEngine = physicsEngine;
@@ -10,7 +9,6 @@ export default class EntityManager {
     this.player = null;
     this.entities = [];
 
-    // 🔴 FLAG: tiene traccia se lo spazio era già premuto nel frame precedente
     this.spaceWasPressed = false;
   }
 
@@ -29,10 +27,10 @@ export default class EntityManager {
   }
 
   spawnPlayer(model, startX, startY, startZ) {
-    // Pulizia se esiste già un player (utile per i respawn totali)
     if (this.player && this.player.mesh) {
       this.scene.remove(this.player.mesh);
-      if (this.player.body) this.physicsEngine.world.removeBody(this.player.body);
+      if (this.player.body)
+        this.physicsEngine.world.removeBody(this.player.body);
     }
 
     this.player = new Player(model, this.physicsEngine);
@@ -47,50 +45,61 @@ export default class EntityManager {
     }
   }
 
-update(delta, input, ui, audio) {
-    // 🛑 Se il gioco è in GAME_OVER o nei menù, ferma la fisica e l'aggiornamento
+  update(delta, input, ui, audio) {
     if (ui && ui.gameState !== "PLAYING") return;
 
-    // 1. Avanzamento fisica
+    // 1. Physics Engine Update
     if (this.physicsEngine) {
       this.physicsEngine.update(delta);
     }
 
     if (!this.player) return;
 
-    // 2. Aggiornamento Player
+    // 2. Player Update
     this.player.update(delta, input, audio);
 
-    // 2.5 Luce dinamica
-    const dirLight = this.dirLight || (this.rendererManager && this.rendererManager.dirLight);
+    // 3. Update the directional light to follow the player
+    const dirLight =
+      this.dirLight || (this.rendererManager && this.rendererManager.dirLight);
     if (dirLight) {
       dirLight.position.set(
         this.player.position.x + 30,
         this.player.position.y + 50,
-        this.player.position.z + 30
+        this.player.position.z + 30,
       );
       dirLight.target.position.copy(this.player.position);
       dirLight.target.updateMatrixWorld();
     }
 
-    // 3. Caduta nel vuoto
+    // 4. Fall detection and respawn logic
     if (this.physicsEngine && this.physicsEngine.checkVoidFall) {
-      this.physicsEngine.checkVoidFall(this.player.position, () => {
-        
-        // Verifica se la morte causa il Game Over (quando si era già a 0 vite)
-        const isGameOver = ui && ui.removeLife ? ui.removeLife(1, audio) : false;
+      // Impostiamo una soglia di respawn più profonda (es. Y = -50)
+      const RESPAWN_Y = -50;
+      // Impostiamo la soglia per l'urlo prima del respawn (es. Y = -15)
+      const SCREAM_Y = -15; // Inizia ad urlare appena lascia l'isola
 
-        // Se è Game Over, ferma il respawn
-        if (isGameOver) {
-          return;
+      if (this.player.position.y < SCREAM_Y) {
+        if (!this.isFallingScreamPlaying) {
+          if (audio && audio.playSFX) audio.playSFX("fall");
+          this.isFallingScreamPlaying = true; // Evita che l'audio riparta a raffica
         }
+      }
 
-        // Se è ancora in gioco (anche a 0 vite), suona la caduta e respawna Mario
-        if (audio && audio.playSFX) audio.playSFX('fall');
-        
-        this.player.body.position.set(-20, 10, 250); 
-        this.player.body.velocity.set(0, 0, 0);
-      });
+      if (this.physicsEngine && this.physicsEngine.checkVoidFall) {
+        this.physicsEngine.checkVoidFall(this.player.position, () => {
+          // Reset del flag per la prossima caduta
+          this.isFallingScreamPlaying = false;
+
+          // Gestione Vite / Game Over
+          const isGameOver =
+            ui && ui.removeLife ? ui.removeLife(1, audio) : false;
+          if (isGameOver) return;
+
+          // Respawn di Mario al punto di partenza
+          this.player.body.position.set(0, 1.5, 0);
+          this.player.body.velocity.set(0, 0, 0);
+        });
+      }
     }
 
     // 4. Mappa e altre entità
@@ -98,17 +107,17 @@ update(delta, input, ui, audio) {
       this.map.update(
         this.player,
         () => {
-          if (audio && audio.playSFX) audio.playSFX('coin');
+          if (audio && audio.playSFX) audio.playSFX("coin");
           if (ui && ui.addCoin) ui.addCoin();
         },
         () => {
-          if (audio && audio.playSFX) audio.playSFX('star');
+          if (audio && audio.playSFX) audio.playSFX("star");
           if (ui && ui.addStar) ui.addStar(1);
         },
         () => {
-          if (audio && audio.playSFX) audio.playSFX('mushroom');
+          if (audio && audio.playSFX) audio.playSFX("mushroom");
           if (ui && ui.addLife) ui.addLife(1);
-        }
+        },
       );
     }
 

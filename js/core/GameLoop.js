@@ -3,7 +3,7 @@ import * as THREE from "three";
 export default class GameLoop {
   constructor(rendererManager, updateCallback) {
     this.clock = new THREE.Clock();
-    this.rendererManager = rendererManager; // Correggi qui il nome della proprietà
+    this.rendererManager = rendererManager; 
     this.updateCallback = updateCallback;
     this.isRunning = false;
   }
@@ -13,7 +13,7 @@ export default class GameLoop {
     this.isRunning = true;
     this.clock.start();
 
-    // Usiamo il loop nativo raccomandato da Three.js
+    // three.js animation loop
     this.rendererManager.renderer.setAnimationLoop(() => {
       if (!this.isRunning) return;
 
