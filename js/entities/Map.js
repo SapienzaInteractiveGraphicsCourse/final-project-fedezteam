@@ -29,52 +29,63 @@ export default class Map extends EntityManager {
       const response = await fetch(levelJsonPath);
       levelData = await response.json();
     } catch (e) {
-      console.warn("Impossibile caricare level1.json, uso dati di fallback.");
+      console.warn("Impossibile caricare level1.json");
     }
 
-    const arenaSize = 100;
+    // 1. SPAWNS (Dal JSON)
     this.playerSpawn = levelData?.playerSpawn || { x: 0, y: 2, z: 0 };
-    this.yoshiSpawn = levelData?.yoshiSpawn || { x: 4, y: -0.2, z: 2 };
+    this.yoshiSpawn = levelData?.yoshiSpawn || { x: 5, y: 2, z: -5 };
 
-    // PAVIMENTO
+    // 2. TEXTURE ERBA
     const textureLoader = new THREE.TextureLoader();
     const grassTexture = textureLoader.load("assets/textures/field/grass2.jpg");
-
     grassTexture.wrapS = THREE.RepeatWrapping;
     grassTexture.wrapT = THREE.RepeatWrapping;
-    grassTexture.repeat.set(25, 25);
+    grassTexture.repeat.set(4, 4);
     grassTexture.colorSpace = THREE.SRGBColorSpace;
 
-    const floorGeometry = new THREE.BoxGeometry(arenaSize, 1, arenaSize);
-    const floorMaterial = new THREE.MeshStandardMaterial({
-      map: grassTexture,
-      color: 0xffffff,
-      roughness: 1,
-    });
-
-    const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
-    floorMesh.position.set(0, -0.9, 0);
-    floorMesh.receiveShadow = true;
-    this.scene.add(floorMesh);
-
-    // FISICA
-    const groundShape = new CANNON.Box(
-      new CANNON.Vec3(arenaSize / 2, 0.5, arenaSize / 2),
-    );
-    const groundBody = new CANNON.Body({
-      mass: 0,
-      shape: groundShape,
-      position: new CANNON.Vec3(0, -0.5, 0),
-      material: this.physicsWorld?.defaultMaterial,
-    });
-
+    // 3. CREA LE ISOLE DAL JSON
+    const platformsData = levelData?.platforms || [];
     const world = this.physicsWorld?.world || this.physicsWorld;
-    if (world && typeof world.addBody === "function") {
-      world.addBody(groundBody);
-    }
 
-    // SPAWN ELEMENTI
-    await this._spawnDecorations(arenaSize);
+    platformsData.forEach((plat) => {
+      // Grafica (Three.js)
+      const geo = new THREE.BoxGeometry(plat.size.x, plat.size.y, plat.size.z);
+      const mat = new THREE.MeshStandardMaterial({
+        map: grassTexture,
+        roughness: 0.8,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(plat.position.x, plat.position.y, plat.position.z);
+      mesh.receiveShadow = true;
+      mesh.castShadow = true;
+      this.scene.add(mesh);
+
+      // Fisica (Cannon.js)
+      const halfSize = new CANNON.Vec3(
+        plat.size.x / 2,
+        plat.size.y / 2,
+        plat.size.z / 2,
+      );
+      const body = new CANNON.Body({
+        mass: 0,
+        shape: new CANNON.Box(halfSize),
+        position: new CANNON.Vec3(
+          plat.position.x,
+          plat.position.y,
+          plat.position.z,
+        ),
+        material: this.physicsWorld?.defaultMaterial,
+      });
+
+      if (world) world.addBody(body);
+    });
+
+    // 4. METTI MONETE, STELLE E FUNGHI SULLA MAPPA
+    // Prende la dimensione dell'Isola Principale per spargere monete e fiori
+    const mainIslandSize = platformsData[0]?.size.x || 60;
+
+    await this._spawnDecorations(mainIslandSize);
     await this._spawnStars(levelData?.stars);
     await this._spawnMushrooms(levelData?.mushrooms);
   }
@@ -223,19 +234,28 @@ export default class Map extends EntityManager {
       console.warn("Modello coin.glb non trovato, salto le monete.");
     }
 
-    const step = 8;
+    const step = 5; // 👈 Ridotto da 8 a 5 per avere più densità di oggetti
     const half = arenaSize / 2 - 5;
 
     for (let x = -half; x <= half; x += step) {
       for (let z = -half; z <= half; z += step) {
-        const offsetX = (Math.random() - 0.5) * 3;
-        const offsetZ = (Math.random() - 0.5) * 3;
+        // Aggiungiamo molto più offset per un look organico "a ciuffi"
+        const offsetX = (Math.random() - 0.5) * 4;
+        const offsetZ = (Math.random() - 0.5) * 4;
         const posX = x + offsetX;
         const posZ = z + offsetZ;
 
+        // Fiori sparsi con scala e rotazione variabile (probabilità aumentata)
         if (flowerGlb && Math.random() > 0.4) {
           const plant = flowerGlb.scene.clone();
-          plant.position.set(posX, -0.6, posZ);
+
+          // Randomizza dimensione e rotazione per farli sembrare naturali
+          const scale = 0.7 + Math.random() * 0.8; // Variano da 0.7x a 1.5x
+          plant.scale.set(scale, scale, scale);
+          plant.rotation.y = Math.random() * Math.PI * 2;
+
+          // Posizionati perfettamente sul piano Y = 0 (rimosso il -0.6)[cite: 6]
+          plant.position.set(posX, 0, posZ);
 
           plant.traverse((child) => {
             if (child.isMesh) {
@@ -246,7 +266,8 @@ export default class Map extends EntityManager {
           this.scene.add(plant);
         }
 
-        if (coinGlb && Math.random() > 0.7) {
+        // Generazione delle monete[cite: 6]
+        if (coinGlb && Math.random() > 0.75) {
           const coin = coinGlb.scene.clone();
           coin.position.set(posX, 1.5, posZ);
           this.scene.add(coin);
@@ -281,15 +302,15 @@ export default class Map extends EntityManager {
         coin.collected = true;
         this.scene.remove(coin.mesh);
         coin.mesh.traverse((child) => {
-        if (child.isMesh) {
+          if (child.isMesh) {
             child.geometry.dispose();
             if (Array.isArray(child.material)) {
-                child.material.forEach(mat => mat.dispose());
+              child.material.forEach((mat) => mat.dispose());
             } else {
-                child.material.dispose();
+              child.material.dispose();
             }
-        }
-    });
+          }
+        });
         if (onCoinCollected) onCoinCollected();
       }
     }

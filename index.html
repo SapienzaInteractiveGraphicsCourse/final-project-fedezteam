@@ -1,186 +1,239 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Super Mario 3D Game</title>
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Super Mario 3D Game</title>
+    <!-- Font Retro Arcade -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="shortcut icon" href="assets/images/marioicon.ico" />
+    <!-- CSS -->
+    <link rel="stylesheet" href="CSS/style.css" />
 
-  <!-- Font Retro Arcade -->
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="shortcut icon" href="assets/images/marioicon.ico">
-  <!-- CSS -->
-  <link rel="stylesheet" href="CSS/style.css">
-
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
       }
-    }
-  </script>
-</head>
+    </script>
+  </head>
 
-<body>
+  <body>
+    <canvas id="webgl-canvas"></canvas>
 
-  <canvas id="webgl-canvas"></canvas>
-
-  <div id="ui-layer">
-
-    <!-- STEP 1: WELCOME SCREEN -->
-    <div id="welcome-screen" class="menu-card">
-      <h1>SUPER MARIO 3D</h1>
-      <p>WELCOME TO THE ISLAND! EXPLORE THE WORLD, DEFEAT THE ENEMIES AND COLLECT STAR.</p>
-      <button id="start-btn" class="btn-retro">START</button>
-    </div>
-
-    <!-- STEP 2: NAME & CHARACTER SELECTION -->
-    <div id="name-screen" class="menu-card">
-      <div class="subtitle">BEFORE THE JOURNEY BEGINS</div>
-      <h2>CHOOSE CHARACTER & NAME</h2>
-
-      <div class="char-selector">
-        <button type="button" id="btn-mario" class="char-card selected-mario">
-          <img src="assets/images/mario.png" alt="Mario">
-          <span>MARIO</span>
-        </button>
-
-        <button type="button" id="btn-luigi" class="char-card">
-          <img src="assets/images/luigi.png" alt="Luigi">
-          <span>LUIGI</span>
-        </button>
+    <div id="ui-layer">
+      <!-- STEP 1: WELCOME SCREEN -->
+      <div id="welcome-screen" class="menu-card">
+        <h1>SUPER MARIO 3D</h1>
+        <p>
+          WELCOME TO THE ISLAND! EXPLORE THE WORLD, DEFEAT THE ENEMIES AND
+          COLLECT STAR.
+        </p>
+        <button id="start-btn" class="btn-retro">START</button>
       </div>
 
-      <div class="input-group">
-        <input type="text" id="hero-name-input" placeholder="ENTER NAME..." maxlength="12" autocomplete="off">
-      </div>
+      <!-- STEP 2: NAME & CHARACTER SELECTION -->
+      <div id="name-screen" class="menu-card">
+        <div class="subtitle">BEFORE THE JOURNEY BEGINS</div>
+        <h2>CHOOSE CHARACTER & NAME</h2>
 
-      <button id="continue-btn" class="btn-retro">CONTINUE</button>
-    </div>
+        <div class="char-selector">
+          <button type="button" id="btn-mario" class="char-card selected-mario">
+            <img src="assets/images/mario.png" alt="Mario" />
+            <span>MARIO</span>
+          </button>
 
-    <!-- HUD DISTRIBUITA NEGLI ANGOLI -->
-    <div id="hud">
-      <!-- ANGOLO IN ALTO A SINISTRA: Profilo (con Box) + Stelle (Senza Box) -->
-      <div class="hud-top-left">
-        <div class="hud-profile">
-          <img id="hud-char-icon" src="assets/images/mario-icon.png" alt="Hero Icon">
-          <span id="hud-hero-name" style="color: #43b047;">MARIO</span>
+          <button type="button" id="btn-luigi" class="char-card">
+            <img src="assets/images/luigi.png" alt="Luigi" />
+            <span>LUIGI</span>
+          </button>
         </div>
-        
-        <div class="hud-stat-clean">
-          <img class="hud-icon-lg" src="assets/images/star-icon.png" alt="Star" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
-          <span class="emoji-fallback-lg" style="display:none;">⭐</span>
-          <span id="stars-count" style="color: #fbd000;">0/5</span>
+
+        <div class="input-group">
+          <input
+            type="text"
+            id="hero-name-input"
+            placeholder="ENTER NAME..."
+            maxlength="12"
+            autocomplete="off"
+          />
         </div>
+
+        <button id="continue-btn" class="btn-retro">CONTINUE</button>
       </div>
 
-      <!-- ANGOLO IN BASSO A SINISTRA: Vite / Fungo (Senza Box) -->
-      <div class="hud-bottom-left">
-        <div class="hud-stat-clean">
-          <img class="hud-icon-lg" src="assets/images/mushroom-icon.png" alt="Mushroom" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
-          <span class="emoji-fallback-lg" style="display:none;">🍄</span>
-          <span class="count-prefix">x</span>
-          <span id="lives-count" style="color: #e52521;">4</span>
-        </div>
-      </div>
+      <!-- HUD DISTRIBUITA NEGLI ANGOLI -->
+      <div id="hud">
+        <!-- ANGOLO IN ALTO A SINISTRA: Profilo (con Box) + Stelle (Senza Box) -->
+        <div class="hud-top-left">
+          <div class="hud-profile">
+            <img
+              id="hud-char-icon"
+              src="assets/images/mario-icon.png"
+              alt="Hero Icon"
+            />
+            <span id="hud-hero-name" style="color: #43b047">MARIO</span>
+          </div>
 
-      <!-- ANGOLO IN BASSO A DESTRA: Monete (Senza Box) -->
-      <div class="hud-bottom-right">
-        <div class="hud-stat-clean">
-          <img class="hud-icon-lg" src="assets/images/coin-icon.png" alt="Coin" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
-          <span class="emoji-fallback-lg" style="display:none;">🪙</span>
-          <span class="count-prefix">x</span>
-          <span id="coins-count" style="color: #fbd000;">0</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="js/main.js"></script>
-
-  <!-- Pulsante in alto a destra -->
-  <button id="pause-btn" class="pause-btn">☰ Pause</button>
-
-  <!-- Overlay scuro a schermo intero con dentro il pannello -->
-  <div id="pause-overlay" class="pause-overlay hidden">
-    
-    <!-- 🔴 Tasto RESUME posizionato nell'angolo in alto a destra (al posto di Settings) -->
-    <button id="close-settings-btn" class="resume-btn">Resume</button>
-
-    <div id="settings-panel" class="settings-panel">
-      <div class="settings-header">
-        <h2 id="settings-title">Settings</h2>
-      </div>
-
-      <div class="settings-body">
-        <!-- Regolazione Volume Musica -->
-        <div class="setting-item">
-          <label for="bgm-slider">Music volume</label>
-          <div class="slider-group">
-            <input type="range" id="bgm-slider" min="0" max="100" value="35">
-            <span id="bgm-val">35%</span>
+          <div class="hud-stat-clean">
+            <img
+              class="hud-icon-lg"
+              src="assets/images/star-icon.png"
+              alt="Star"
+              onerror="
+                this.style.display = 'none';
+                this.nextElementSibling.style.display = 'inline';
+              "
+            />
+            <span class="emoji-fallback-lg" style="display: none">⭐</span>
+            <span id="stars-count" style="color: #fbd000">0/5</span>
           </div>
         </div>
 
-        <!-- Regolazione Volume Effetti Sonori -->
-        <div class="setting-item">
-          <label for="sfx-slider">SFX volume</label>
-          <div class="slider-group">
-            <input type="range" id="sfx-slider" min="0" max="100" value="60">
-            <span id="sfx-val">60%</span>
+        <!-- ANGOLO IN BASSO A SINISTRA: Vite / Fungo (Senza Box) -->
+        <div class="hud-bottom-left">
+          <div class="hud-stat-clean">
+            <img
+              class="hud-icon-lg"
+              src="assets/images/mushroom-icon.png"
+              alt="Mushroom"
+              onerror="
+                this.style.display = 'none';
+                this.nextElementSibling.style.display = 'inline';
+              "
+            />
+            <span class="emoji-fallback-lg" style="display: none">🍄</span>
+            <span class="count-prefix">x</span>
+            <span id="lives-count" style="color: #e52521">4</span>
           </div>
         </div>
 
-        <hr class="settings-divider">
+        <!-- ANGOLO IN BASSO A DESTRA: Monete (Senza Box) -->
+        <div class="hud-bottom-right">
+          <div class="hud-stat-clean">
+            <img
+              class="hud-icon-lg"
+              src="assets/images/coin-icon.png"
+              alt="Coin"
+              onerror="
+                this.style.display = 'none';
+                this.nextElementSibling.style.display = 'inline';
+              "
+            />
+            <span class="emoji-fallback-lg" style="display: none">🪙</span>
+            <span class="count-prefix">x</span>
+            <span id="coins-count" style="color: #fbd000">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-        <!-- Schema Comandi di Gioco -->
-        <div class="controls-section">
-          <h3>CONTROLS</h3>
+    <script type="module" src="js/main.js"></script>
 
-          <!-- Movimento WASD -->
-          <div class="control-row">
-            <div class="keys-group">
-              <div class="key-row"><span class="key-badge">W</span></div>
-              <div class="key-row">
-                <span class="key-badge">A</span>
-                <span class="key-badge">S</span>
-                <span class="key-badge">D</span>
+    <!-- Pulsante in alto a destra -->
+    <button id="pause-btn" class="pause-btn">☰ Settings</button>
+     
+    <button id="btn-mute" class="mute-button">🔊</button>
+    <!-- Overlay scuro a schermo intero con dentro il pannello -->
+    <div id="pause-overlay" class="pause-overlay hidden">
+      <!-- 🔴 Tasto RESUME posizionato nell'angolo in alto a destra (al posto di Settings) -->
+      <button id="close-settings-btn" class="resume-btn">Resume</button>
+
+      <div id="settings-panel" class="settings-panel">
+        <div class="settings-header">
+          <h2 id="settings-title">Settings</h2>
+        </div>
+
+        <div class="settings-body">
+          <!-- Regolazione Volume Musica -->
+          <div class="setting-item">
+            <label for="bgm-slider">Music volume</label>
+            <div class="slider-group">
+              <input
+                type="range"
+                id="bgm-slider"
+                min="0"
+                max="100"
+                value="35"
+              />
+              <span id="bgm-val">35%</span>
+            </div>
+          </div>
+
+          <!-- Regolazione Volume Effetti Sonori -->
+          <div class="setting-item">
+            <label for="sfx-slider">SFX volume</label>
+            <div class="slider-group">
+              <input
+                type="range"
+                id="sfx-slider"
+                min="0"
+                max="100"
+                value="60"
+              />
+              <span id="sfx-val">60%</span>
+            </div>
+          </div>
+
+          <button id="btn-return-menu">MENU PRINCIPALE</button>
+          <hr class="settings-divider" />
+          <!-- Schema Comandi di Gioco -->
+          <div class="controls-section">
+            <h3>CONTROLS</h3>
+
+            <!-- Movimento WASD -->
+            <div class="control-row">
+              <div class="keys-group">
+                <div class="key-row"><span class="key-badge">W</span></div>
+                <div class="key-row">
+                  <span class="key-badge">A</span>
+                  <span class="key-badge">S</span>
+                  <span class="key-badge">D</span>
+                </div>
               </div>
+              <span class="control-label">MOVE</span>
             </div>
-            <span class="control-label">MOVE</span>
-          </div>
 
-          <!-- Scatto SHIFT -->
-          <div class="control-row">
-            <div class="keys-group">
-              <span class="key-badge wide">SHIFT</span>
+            <!-- Scatto SHIFT -->
+            <div class="control-row">
+              <div class="keys-group">
+                <span class="key-badge wide">SHIFT</span>
+              </div>
+              <span class="control-label">SPRINT</span>
             </div>
-            <span class="control-label">SPRINT</span>
-          </div>
 
-          <!-- Salto SPACE -->
-          <div class="control-row">
-            <div class="keys-group">
-              <span class="key-badge wide">SPACE</span>
+            <!-- Salto SPACE -->
+            <div class="control-row">
+              <div class="keys-group">
+                <span class="key-badge wide">SPACE</span>
+              </div>
+              <span class="control-label">JUMP</span>
             </div>
-            <span class="control-label">JUMP</span>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- OVERLAY GAME OVER -->
-  <div id="game-over-screen" class="game-over-overlay hidden">
-    <div class="menu-card game-over-card">
-      <h1 class="game-over-title">GAME OVER</h1>
-      <p>YOU RAN OUT OF LIVES!</p>
-      <img id="game-over-img" src="assets/images/gameover.png" alt="Game Over" onerror="this.style.display='none';">
+    <!-- OVERLAY GAME OVER -->
+    <div id="game-over-screen" class="game-over-overlay hidden">
+      <div class="menu-card game-over-card">
+        <h1 class="game-over-title">GAME OVER</h1>
+        <p>YOU RAN OUT OF LIVES!</p>
+        <img
+          id="game-over-img"
+          src="assets/images/gameover.png"
+          alt="Game Over"
+          onerror="this.style.display = 'none'"
+        />
 
-      <button id="restart-btn" class="btn-retro btn-red">RESTART GAME</button>
+        <button id="restart-btn" class="btn-retro btn-red">RESTART GAME</button>
+      </div>
     </div>
-  </div>
-</body>
-
+  </body>
 </html>

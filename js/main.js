@@ -1,12 +1,12 @@
 import RendererManager from "./core/Renderer.js";
 import AssetLoader from "./core/AssetLoad/AssetLoader.js";
-import {initGameModels } from "./core/AssetLoad/assetConfig.js";
+import { initGameModels } from "./core/AssetLoad/assetConfig.js";
 import GameLoop from "./core/GameLoop.js";
 import InputManager from "./core/InputManager.js";
 import UIManager from "./ui/UIManager.js";
 import PhysicsEngine from "./physics/PhysicsEngine.js";
 import AudioManager from "./core/Audio/AudioManager.js";
-import {initGameAudio} from "./core/Audio/soundConfig.js";
+import { initGameAudio } from "./core/Audio/soundConfig.js";
 import Yoshi from "./entities/Yoshi.js";
 import Map from "./entities/Map.js";
 import EntityManager from "./entities/EntityManager.js";
@@ -21,9 +21,24 @@ const ui = new UIManager();
 const audio = new AudioManager();
 initGameAudio(audio);
 
+// All'avvio, applica subito il muto se era stato salvato nel LocalStorage
+const initialMuteState = localStorage.getItem("game_is_muted") === "true";
+audio.setMute(initialMuteState);
+
+// 1. Ascolta il click sul tasto muto
+ui.onMuteToggle = (isMuted) => {
+  audio.setMute(isMuted);
+};
+
+// 2. Ascolta il click su "Ritorna al Menu" dal menu di pausa
+ui.onReturnToMenu = () => {
+  // Ricarica la pagina per resettare istantaneamente grafica, memoria e fisica
+  window.location.reload();
+};
+
 const physics = new PhysicsEngine({
   gravity: -35,
-  fallThreshold: -200 
+  fallThreshold: -50,
 });
 
 const entityManager = new EntityManager(renderer.scene, physics);
@@ -47,11 +62,10 @@ ui.onWelcomeStart(() => {
   audio.playBGM();
 });
 
-
 //3. UI
 ui.onCharacterSelect((character) => {
   audio.setCharacter(character);
-  audio.playSFX('selected');
+  audio.playSFX("selected");
 });
 
 ui.onGameStart(({ character }) => {
@@ -62,9 +76,17 @@ ui.onGameStart(({ character }) => {
   const spawn = mapEntity?.playerSpawn;
 
   if (spawn) {
-    entityManager.spawnPlayer(rawModels[character], spawn.x, spawn.y, spawn.z);
+    // 👈 Aggiungi 'character' come 5° parametro alla fine![cite: 9]
+    entityManager.spawnPlayer(
+      rawModels[character],
+      spawn.x,
+      spawn.y,
+      spawn.z,
+      character,
+    );
   } else {
-    entityManager.spawnPlayer(rawModels[character], -20, 10, 250);
+    // 👈 Aggiungi 'character' anche nel fallback[cite: 9]
+    entityManager.spawnPlayer(rawModels[character], 0, 2, 0, character);
   }
 });
 
@@ -93,7 +115,7 @@ function updateGame(delta) {
   renderer.camera.lookAt(playerPos.x, playerPos.y + 1, playerPos.z);
 }
 
-// 5. ASSET LOADING 
+// 5. ASSET LOADING
 // (GLTF Models)
 // assets is the result of the loaded models, which will be used to spawn entities in the game
 initGameModels(assetLoader)

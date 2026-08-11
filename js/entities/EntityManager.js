@@ -26,14 +26,33 @@ export default class EntityManager {
     }
   }
 
-  spawnPlayer(model, startX, startY, startZ) {
+  // In EntityManager.js, aggiorna il metodo spawnPlayer[cite: 5]
+
+  spawnPlayer(model, startX, startY, startZ, characterName = "mario") {
     if (this.player && this.player.mesh) {
       this.scene.remove(this.player.mesh);
       if (this.player.body)
         this.physicsEngine.world.removeBody(this.player.body);
     }
 
-    this.player = new Player(model, this.physicsEngine);
+    // 💡 Definisci le Statistiche in base al personaggio scelto!
+    let stats = {};
+    if (characterName === "luigi") {
+      stats = {
+        moveSpeed: 20, // Luigi è più veloce
+        jumpVelocity: 22, // Luigi salta molto più in alto (es. 22 vs 18)
+        control: 0.1, // Luigi è SCIVOLOSO! (Valore basso = tanta inerzia)
+      };
+    } else {
+      stats = {
+        moveSpeed: 11, // Mario standard
+        jumpVelocity: 18, // Salto bilanciato
+        control: 0.6, // Mario è preciso e si ferma/gira molto in fretta
+      };
+    }
+
+    // Passiamo 'stats' al costruttore del giocatore[cite: 5]
+    this.player = new Player(model, this.physicsEngine, stats);
     this.player.spawn(startX, startY, startZ);
     this.scene.add(this.player.mesh);
   }
@@ -72,34 +91,27 @@ export default class EntityManager {
     }
 
     // 4. Fall detection and respawn logic
+    // Cerca la sezione 4 (Fall detection and respawn logic) e cambiala così:[cite: 5]
+    // (Cerca il blocco della caduta in update)
     if (this.physicsEngine && this.physicsEngine.checkVoidFall) {
-      // Impostiamo una soglia di respawn più profonda (es. Y = -50)
-      const RESPAWN_Y = -50;
-      // Impostiamo la soglia per l'urlo prima del respawn (es. Y = -15)
-      const SCREAM_Y = -15; // Inizia ad urlare appena lascia l'isola
-
+      const SCREAM_Y = -5; // Urla appena cade di 5 metri
       if (this.player.position.y < SCREAM_Y) {
         if (!this.isFallingScreamPlaying) {
           if (audio && audio.playSFX) audio.playSFX("fall");
-          this.isFallingScreamPlaying = true; // Evita che l'audio riparta a raffica
+          this.isFallingScreamPlaying = true;
         }
       }
 
-      if (this.physicsEngine && this.physicsEngine.checkVoidFall) {
-        this.physicsEngine.checkVoidFall(this.player.position, () => {
-          // Reset del flag per la prossima caduta
-          this.isFallingScreamPlaying = false;
+      this.physicsEngine.checkVoidFall(this.player.position, () => {
+        this.isFallingScreamPlaying = false;
+        const isGameOver =
+          ui && ui.removeLife ? ui.removeLife(1, audio) : false;
+        if (isGameOver) return;
 
-          // Gestione Vite / Game Over
-          const isGameOver =
-            ui && ui.removeLife ? ui.removeLife(1, audio) : false;
-          if (isGameOver) return;
-
-          // Respawn di Mario al punto di partenza
-          this.player.body.position.set(0, 1.5, 0);
-          this.player.body.velocity.set(0, 0, 0);
-        });
-      }
+        // 💡 RIPOSIZIONA A Y = 2 (Centro della piattaforma)
+        this.player.body.position.set(0, 2, 0);
+        this.player.body.velocity.set(0, 0, 0);
+      });
     }
 
     // 4. Mappa e altre entità

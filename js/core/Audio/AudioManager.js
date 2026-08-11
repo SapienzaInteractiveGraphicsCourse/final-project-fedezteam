@@ -3,7 +3,7 @@ export default class AudioManager {
     this.sounds = {};
     this.bgm = null;
     this.isMuted = false;
-    this.currentCharacter = 'mario'; // Default
+    this.currentCharacter = "mario"; // Default
     // 🔴 Toggle per alternare il primo e il secondo suono del salto
     this.jumpToggle = false;
 
@@ -48,7 +48,7 @@ export default class AudioManager {
    */
   load(name, src, isBGM = false) {
     const audio = new Audio(src);
-    audio.preload = 'auto';
+    audio.preload = "auto";
 
     if (isBGM) {
       audio.loop = true;
@@ -62,7 +62,9 @@ export default class AudioManager {
 
   playBGM() {
     if (this.bgm && !this.isMuted) {
-      this.bgm.play().catch((err) => console.warn("Autoplay bloccato dal browser:", err));
+      this.bgm
+        .play()
+        .catch((err) => console.warn("Autoplay bloccato dal browser:", err));
     }
   }
 
@@ -74,7 +76,7 @@ export default class AudioManager {
   }
 
   /**
-   * Riproduce l'effetto sonoro. 
+   * Riproduce l'effetto sonoro.
    * Cerca prima l'audio specifico (es. 'mario_jump'), altrimenti usa quello generico ('star').
    */
   playSFX(name) {
@@ -86,8 +88,8 @@ export default class AudioManager {
       soundKey = name;
     }
     // 2. Alternanza dei due suoni per il salto
-    else if (name === 'jump') {
-      const suffix = this.jumpToggle ? '2' : '1';
+    else if (name === "jump") {
+      const suffix = this.jumpToggle ? "2" : "1";
       this.jumpToggle = !this.jumpToggle;
       soundKey = `${this.currentCharacter}_jump${suffix}`;
     }
@@ -103,16 +105,23 @@ export default class AudioManager {
 
     const soundClone = this.sounds[soundKey].cloneNode();
     soundClone.volume = this.sounds[soundKey].volume;
-    soundClone.play().catch(() => { });
+    soundClone.play().catch(() => {});
   }
   // Per fermare un SFX e riportarlo all'inizio
-stopSFX(key) {
-  const sound = this.sounds[key]; // o dove salvi gli Audio/PositionalAudio
-  if (sound) {
-    sound.stop(); // Se usi Three.js Audio
-    // Oppure se usi HTML5 Audio standard:
-    // sound.pause();
-    // sound.currentTime = 0;
+  setMute(isMuted) {
+    this.isMuted = isMuted;
+
+    // Esempio: scorri tutti i suoni che hai salvato e mutali
+    // Muta la BGM
+    if (this.bgm) {
+      this.bgm.muted = isMuted;
+    }
+
+    // Muta tutti gli effetti sonori
+    for (const key in this.sfx) {
+      if (this.sfx[key]) {
+        this.sfx[key].muted = isMuted;
+      }
+    }
   }
-}
 }

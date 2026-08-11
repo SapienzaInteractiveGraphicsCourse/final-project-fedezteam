@@ -1,15 +1,28 @@
 {
-  "name": "Procedural Arena 100x100",
   "playerSpawn": { "x": 0, "y": 2, "z": 0 },
-  "yoshiSpawn": { "x": 4, "y": -0.2, "z": 2 },
+  "yoshiSpawn": { "x": 5, "y": 2, "z": -5 },
+  "platforms": [
+    {
+      "name": "Isola Principale (Dove ci sono monete e fiori)",
+      "position": { "x": 0, "y": -1, "z": 0 },
+      "size": { "x": 60, "y": 2, "z": 60 }
+    },
+    {
+      "name": "Isola Salto a Destra",
+      "position": { "x": 40, "y": -1, "z": 0 },
+      "size": { "x": 15, "y": 2, "z": 15 }
+    },
+    {
+      "name": "Isola Salto in Avanti",
+      "position": { "x": 0, "y": -1, "z": -40 },
+      "size": { "x": 15, "y": 2, "z": 15 }
+    }
+  ],
   "stars": [
-    { "x": -30, "y": 2, "z": -30 },
-    { "x": 30, "y": 2, "z": -30 },
-    { "x": -30, "y": 2, "z": 30 },
-    { "x": 30, "y": 2, "z": 30 },
-    { "x": 0, "y": 2, "z": -40 }
+    { "x": 40, "y": 1.5, "z": 0 },
+    { "x": 0, "y": 1.5, "z": -40 }
   ],
   "mushrooms": [
-    { "x": 10, "y": 1.5, "z": -10 }
+    { "x": -8, "y": 1.5, "z": -8 }
   ]
 }

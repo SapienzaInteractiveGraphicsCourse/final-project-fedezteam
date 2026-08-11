@@ -294,20 +294,20 @@ html, body {
 
 /* --- PULSANTE PAUSA / SETTINGS IN GIOCO --- */
 .pause-btn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  background: rgba(0, 0, 0, 0.75);
-  color: #fff;
-  border: 3px solid #fff;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  z-index: 100;
-  pointer-events: auto;
-  box-shadow: 0 4px 0 #000;
-  transition: transform 0.1s ease, background 0.2s ease;
+position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    border: 3px solid #fff;
+    border-radius: 8px;
+    padding: 11px 16px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    z-index: 100;
+    pointer-events: auto;
+    box-shadow: 0 4px 0 #000;
+    transition: transform 0.1s ease, background 0.2s ease;
 }
 
 .pause-btn:hover {
@@ -344,19 +344,19 @@ html, body {
 /* 🔴 TASTO RESUME (In alto a destra, sopra il tasto Settings oscurato) */
 .resume-btn {
   position: absolute;
-  top: 20px;
-  right: 20px;
-  background: #e52521;
-  color: #fff;
-  border: 3px solid #fff;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-size: 0.75rem;
-  font-weight: bold;
-  cursor: pointer;
-  z-index: 201;
-  box-shadow: 0 4px 0 #8b0000;
-  transition: transform 0.1s ease, background 0.2s ease;
+    top: 20px;
+    right: 20px;
+    background: #e52521;
+    color: #fff;
+    border: 3px solid #fff;
+    border-radius: 8px;
+    padding: 10px 41px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 201;
+    box-shadow: 0 4px 0 #8b0000;
+    transition: transform 0.1s ease, background 0.2s ease;
 }
 
 .resume-btn:hover {
@@ -561,4 +561,58 @@ html, body {
 
 .btn-red:hover {
   background-color: #ff3b30 !important;
+}
+/* --- TASTO MUTE IN ALTO A DESTRA --- */
+.mute-button {
+  position: absolute;
+  top: 20px;
+  right: 200px;/* Posizionato a sinistra del tasto Pause/Settings */
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  border: 3px solid #fff;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  z-index: 100;
+  pointer-events: auto;
+  box-shadow: 0 4px 0 #000;
+  transition: transform 0.1s ease, background 0.2s ease;
+}
+
+.mute-button:hover {
+  background: #fbd000;
+  transform: scale(1.05);
+}
+
+.mute-button:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #000;
+}
+
+/* --- PULSANTE TORNA AL MENU PRINCIPALE (Nel Pannello di Pausa) --- */
+#btn-return-menu {
+  width: 100%;
+  margin-top: 15px;
+  padding: 12px 10px;
+  font-size: 0.65rem;
+  color: #fff;
+  background: #e52521;
+  border: 3px solid #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #8b0000;
+  transition: transform 0.1s ease, background 0.2s ease;
+  pointer-events: auto;
+  font-family: 'Press Start 2P', cursive, sans-serif;
+}
+
+#btn-return-menu:hover {
+  background: #ff3b30;
+  transform: scale(1.03);
+}
+
+#btn-return-menu:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #8b0000;
 }

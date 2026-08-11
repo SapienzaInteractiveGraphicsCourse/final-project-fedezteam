@@ -2,16 +2,21 @@ import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 
 export default class Player {
-  constructor(mesh, physicsEngine, moveSpeed = 11, jumpVelocity = 11) {
+  // 1. Passiamo un oggetto 'stats' al posto dei valori fissi[cite: 7]
+  constructor(mesh, physicsEngine, stats = {}) {
     this.mesh = mesh;
     this.physicsEngine = physicsEngine;
-    this.moveSpeed = moveSpeed; // Velocità di camminata standard
-    this.sprintMultiplier = 1.5; // ⚡ Moltiplicatore per lo scatto (16,5 di velocità)
-    this.jumpVelocity = jumpVelocity;
+
+    // Assegniamo le statistiche (con i valori di Mario come default)
+    this.moveSpeed = stats.moveSpeed || 11;
+    this.jumpVelocity = stats.jumpVelocity || 18;
+    this.control = stats.control || 0.8; // 👈 NUOVO: 1.0 = stop istantaneo, valori bassi = scivoloso
+
+    this.sprintMultiplier = 1.5;
 
     this.body = null;
     this.canJump = false;
-    this.radius = 1; // Raggio della sfera di collisione fisica
+    this.radius = 1;
 
     if (this.mesh) {
       this.mesh.traverse((child) => {
@@ -65,21 +70,12 @@ export default class Player {
     let inputX = 0;
     let inputZ = 0;
 
-    // 1. Rilevamento Input (Assi X e Z)
-    if (input.isPressed("w") || input.isPressed("arrowup")) {
-      inputZ -= 1;
-    }
-    if (input.isPressed("s") || input.isPressed("arrowdown")) {
-      inputZ += 1;
-    }
-    if (input.isPressed("a") || input.isPressed("arrowleft")) {
-      inputX -= 1;
-    }
-    if (input.isPressed("d") || input.isPressed("arrowright")) {
-      inputX += 1;
-    }
+    // 1. Rilevamento Input (Assi X e Z)[cite: 7]
+    if (input.isPressed("w") || input.isPressed("arrowup")) inputZ -= 1;
+    if (input.isPressed("s") || input.isPressed("arrowdown")) inputZ += 1;
+    if (input.isPressed("a") || input.isPressed("arrowleft")) inputX -= 1;
+    if (input.isPressed("d") || input.isPressed("arrowright")) inputX += 1;
 
-    // ⚡ 2. Controllo Tasto Scatto (SHIFT)
     const isSprinting =
       input.isPressed("shift") ||
       input.isPressed("shiftleft") ||
@@ -91,39 +87,37 @@ export default class Player {
     let moveX = 0;
     let moveZ = 0;
 
-    // 3. Calcolo Direzione e Velocità Diagonale Bilanciata
+    // 3. Calcolo Direzione
     if (inputX !== 0 || inputZ !== 0) {
       const isDiagonal = inputX !== 0 && inputZ !== 0;
-
       const diagonalFactor = isDiagonal ? 1.18 / Math.sqrt(2) : 1;
 
       moveX = inputX * activeSpeed * diagonalFactor;
       moveZ = inputZ * activeSpeed * diagonalFactor;
 
-      // Rotazione precisa verso la direzione di movimento
       const targetRotation = Math.atan2(inputZ, -inputX);
       this.mesh.rotation.y = targetRotation;
     }
 
-    // 4. Applica Velocità alla Fisica
-    this.body.velocity.x = moveX;
-    this.body.velocity.z = moveZ;
+    // ⚡ 4. APPLICAZIONE VELOCITÀ CON INERZIA (LERP) ⚡
+    // Invece di settarla direttamente in modo robotico, ammorbidiamo il movimento[cite: 7]
+    this.body.velocity.x += (moveX - this.body.velocity.x) * this.control;
+    this.body.velocity.z += (moveZ - this.body.velocity.z) * this.control;
 
-    // 5. Salto (solo se toccava terra)
+    // 5. Salto[cite: 7]
     if ((input.isPressed("space") || input.isPressed(" ")) && this.canJump) {
       this.body.velocity.y = this.jumpVelocity;
-      this.canJump = false; // Imposta subito a false in modo da bloccare salti ed effetti audio successivi in volo
+      this.canJump = false;
 
-      // 🔊 Suono riprodotto SOLO quando il salto avviene effettivamente
       if (audio && audio.playSFX) {
         audio.playSFX("jump");
       }
     }
 
-    // 6. Sincronizzazione Grafica <-> Fisica
+    // 6. Sincronizzazione Grafica <-> Fisica[cite: 7]
     this.mesh.position.set(
       this.body.position.x,
-      this.body.position.y - (this.radius + 0.3), // Piccolo offset per evitare che il modello affondi nel terreno
+      this.body.position.y - this.radius, // Modificato prima per sistemare l'erba
       this.body.position.z,
     );
   }

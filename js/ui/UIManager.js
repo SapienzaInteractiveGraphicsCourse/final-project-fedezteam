@@ -8,7 +8,7 @@ export default class UIManager {
     this.startBtn = document.getElementById("start-btn");
     this.continueBtn = document.getElementById("continue-btn");
     this.restartBtn = document.getElementById("restart-btn"); // Pulsante MAIN MENU
-    
+
     this.heroNameInput = document.getElementById("hero-name-input");
     this.hudHeroName = document.getElementById("hud-hero-name");
     this.hudCharIcon = document.getElementById("hud-char-icon");
@@ -29,10 +29,10 @@ export default class UIManager {
     this.btnMario = document.getElementById("btn-mario");
     this.btnLuigi = document.getElementById("btn-luigi");
 
-    this.gameState = "MENU_WELCOME"; 
-    this.selectedCharacter = "mario"; 
+    this.gameState = "MENU_WELCOME";
+    this.selectedCharacter = "mario";
     this.isPaused = false;
-    
+
     this.coins = 0;
     this.lives = 4;
     this.stars = 0;
@@ -40,6 +40,38 @@ export default class UIManager {
 
     this.onStartCallback = null;
     this.onResetToMenuCallback = null;
+    // Aggiungi questo nel constructor() di UIManager.js
+
+    this.btnMute = document.getElementById("btn-mute");
+    this.btnReturnMenu = document.getElementById("btn-return-menu");
+
+    // --- LOGICA TASTO MUTO CON LOCALSTORAGE ---
+    // Leggiamo il salvataggio precedente (se non esiste, di default è false)
+    this.isMuted = localStorage.getItem("game_is_muted") === "true";
+    this._updateMuteButtonUI();
+
+    if (this.btnMute) {
+      this.btnMute.addEventListener("click", () => {
+        // Inverti lo stato
+        this.isMuted = !this.isMuted;
+
+        // Salva nel browser
+        localStorage.setItem("game_is_muted", this.isMuted);
+
+        // Aggiorna l'icona
+        this._updateMuteButtonUI();
+
+        // Avvisa il main.js
+        if (this.onMuteToggle) this.onMuteToggle(this.isMuted);
+      });
+    }
+
+    // --- LOGICA TASTO RITORNA AL MENU ---
+    if (this.btnReturnMenu) {
+      this.btnReturnMenu.addEventListener("click", () => {
+        if (this.onReturnToMenu) this.onReturnToMenu();
+      });
+    }
 
     this._setupListeners();
   }
@@ -79,10 +111,15 @@ export default class UIManager {
     }
 
     this.pauseBtn.addEventListener("click", () => this.toggleSettings());
-    this.closeSettingsBtn.addEventListener("click", () => this.toggleSettings());
+    this.closeSettingsBtn.addEventListener("click", () =>
+      this.toggleSettings(),
+    );
 
     window.addEventListener("keydown", (e) => {
-      if ((e.key === "Escape" || e.key.toLowerCase() === "p") && this.gameState === "PLAYING") {
+      if (
+        (e.key === "Escape" || e.key.toLowerCase() === "p") &&
+        this.gameState === "PLAYING"
+      ) {
         this.toggleSettings();
       }
     });
@@ -130,13 +167,14 @@ export default class UIManager {
 
   addStar(amount = 1) {
     this.stars += amount;
-    if (this.starsCountEl) this.starsCountEl.textContent = `${this.stars}/${this.maxStars}`;
+    if (this.starsCountEl)
+      this.starsCountEl.textContent = `${this.stars}/${this.maxStars}`;
   }
 
   // 💀 Mostra la schermata Game Over, stacca la BGM e suona gameover.mp3
   showGameOver(audio = null) {
     this.gameState = "GAME_OVER";
-    
+
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "none";
     if (this.gameOverScreen) this.gameOverScreen.classList.remove("hidden");
@@ -146,9 +184,10 @@ export default class UIManager {
       // 1. Ferma la musica di sottofondo
       try {
         if (typeof audio.stopBGM === "function") audio.stopBGM();
-        else if (typeof audio.stop === "function") audio.stop('bgm');
+        else if (typeof audio.stop === "function") audio.stop("bgm");
         else if (audio.bgm && audio.bgm.pause) audio.bgm.pause();
-        else if (audio.sounds && audio.sounds.bgm && audio.sounds.bgm.pause) audio.sounds.bgm.pause();
+        else if (audio.sounds && audio.sounds.bgm && audio.sounds.bgm.pause)
+          audio.sounds.bgm.pause();
       } catch (e) {
         console.warn("Errore nello stop della musica BGM:", e);
       }
@@ -156,9 +195,9 @@ export default class UIManager {
       // 2. Riproduce il suono di Game Over
       try {
         if (typeof audio.playSFX === "function") {
-          audio.playSFX('gameover');
+          audio.playSFX("gameover");
         } else if (typeof audio.play === "function") {
-          audio.play('gameover');
+          audio.play("gameover");
         }
       } catch (e) {
         console.warn("Errore nella riproduzione di gameover.mp3:", e);
@@ -175,13 +214,14 @@ export default class UIManager {
 
     if (this.livesCountEl) this.livesCountEl.textContent = this.lives;
     if (this.coinsCountEl) this.coinsCountEl.textContent = this.coins;
-    if (this.starsCountEl) this.starsCountEl.textContent = `${this.stars}/${this.maxStars}`;
+    if (this.starsCountEl)
+      this.starsCountEl.textContent = `${this.stars}/${this.maxStars}`;
 
     // Reset Interfaccia
     if (this.gameOverScreen) this.gameOverScreen.classList.add("hidden");
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "block";
-    
+
     if (this.welcomeScreen) this.welcomeScreen.style.display = "flex";
     if (this.nameScreen) this.nameScreen.style.display = "none";
 
@@ -206,9 +246,9 @@ export default class UIManager {
     // 🔊 Riproduce menu_pause.wav sia all'apertura che alla chiusura
     if (this.audio) {
       if (typeof this.audio.playSFX === "function") {
-        this.audio.playSFX('pause');
+        this.audio.playSFX("pause");
       } else if (typeof this.audio.play === "function") {
-        this.audio.play('pause');
+        this.audio.play("pause");
       }
     }
 
@@ -236,7 +276,7 @@ export default class UIManager {
       this.selectedCharacter === "mario" ? "#e52521" : "#43b047";
 
     this.gameState = "PLAYING";
-    
+
     if (this.pauseBtn) this.pauseBtn.textContent = "☰ Settings";
 
     this.nameScreen.style.display = "none";
@@ -249,9 +289,22 @@ export default class UIManager {
       });
     }
   }
+  _updateMuteButtonUI() {
+  if (this.btnMute) {
+    this.btnMute.innerText = this.isMuted ? "🔇" : "🔊";
+  }
+}
 
-  onResetToMenu(cb) { this.onResetToMenuCallback = cb; }
-  onWelcomeStart(cb) { this.onWelcomeStartCallback = cb; }
-  onCharacterSelect(cb) { this.onSelectCallback = cb; }
-  onGameStart(cb) { this.onStartCallback = cb; }
+  onResetToMenu(cb) {
+    this.onResetToMenuCallback = cb;
+  }
+  onWelcomeStart(cb) {
+    this.onWelcomeStartCallback = cb;
+  }
+  onCharacterSelect(cb) {
+    this.onSelectCallback = cb;
+  }
+  onGameStart(cb) {
+    this.onStartCallback = cb;
+  }
 }
