@@ -120,6 +120,8 @@ function updateGame(delta) {
 // assets is the result of the loaded models, which will be used to spawn entities in the game
 initGameModels(assetLoader)
   .then(async (assets) => {
+    // 💡 Nascondi la schermata di caricamento!
+    document.getElementById("loading-screen").style.display = "none";
     // 1. Map loading
     mapEntity = new Map(physics);
     await mapEntity.loadLevel("./assets/levels/level1.json");

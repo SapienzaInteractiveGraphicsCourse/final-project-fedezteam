@@ -73,7 +73,7 @@ export default class Yoshi {
       // Sincronizzazione: sottrae il raggio per mantenere i piedi del GLTF a contatto con il pavimento
       this.mesh.position.set(
         this.body.position.x,
-        this.body.position.y - (this.radius + 0.3), // Piccolo offset per evitare che il modello affondi nel terreno
+        this.body.position.y - this.radius, // Piccolo offset per evitare che il modello affondi nel terreno
         this.body.position.z
       );
     }

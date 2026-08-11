@@ -616,3 +616,39 @@ position: absolute;
   transform: translateY(2px);
   box-shadow: 0 2px 0 #8b0000;
 }
+
+/* --- LOADING SCREEN --- */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-title {
+  color: #fff;
+  font-size: 2rem;
+  margin-bottom: 20px;
+  text-shadow: 3px 3px 0 #e52521;
+  animation: pulse-red 1s infinite alternate;
+}
+
+.loader-spinner {
+  width: 60px;
+  height: 60px;
+  border: 8px solid #333;
+  border-top: 8px solid #fbd000;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}

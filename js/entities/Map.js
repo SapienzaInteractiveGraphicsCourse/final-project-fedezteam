@@ -7,6 +7,9 @@ export default class Map extends EntityManager {
   constructor(physicsWorld) {
     super(new THREE.Group());
     this.physicsWorld = physicsWorld;
+    this.brickBlocks = []; // Array per i blocchi
+    this.mushroomGlb = null; // Salviamo il modello per usarlo nei blocchi
+
     this.loader = new GLTFLoader();
     this.loader.setResourcePath("assets/");
 
@@ -23,7 +26,7 @@ export default class Map extends EntityManager {
     this.mushroomCollectRadius = 2.5;
   }
 
-  async loadLevel(levelJsonPath = "./assets/levels/level1.json") {
+async loadLevel(levelJsonPath = "./assets/levels/level1.json") {
     let levelData = null;
     try {
       const response = await fetch(levelJsonPath);
@@ -80,16 +83,24 @@ export default class Map extends EntityManager {
 
       if (world) world.addBody(body);
     });
+    
+    // 4. PRE-CARICA IL FUNGO 
+    // Lo salviamo in memoria per averlo disponibile quando colpisci i blocchi
+    try {
+      this.mushroomGlb = await this.loader.loadAsync("assets/models/Super_Mario/Items/mushroom.glb");
+    } catch(e) {}
 
-    // 4. METTI MONETE, STELLE E FUNGHI SULLA MAPPA
-    // Prende la dimensione dell'Isola Principale per spargere monete e fiori
+    // 5. METTI MONETE, STELLE, FUNGHI E BLOCCHI SULLA MAPPA
+    // Prende la dimensione dell'Isola Principale (es: 60) per spargere monete e fiori senza farli cadere nel vuoto
     const mainIslandSize = platformsData[0]?.size.x || 60;
 
+    // Chiama i generatori una volta sola e nell'ordine corretto
     await this._spawnDecorations(mainIslandSize);
     await this._spawnStars(levelData?.stars);
-    await this._spawnMushrooms(levelData?.mushrooms);
+    await this._spawnMushrooms(levelData?.mushrooms); 
+    await this._spawnBrickBlocks(levelData?.brickBlocks); 
   }
-
+  
   /**
    * Spawna i Funghi sulla mappa
    */
@@ -105,6 +116,7 @@ export default class Map extends EntityManager {
         "Modello mushroom.glb non trovato. Creo fungo geometrico di fallback.",
       );
     }
+    
 
     const positions = mushroomPositions || [{ x: 10, y: 1.5, z: -10 }];
 
@@ -340,5 +352,99 @@ export default class Map extends EntityManager {
         if (onMushroomCollected) onMushroomCollected();
       }
     }
+    // 🧱 4. Collisione Testa-Blocco
+    for (const block of this.brickBlocks) {
+      if (block.isHit) continue; // Se già colpito, ignora
+
+      // Calcola distanza X e Z per vedere se Mario è esattamente sotto il blocco
+      const dx = Math.abs(playerPos.x - block.position.x);
+      const dz = Math.abs(playerPos.z - block.position.z);
+
+      if (dx < 1.2 && dz < 1.2) {
+        // La testa di Mario è circa Y + 2. Il fondo del blocco (lato 2) è circa Y - 1.
+        const headY = playerPos.y + 2.0; 
+        const blockBottom = block.position.y - 1.0;
+
+        // Se la testa tocca il fondo del blocco saltando verso l'alto
+        if (headY > blockBottom && headY < blockBottom + 0.5) {
+          block.isHit = true; // Segna come colpito
+          
+          // Animazione "Balzo" del blocco
+          block.mesh.position.y += 0.3;
+          setTimeout(() => {
+            if (block.mesh) block.mesh.position.y -= 0.3;
+          }, 120);
+
+          // Fai comparire il Fungo sopra il blocco!
+          this._spawnSingleMushroom(block.position.x, block.position.y + 1.5, block.position.z);
+        }
+      }
+    }
+  }
+  // 💡 NUOVO METODO: Spawna i blocchi sospesi
+  async _spawnBrickBlocks(positions) {
+    let brickGlb = null;
+    try {
+      brickGlb = await this.loader.loadAsync("assets/models/Super_Mario/Map/brick_block.glb");
+    } catch (e) {
+      console.warn("Modello brick_block.glb non trovato.");
+    }
+
+    // Se non ci sono coordinate, ne crea due di default sospesi a Y=4.5
+    const blocks = positions || [
+      { x: -8, y: 4.5, z: -10 },
+      { x: 8, y: 4.5, z: -10 }
+    ];
+
+    blocks.forEach((pos) => {
+      let mesh;
+      if (brickGlb) {
+        mesh = brickGlb.scene.clone();
+        mesh.scale.set(1.2, 1.2, 1.2); // Scala del blocco
+      } else {
+        const geo = new THREE.BoxGeometry(2, 2, 2);
+        const mat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+        mesh = new THREE.Mesh(geo, mat);
+      }
+      mesh.position.set(pos.x, pos.y, pos.z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+
+      // Fisica del blocco (Solido, Mario ci sbatte)
+      const shape = new CANNON.Box(new CANNON.Vec3(1, 1, 1));
+      const body = new CANNON.Body({
+        mass: 0,
+        shape: shape,
+        position: new CANNON.Vec3(pos.x, pos.y, pos.z),
+        material: this.physicsWorld?.defaultMaterial,
+      });
+
+      if (this.physicsWorld?.world) this.physicsWorld.world.addBody(body);
+
+      this.brickBlocks.push({
+        mesh: mesh,
+        body: body,
+        position: mesh.position,
+        isHit: false // Flag per sapere se è già stato colpito
+      });
+    });
+  }
+
+  // 💡 NUOVO METODO HELPER: Genera un singolo fungo a runtime
+  _spawnSingleMushroom(x, y, z) {
+    if (!this.mushroomGlb) return;
+    const mesh = this.mushroomGlb.scene.clone();
+    
+    mesh.scale.set(0.4, 0.4, 0.4); // 🍄 RIDIMENSIONAMENTO FUNGO (più piccolo)
+    mesh.position.set(x, y, z);
+    mesh.traverse((child) => {
+      if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
+    });
+    
+    this.scene.add(mesh);
+    this.mushrooms.push({
+      mesh: mesh, position: mesh.position, collected: false
+    });
   }
 }
