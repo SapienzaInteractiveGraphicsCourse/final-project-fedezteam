@@ -29,6 +29,12 @@
     <div id="loading-screen" class="loading-overlay">
       <h1 class="loading-title">LOADING...</h1>
       <div class="loader-spinner"></div>
+
+      <!-- 💡 NUOVO: Barra di caricamento -->
+      <div class="loading-bar-container">
+        <div id="loading-bar" class="loading-bar"></div>
+      </div>
+      <p id="loading-text">0%</p>
     </div>
     <canvas id="webgl-canvas"></canvas>
 
@@ -143,7 +149,7 @@
 
     <!-- Pulsante in alto a destra -->
     <button id="pause-btn" class="pause-btn">☰ Settings</button>
-     
+
     <button id="btn-mute" class="mute-button">🔊</button>
     <!-- Overlay scuro a schermo intero con dentro il pannello -->
     <div id="pause-overlay" class="pause-overlay hidden">
