@@ -3,6 +3,7 @@ import * as THREE from "three";
 export default class RendererManager {
   constructor(canvasId = "#webgl-canvas") {
     this.canvas = document.querySelector(canvasId);
+    
 
     // Canvas styling for full-screen rendering
     if (this.canvas) {
@@ -124,24 +125,20 @@ setupLights() {
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
 
-    // camera setting for the shadow directional light
-    const d = 80; 
+
+    const d = 200; 
     this.dirLight.shadow.camera.left = -d;
     this.dirLight.shadow.camera.right = d;
     this.dirLight.shadow.camera.top = d;
     this.dirLight.shadow.camera.bottom = -d;
 
-    // camera near very close to the light source to avoid shadow artifacts and far enough to cover the entire scene
+    // Aumentiamo anche il raggio d'azione in profondità
     this.dirLight.shadow.camera.near = 0.1;
-    this.dirLight.shadow.camera.far = 1000;
+    this.dirLight.shadow.camera.far = 1500; 
 
-    // We manatin an high resolution since we have increased the directional light's camera
-    this.dirLight.shadow.mapSize.width = 4096;
-    this.dirLight.shadow.mapSize.height = 4096;
-
-    // the bias and normalBias are used to reduce shadow acne and peter panning artifacts.
-    this.dirLight.shadow.bias = -0.0001;
-    this.dirLight.shadow.normalBias = 0.02;
+    // Risoluzione ombre (mantieni 2048x2048 o 4096x4096 in base a quanto regge il tuo PC)
+    this.dirLight.shadow.mapSize.width = 2048*4;
+    this.dirLight.shadow.mapSize.height = 2048*4;
   }
 
   // Resize when the window is resized, we need to update the camera aspect ratio and the renderer size

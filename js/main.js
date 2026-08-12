@@ -115,16 +115,30 @@ function updateGame(delta) {
   renderer.camera.lookAt(playerPos.x, playerPos.y + 1, playerPos.z);
 }
 
-// 5. ASSET LOADING
-// (GLTF Models)
-// assets is the result of the loaded models, which will be used to spawn entities in the game
+// 💡 1. CONFIGURAZIONE DEL MANAGER DI CARICAMENTO GLOBALE
+THREE.DefaultLoadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
+  const progress = (itemsLoaded / itemsTotal) * 100;
+  
+  const loadingBar = document.getElementById('loading-bar');
+  const loadingText = document.getElementById('loading-text');
+  
+  if (loadingBar) loadingBar.style.width = progress + '%';
+  if (loadingText) loadingText.innerText = Math.floor(progress) + '%';
+};
+
+
+// 2. AVVIO DEL CARICAMENTO DEGLI ASSET
 initGameModels(assetLoader)
   .then(async (assets) => {
-    // 💡 Nascondi la schermata di caricamento!
-    document.getElementById("loading-screen").style.display = "none";
-    // 1. Map loading
+    
+    // 💡 ATTENZIONE: Non nascondiamo più la schermata qui!
+    // Prima aspettiamo che la Mappa carichi e sparpagli TUTTI i suoi oggetti
+
     mapEntity = new Map(physics);
+    
+    // Questo await mette in pausa finché case, alberi e funghi non sono posizionati
     await mapEntity.loadLevel("./assets/levels/level1.json");
+    
     entityManager.setMap(mapEntity);
 
     // 2. Yoshi Spawn point
@@ -139,10 +153,22 @@ initGameModels(assetLoader)
     rawModels.mario = assets.mario;
     rawModels.luigi = assets.luigi;
 
+    // 💡 3. FINE CARICAMENTO! ORA POSSIAMO MOSTRARE IL GIOCO
+    const loadingScreen = document.getElementById("loading-screen");
+    if (loadingScreen) {
+      // Usiamo una piccola transizione di fade out per renderlo più elegante
+      loadingScreen.style.opacity = "0";
+      setTimeout(() => {
+        loadingScreen.style.display = "none";
+      }, 500);
+    }
+
     // 4. Start the game loop
     const gameLoop = new GameLoop(renderer, updateGame);
     gameLoop.start();
   })
   .catch((error) => {
     console.error("Errore durante il caricamento degli asset:", error);
+    const loadingText = document.getElementById('loading-text');
+    if (loadingText) loadingText.innerText = "ERRORE DI CARICAMENTO";
   });

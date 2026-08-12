@@ -27,3 +27,9 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 
 ### Textures & Environments
 - **Skyboxes**: Provided by [Kenney](https://kenney.nl/assets/skyboxes)
+https://sketchfab.com/3d-models/3ds-mario-kart-7-palm-tree-4f27fab359e74e9b82c6a061bc782a18#download
+https://sketchfab.com/3d-models/super-mario-3d-land-toad-house-35e2cb6b184a47cca3e20ed5b3036575#download
+https://sketchfab.com/3d-models/super-mario-pipe-for-free-470f2e1ef78d4c4bb35969909adf90ce#download
+https://sketchfab.com/3d-models/toad-mushroom-house-8fd19ae8900f49ddaad3568e345bfd03
+https://sketchfab.com/3d-models/nintendo-64-paper-mario-marios-house-exterio-6eaf1353a8a34de4a9a1d74a41445f2d
+https://sketchfab.com/3d-models/egg-planet-8e5dba7af88e487ea61992f804b91eb8#download

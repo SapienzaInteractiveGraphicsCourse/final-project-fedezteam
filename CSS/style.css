@@ -652,3 +652,28 @@ position: absolute;
 @keyframes spin {
   100% { transform: rotate(360deg); }
 }
+.loading-bar-container {
+  width: 60%;
+  max-width: 400px;
+  height: 20px;
+  border: 3px solid #fff;
+  border-radius: 10px;
+  margin-top: 25px;
+  overflow: hidden;
+  background: #333;
+  box-shadow: 0 4px 0 #000;
+}
+
+.loading-bar {
+  width: 0%;
+  height: 100%;
+  background: #fbd000; /* Giallo Mario */
+  transition: width 0.1s linear;
+}
+
+#loading-text {
+  color: #fff;
+  margin-top: 15px;
+  font-size: 0.8rem;
+  text-shadow: 2px 2px 0 #000;
+}
