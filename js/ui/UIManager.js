@@ -52,16 +52,14 @@ export default class UIManager {
 
     if (this.btnMute) {
       this.btnMute.addEventListener("click", () => {
-        // Inverti lo stato
         this.isMuted = !this.isMuted;
-
-        // Salva nel browser
         localStorage.setItem("game_is_muted", this.isMuted);
-
-        // Aggiorna l'icona
         this._updateMuteButtonUI();
 
-        // Avvisa il main.js
+        if (this.audio && typeof this.audio.setMute === "function") {
+          this.audio.setMute(this.isMuted);
+        }
+
         if (this.onMuteToggle) this.onMuteToggle(this.isMuted);
       });
     }
@@ -100,6 +98,12 @@ export default class UIManager {
       this.welcomeScreen.style.display = "none";
       this.nameScreen.style.display = "flex";
       this.heroNameInput.focus();
+
+      // 🎵 Avvia l'audio al primo vero click utente
+      if (this.audio && typeof this.audio.playBGM === "function") {
+        this.audio.playBGM();
+      }
+
       if (this.onWelcomeStartCallback) this.onWelcomeStartCallback();
     });
 
@@ -238,6 +242,9 @@ export default class UIManager {
   // Metodo per collegare l'AudioManager a UIManager
   setAudio(audio) {
     this.audio = audio;
+    if (this.audio && typeof this.audio.setMute === "function") {
+      this.audio.setMute(this.isMuted);
+    }
   }
 
   toggleSettings() {
@@ -282,6 +289,11 @@ export default class UIManager {
     this.nameScreen.style.display = "none";
     this.hud.style.display = "block";
 
+    // 🎵 Garanzia di avvio se si salta il primo passaggio
+    if (this.audio && typeof this.audio.playBGM === "function") {
+      this.audio.playBGM();
+    }
+
     if (this.onStartCallback) {
       this.onStartCallback({
         character: this.selectedCharacter,
@@ -290,10 +302,10 @@ export default class UIManager {
     }
   }
   _updateMuteButtonUI() {
-  if (this.btnMute) {
-    this.btnMute.innerText = this.isMuted ? "🔇" : "🔊";
+    if (this.btnMute) {
+      this.btnMute.innerText = this.isMuted ? "🔇" : "🔊";
+    }
   }
-}
 
   onResetToMenu(cb) {
     this.onResetToMenuCallback = cb;
