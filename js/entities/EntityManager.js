@@ -65,7 +65,7 @@ export default class EntityManager {
   }
 
 // 1. 🛡️ AGGIUNTO 'camera' COME 5° PARAMETRO QUI:
-  update(delta, input, ui, audio, camera) {
+update(delta, input, ui, audio, camera) { // 👈 AGGIUNTO 'camera' QUI
     if (ui && ui.gameState !== "PLAYING") return;
 
     // 1. Physics Engine Update
@@ -75,10 +75,10 @@ export default class EntityManager {
 
     if (!this.player) return;
 
-    // 2. 🛡️ PLAYER UPDATE (Singolo e con tutti i parametri in ordine)
+    // 2. Unico update del player con la telecamera passata correttamente
     this.player.update(delta, input, ui, audio, camera);
 
-    // 3. Update the directional light to follow the player
+    // 3. Luce direzionale
     const dirLight =
       this.dirLight || (this.rendererManager && this.rendererManager.dirLight);
     if (dirLight) {
@@ -91,9 +91,9 @@ export default class EntityManager {
       dirLight.target.updateMatrixWorld();
     }
 
-    // 4. Fall detection and respawn logic
+    // 4. Caduta nel vuoto
     if (this.physicsEngine && this.physicsEngine.checkVoidFall) {
-      const SCREAM_Y = -5; // Urla appena cade di 5 metri
+      const SCREAM_Y = -5;
       if (this.player.position.y < SCREAM_Y) {
         if (!this.isFallingScreamPlaying) {
           if (audio && audio.playSFX) audio.playSFX("fall");
@@ -107,13 +107,12 @@ export default class EntityManager {
           ui && ui.removeLife ? ui.removeLife(1, audio) : false;
         if (isGameOver) return;
 
-        // 💡 RIPOSIZIONA A Y = 2 (Centro della piattaforma)
         this.player.body.position.set(0, 2, 0);
         this.player.body.velocity.set(0, 0, 0);
       });
     }
 
-    // 5. Mappa e altre entità
+    // 5. Mappa
     if (this.map && this.map.update) {
       this.map.update(
         this.player,
@@ -132,7 +131,7 @@ export default class EntityManager {
       );
     }
 
-    // 6. Yoshi update (Nota: passiamo solo i parametri che servono a Yoshi)
+    // 6. Yoshi
     if (this.yoshi && this.yoshi.update) {
       this.yoshi.update(delta, input, this.player);
     }

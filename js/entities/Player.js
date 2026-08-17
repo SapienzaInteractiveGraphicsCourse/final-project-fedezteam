@@ -67,11 +67,9 @@ export default class Player {
     }
   }
 
-  update(delta, input, ui, audio, camera) {
-    // 🛡️ FIX 1: Togliamo '!camera' dal blocco critico per evitare che Mario rimanga in aria
+update(delta, input, ui, audio, camera) {
     if (!this.mesh || !this.body) return;
 
-    // 1. Calcolo Velocità Attiva (Gestione Sprint)
     const isSprinting =
       input.isPressed("shift") ||
       input.isPressed("shiftleft") ||
@@ -80,65 +78,56 @@ export default class Player {
       ? this.moveSpeed * this.sprintMultiplier
       : this.moveSpeed;
 
-    const moveDirection = new THREE.Vector3(0, 0, 0);
+    // Angolo stabile della telecamera
+    const camAngle = (camera && camera.userData && camera.userData.cameraAngleX !== undefined) 
+      ? camera.userData.cameraAngleX 
+      : 0;
 
-    // 🛡️ FIX 2: Calcoliamo i vettori solo se la telecamera esiste effettivamente
-    if (camera) {
-      const cameraForward = new THREE.Vector3();
-      camera.getWorldDirection(cameraForward);
-      cameraForward.y = 0;
+    // Vettori di direzione basati sull'angolo puro
+    const camForwardX = -Math.sin(camAngle);
+    const camForwardZ = -Math.cos(camAngle);
+    
+    const camRightX = Math.cos(camAngle);
+    const camRightZ = -Math.sin(camAngle);
 
-      // Prevenzione errori matematici (NaN) se la camera guarda perfettamente in basso
-      if (cameraForward.lengthSq() < 0.001) {
-        cameraForward.set(0, 0, -1);
-      }
-      cameraForward.normalize();
+    let moveDirX = 0;
+    let moveDirZ = 0;
 
-      const upVector = new THREE.Vector3(0, 1, 0);
-      const cameraRight = new THREE.Vector3()
-        .crossVectors(cameraForward, upVector) // ✅ Ordine corretto, calcola la Destra!
-        .normalize();
-
-      // 3. Calcolo Direzione di Movimento
-      if (input.isPressed("w") || input.isPressed("arrowup")) {
-        moveDirection.add(cameraForward);
-      }
-      if (input.isPressed("s") || input.isPressed("arrowdown")) {
-        moveDirection.sub(cameraForward);
-      }
-      if (input.isPressed("a") || input.isPressed("arrowleft")) {
-        moveDirection.sub(cameraRight);
-      }
-      if (input.isPressed("d") || input.isPressed("arrowright")) {
-        moveDirection.add(cameraRight);
-      }
+    if (input.isPressed("w") || input.isPressed("arrowup")) {
+      moveDirX += camForwardX;
+      moveDirZ += camForwardZ;
+    }
+    if (input.isPressed("s") || input.isPressed("arrowdown")) {
+      moveDirX -= camForwardX;
+      moveDirZ -= camForwardZ;
+    }
+    if (input.isPressed("a") || input.isPressed("arrowleft")) {
+      moveDirX -= camRightX;
+      moveDirZ -= camRightZ;
+    }
+    if (input.isPressed("d") || input.isPressed("arrowright")) {
+      moveDirX += camRightX;
+      moveDirZ += camRightZ;
     }
 
-    // Normalizziamo
-    if (moveDirection.lengthSq() > 0) {
-      moveDirection.normalize();
+    const moveLen = Math.hypot(moveDirX, moveDirZ);
+    if (moveLen > 0.0001) {
+      moveDirX /= moveLen;
+      moveDirZ /= moveLen;
     }
 
-    // 4. Velocità Bersaglio Desiderata
-    const targetMoveX = moveDirection.x * activeSpeed;
-    const targetMoveZ = moveDirection.z * activeSpeed;
+    const targetMoveX = moveDirX * activeSpeed;
+    const targetMoveZ = moveDirZ * activeSpeed;
 
-    // ⚡ 5. APPLICAZIONE VELOCITÀ CON INERZIA (LERP) ⚡
     this.body.velocity.x += (targetMoveX - this.body.velocity.x) * this.control;
     this.body.velocity.z += (targetMoveZ - this.body.velocity.z) * this.control;
 
-    // 6. Rotazione del Personaggio
-    if (moveDirection.lengthSq() > 0.01) {
-      const targetRotation = Math.atan2(moveDirection.x, moveDirection.z);
-
-      // 💡 NUOVO: Salviamo la VERA direzione in cui corre, senza l'errore del modello 3D
+    if (moveLen > 0.0001) {
+      const targetRotation = Math.atan2(moveDirX, moveDirZ);
       this.currentFacingAngle = targetRotation;
-
-      // 🔄 Sommiamo il nostro offset per compensare il difetto del modello 3D (Solo visivo!)
       this.mesh.rotation.y = targetRotation + (this.modelOffset || 0);
     }
 
-    // 7. Salto
     if ((input.isPressed("space") || input.isPressed(" ")) && this.canJump) {
       this.body.velocity.y = this.jumpVelocity;
       this.canJump = false;
@@ -148,11 +137,10 @@ export default class Player {
       }
     }
 
-    // 8. Sincronizzazione Grafica <-> Fisica (Adesso questa parte viene eseguita sempre!)
     this.mesh.position.set(
       this.body.position.x,
       this.body.position.y - this.radius,
-      this.body.position.z,
+      this.body.position.z
     );
   }
 

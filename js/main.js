@@ -109,9 +109,8 @@ function updateGame(delta) {
   if (ui.isPaused || !entityManager.player) return;
 
   entityManager.update(delta, input, ui, audio, renderer.camera);
-
-  // 🎥 Aggiornamento della telecamera orbitale con i tasti I, J, K, L
   cameraManager.update(entityManager.player, input, delta);
+
 }
 
 // 💡 1. CONFIGURAZIONE DEL MANAGER DI CARICAMENTO GLOBALE
