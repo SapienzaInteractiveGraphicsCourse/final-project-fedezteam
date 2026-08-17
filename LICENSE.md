@@ -1,6 +1,6 @@
 ## 🎨 3D Assets & Credits
 
-All 3D models used in this project are used under the [Creative Commons Attribution (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) license.
+All 3D models used in this project are used under the [Creative Commons Attribution (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) license (or their respective CC licenses).
 
 ### Characters & Enemies
 - **Mario**: Created by [gaddiellartey2010](https://sketchfab.com/gaddiellartey2010) — [Model Link](https://sketchfab.com/3d-models/mario-802b20551cef40c0a19462f92d40a1b1)
@@ -24,12 +24,13 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Star**: Created by [jkimmel694](https://sketchfab.com/jkimmel694) — [Model Link](https://sketchfab.com/3d-models/wii-mario-kart-wii-star-605d03622b334f4695ee7fa5a00d9dc9)
 - **Super Mushroom**: Created by [smarthug](https://sketchfab.com/smarthug) — [Model Link](https://sketchfab.com/3d-models/mario-super-mushroom-bfecb0aee2984ddca543ea90dcb270cc)
 - **Yoshi Egg**: Created by [Yanez-Designs](https://sketchfab.com/Yanez-Designs) — [Model Link](https://sketchfab.com/3d-models/yoshi-egg-2125c39434ed4b3696bdff0a0bdb6fb2)
+- **Warp Pipe**: Created by [vanc3d](https://sketchfab.com/vanc3d) — [Model Link](https://sketchfab.com/3d-models/super-mario-pipe-for-free-470f2e1ef78d4c4bb35969909adf90ce)
 
 ### Textures & Environments
 - **Skyboxes**: Provided by [Kenney](https://kenney.nl/assets/skyboxes)
-https://sketchfab.com/3d-models/3ds-mario-kart-7-palm-tree-4f27fab359e74e9b82c6a061bc782a18#download
-https://sketchfab.com/3d-models/super-mario-3d-land-toad-house-35e2cb6b184a47cca3e20ed5b3036575#download
-https://sketchfab.com/3d-models/super-mario-pipe-for-free-470f2e1ef78d4c4bb35969909adf90ce#download
-https://sketchfab.com/3d-models/toad-mushroom-house-8fd19ae8900f49ddaad3568e345bfd03
-https://sketchfab.com/3d-models/nintendo-64-paper-mario-marios-house-exterio-6eaf1353a8a34de4a9a1d74a41445f2d
-https://sketchfab.com/3d-models/egg-planet-8e5dba7af88e487ea61992f804b91eb8#download
+- **Palm Tree**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/3ds-mario-kart-7-palm-tree-4f27fab359e74e9b82c6a061bc782a18)
+- **Toad House (3D Land)**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/super-mario-3d-land-toad-house-35e2cb6b184a47cca3e20ed5b3036575)
+- **Toad Mushroom House**: Created by [Spooky](https://sketchfab.com/Spooky) — [Model Link](https://sketchfab.com/3d-models/toad-mushroom-house-8fd19ae8900f49ddaad3568e345bfd03)
+- **Mario's House Exterior**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/nintendo-64-paper-mario-marios-house-exterio-6eaf1353a8a34de4a9a1d74a41445f2d)
+- **Egg Planet**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/egg-planet-8e5dba7af88e487ea61992f804b91eb8)
+- **Grass**: Created by [Quaternius](https://poly.pizza/m/3tyh15Fbmsx) — [Model Link](https://poly.pizza/m/3tyh15Fbmsx) (CC0)
