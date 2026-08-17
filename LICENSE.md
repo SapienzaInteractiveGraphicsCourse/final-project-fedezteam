@@ -5,7 +5,7 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 ### Characters & Enemies
 - **Mario**: Created by [gaddiellartey2010](https://sketchfab.com/gaddiellartey2010) — [Model Link](https://sketchfab.com/3d-models/mario-802b20551cef40c0a19462f92d40a1b1)
 - **Luigi**: Created by [kingston.shamily](https://sketchfab.com/kingston.shamily) — [Model Link](https://sketchfab.com/3d-models/luigi-9fb92a86975446e8970bc99cee522b02)
-- **Yoshi**: Original model created by [Andres.Fco.Corbacho.Bueno](https://sketchfab.com/Andres.Fco.Corbacho.Bueno) ([Model Link](https://sketchfab.com/3d-models/yoshi-363820d7add148c2ae08d7ca599e5bb3)) — **Personally modified using Blender** to suit the needs of the project.
+- **Yoshi**: Original model created by [Seven71987](https://sketchfab.com/Seven71987) ([Model Link](https://sketchfab.com/3d-models/yoshi-58eb9ae7cbd3436eb7b5fde84faca10c)) — **Personally modified using Blender** to suit the needs of the project.
 - **Toad**: Created by [jakobhenerey2023](https://sketchfab.com/jakobhenerey2023) — [Model Link](https://sketchfab.com/3d-models/toad-d6a9f85aecd245fcb75f7d0f7a2f9f95)
 - **Bowser**: Created by [the_shatel](https://sketchfab.com/the_shatel) — [Model Link](https://sketchfab.com/3d-models/bowser-fa17f94ae350416f86c35db7c0e129c3)
 - **Bowser Jr.**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/bowser-jr-mario-kart-8-deluxe-8fd1397374a04d499ab4bd5bf90ffeac)
