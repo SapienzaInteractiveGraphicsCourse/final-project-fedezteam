@@ -6,10 +6,11 @@ export default class PhysicsEngine {
     this.world.gravity.set(0, options.gravity || -30, 0);
 
     this.defaultMaterial = new CANNON.Material("default");
+    // PhysicsEngine.js
     const contactMaterial = new CANNON.ContactMaterial(
       this.defaultMaterial,
       this.defaultMaterial,
-      { friction: 0.1, restitution: 0.0 }
+      { friction: 0.01, restitution: 0.0 }, // 👈 Imposta friction a 0.0
     );
     this.world.addContactMaterial(contactMaterial);
 

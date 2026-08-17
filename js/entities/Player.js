@@ -67,7 +67,7 @@ export default class Player {
     }
   }
 
-update(delta, input, ui, audio, camera) {
+  update(delta, input, ui, audio, camera) {
     if (!this.mesh || !this.body) return;
 
     const isSprinting =
@@ -79,14 +79,15 @@ update(delta, input, ui, audio, camera) {
       : this.moveSpeed;
 
     // Angolo stabile della telecamera
-    const camAngle = (camera && camera.userData && camera.userData.cameraAngleX !== undefined) 
-      ? camera.userData.cameraAngleX 
-      : 0;
+    const camAngle =
+      camera && camera.userData && camera.userData.cameraAngleX !== undefined
+        ? camera.userData.cameraAngleX
+        : 0;
 
     // Vettori di direzione basati sull'angolo puro
     const camForwardX = -Math.sin(camAngle);
     const camForwardZ = -Math.cos(camAngle);
-    
+
     const camRightX = Math.cos(camAngle);
     const camRightZ = -Math.sin(camAngle);
 
@@ -140,7 +141,7 @@ update(delta, input, ui, audio, camera) {
     this.mesh.position.set(
       this.body.position.x,
       this.body.position.y - this.radius,
-      this.body.position.z
+      this.body.position.z,
     );
   }
 
