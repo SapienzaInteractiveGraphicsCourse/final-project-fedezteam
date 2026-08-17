@@ -64,7 +64,8 @@ export default class EntityManager {
     }
   }
 
-  update(delta, input, ui, audio) {
+// 1. 🛡️ AGGIUNTO 'camera' COME 5° PARAMETRO QUI:
+  update(delta, input, ui, audio, camera) {
     if (ui && ui.gameState !== "PLAYING") return;
 
     // 1. Physics Engine Update
@@ -74,8 +75,8 @@ export default class EntityManager {
 
     if (!this.player) return;
 
-    // 2. Player Update
-    this.player.update(delta, input, audio);
+    // 2. 🛡️ PLAYER UPDATE (Singolo e con tutti i parametri in ordine)
+    this.player.update(delta, input, ui, audio, camera);
 
     // 3. Update the directional light to follow the player
     const dirLight =
@@ -91,8 +92,6 @@ export default class EntityManager {
     }
 
     // 4. Fall detection and respawn logic
-    // Cerca la sezione 4 (Fall detection and respawn logic) e cambiala così:[cite: 5]
-    // (Cerca il blocco della caduta in update)
     if (this.physicsEngine && this.physicsEngine.checkVoidFall) {
       const SCREAM_Y = -5; // Urla appena cade di 5 metri
       if (this.player.position.y < SCREAM_Y) {
@@ -114,7 +113,7 @@ export default class EntityManager {
       });
     }
 
-    // 4. Mappa e altre entità
+    // 5. Mappa e altre entità
     if (this.map && this.map.update) {
       this.map.update(
         this.player,
@@ -133,6 +132,7 @@ export default class EntityManager {
       );
     }
 
+    // 6. Yoshi update (Nota: passiamo solo i parametri che servono a Yoshi)
     if (this.yoshi && this.yoshi.update) {
       this.yoshi.update(delta, input, this.player);
     }

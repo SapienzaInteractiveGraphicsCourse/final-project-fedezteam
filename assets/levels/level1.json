@@ -13,7 +13,7 @@
     { "x": -50, "y": 5, "z": 60 }
   ],
   "buildings": [
-    { "type": "mario_house", "x": 0, "y": 4, "z": -15, "scale": 1.5, "hitboxX": 6, "hitboxZ": 6 },
+    { "type": "mario_house", "x": -20, "y": 4, "z": -40, "scale": 1.5, "rotationY": -1.5708, "hitboxX": 6, "hitboxZ": 6 },
     { "type": "toad_house_red", "x": 35, "y": 0, "z": -15, "scale": 0.01, "hitboxX": 5, "hitboxZ": 5 }
   ],
   "mushrooms":[],

@@ -128,8 +128,9 @@ export default class Map extends EntityManager {
         mesh.scale.set(b.scale, b.scale, b.scale);
         mesh.position.set(b.x, b.y, b.z);
 
-        // Se i modelli non sono ruotati bene di default, puoi aggiustarli qui:
-        // mesh.rotation.y = Math.PI;
+        // 🔄 Angolo di rotazione sull'asse Y (default 0 se non specificato)
+        const rotY = b.rotationY || 0;
+        mesh.rotation.y = rotY;
 
         mesh.traverse((child) => {
           if (child.isMesh) {
@@ -139,14 +140,18 @@ export default class Map extends EntityManager {
         });
         this.scene.add(mesh);
 
-        // 🧱 FISICA DELLA CASA (Hitbox invisibile per non farci passare attraverso Mario)
+        // 🧱 FISICA DELLA CASA (Hitbox allineata con la rotazione della mesh)
         if (world) {
           const halfExtents = new CANNON.Vec3(b.hitboxX / 2, 5, b.hitboxZ / 2);
           const houseBody = new CANNON.Body({
             mass: 0, // Statico
             shape: new CANNON.Box(halfExtents),
-            position: new CANNON.Vec3(b.x, b.y + 5, b.z), // Alzato per coprire tutta l'altezza
+            position: new CANNON.Vec3(b.x, b.y + 5, b.z),
           });
+
+          // Applica la stessa rotazione al corpo fisico
+          houseBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), rotY);
+
           world.addBody(houseBody);
         }
       } catch (e) {
@@ -567,7 +572,6 @@ export default class Map extends EntityManager {
     }
   }
   // 🌾 METODO ULTRA-OTTIMIZZATO (Erba molto densa e folta)
-  // 🌾 METODO SPONWGRASS CON I TUOI PARAMETRI E MARGINI CORRETTI
   async _spawnGrass(arenaSize) {
     let grassGlb = null;
     try {

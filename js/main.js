@@ -6,6 +6,7 @@ import InputManager from "./core/InputManager.js";
 import UIManager from "./ui/UIManager.js";
 import PhysicsEngine from "./physics/PhysicsEngine.js";
 import AudioManager from "./core/Audio/AudioManager.js";
+import CameraManager from "./core/CameraManager.js";
 import { initGameAudio } from "./core/Audio/soundConfig.js";
 import Yoshi from "./entities/Yoshi.js";
 import Map from "./entities/Map.js";
@@ -14,6 +15,7 @@ import * as THREE from "three";
 
 // 1. CORE MODULES
 const renderer = new RendererManager("#webgl-canvas");
+const cameraManager = new CameraManager(renderer.camera);
 const assetLoader = new AssetLoader();
 const input = new InputManager();
 const ui = new UIManager();
@@ -91,6 +93,7 @@ ui.onGameStart(({ character }) => {
 });
 
 // 4. GAME LOOP
+
 function updateGame(delta) {
   if (ui.gameState === "MENU_WELCOME" || ui.gameState === "MENU_NAME") {
     menuCameraAngle += 0.5 * delta;
@@ -105,40 +108,38 @@ function updateGame(delta) {
   // If player is dead or game is paused, skip updating entities
   if (ui.isPaused || !entityManager.player) return;
 
-  entityManager.update(delta, input, ui, audio);
+  entityManager.update(delta, input, ui, audio, renderer.camera);
 
-  // Camera follows the player behind and slightly above
-  const playerPos = entityManager.player.mesh.position;
-  renderer.camera.position.x = playerPos.x;
-  renderer.camera.position.y = playerPos.y + 4;
-  renderer.camera.position.z = playerPos.z + 8;
-  renderer.camera.lookAt(playerPos.x, playerPos.y + 1, playerPos.z);
+  // 🎥 Aggiornamento della telecamera orbitale con i tasti I, J, K, L
+  cameraManager.update(entityManager.player, input, delta);
 }
 
 // 💡 1. CONFIGURAZIONE DEL MANAGER DI CARICAMENTO GLOBALE
-THREE.DefaultLoadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
+THREE.DefaultLoadingManager.onProgress = function (
+  url,
+  itemsLoaded,
+  itemsTotal,
+) {
   const progress = (itemsLoaded / itemsTotal) * 100;
-  
-  const loadingBar = document.getElementById('loading-bar');
-  const loadingText = document.getElementById('loading-text');
-  
-  if (loadingBar) loadingBar.style.width = progress + '%';
-  if (loadingText) loadingText.innerText = Math.floor(progress) + '%';
-};
 
+  const loadingBar = document.getElementById("loading-bar");
+  const loadingText = document.getElementById("loading-text");
+
+  if (loadingBar) loadingBar.style.width = progress + "%";
+  if (loadingText) loadingText.innerText = Math.floor(progress) + "%";
+};
 
 // 2. AVVIO DEL CARICAMENTO DEGLI ASSET
 initGameModels(assetLoader)
   .then(async (assets) => {
-    
     // 💡 ATTENZIONE: Non nascondiamo più la schermata qui!
     // Prima aspettiamo che la Mappa carichi e sparpagli TUTTI i suoi oggetti
 
     mapEntity = new Map(physics);
-    
+
     // Questo await mette in pausa finché case, alberi e funghi non sono posizionati
     await mapEntity.loadLevel("./assets/levels/level1.json");
-    
+
     entityManager.setMap(mapEntity);
 
     // 2. Yoshi Spawn point
@@ -169,6 +170,6 @@ initGameModels(assetLoader)
   })
   .catch((error) => {
     console.error("Errore durante il caricamento degli asset:", error);
-    const loadingText = document.getElementById('loading-text');
+    const loadingText = document.getElementById("loading-text");
     if (loadingText) loadingText.innerText = "ERRORE DI CARICAMENTO";
   });
