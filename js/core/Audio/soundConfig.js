@@ -1,6 +1,10 @@
 export const SOUND_MANIFEST = [
   { key: 'bgm', path: 'assets/audio/overworld_bgm.mp3', loop: true },
+  { key: 'pause', path: 'assets/audio/menu_pause.wav' },
   { key: 'coin', path: 'assets/audio/coin_collect.wav' },
+  { key: 'star', path: 'assets/audio/star_collect.wav' },
+  { key: 'mushroom', path: 'assets/audio/1up.wav' },
+  { key: 'gameover', path: 'assets/audio/gameover.mp3' },
   { key: 'mario_selected', path: 'assets/audio/mario_selected.wav' },
   { key: 'luigi_selected', path: 'assets/audio/luigi_selected.wav' },
   { key: 'mario_jump1', path: 'assets/audio/mario_jump1.wav' },

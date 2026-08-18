@@ -23,16 +23,19 @@ const ui = new UIManager();
 const audio = new AudioManager();
 initGameAudio(audio);
 
-// All'avvio, applica subito il muto se era stato salvato nel LocalStorage
+// 🔊 Collega l'istanza audio a UIManager
+ui.setAudio(audio);
+
+// All'avvio, applica subito il muto se salvato nel LocalStorage
 const initialMuteState = localStorage.getItem("game_is_muted") === "true";
 audio.setMute(initialMuteState);
 
-// 1. Ascolta il click sul tasto muto
+// Ascolta il click sul tasto muto
 ui.onMuteToggle = (isMuted) => {
   audio.setMute(isMuted);
 };
 
-// 2. Ascolta il click su "Ritorna al Menu" dal menu di pausa
+// Ascolta il click su "Ritorna al Menu"
 ui.onReturnToMenu = () => {
   // Ricarica la pagina per resettare istantaneamente grafica, memoria e fisica
   window.location.reload();

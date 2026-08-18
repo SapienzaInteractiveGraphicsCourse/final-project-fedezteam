@@ -7,7 +7,7 @@ export default class UIManager {
 
     this.startBtn = document.getElementById("start-btn");
     this.continueBtn = document.getElementById("continue-btn");
-    this.restartBtn = document.getElementById("restart-btn"); // Pulsante MAIN MENU
+    this.restartBtn = document.getElementById("restart-btn");
 
     this.heroNameInput = document.getElementById("hero-name-input");
     this.hudHeroName = document.getElementById("hud-hero-name");
@@ -32,6 +32,7 @@ export default class UIManager {
     this.gameState = "MENU_WELCOME";
     this.selectedCharacter = "mario";
     this.isPaused = false;
+    this.audio = null;
 
     this.coins = 0;
     this.lives = 4;
@@ -109,15 +110,13 @@ export default class UIManager {
 
     this.continueBtn.addEventListener("click", () => this._triggerStart());
 
-    // 🔄 Pressione Tasto MAIN MENU da Game Over
+    // 🔄 Pressione Tasto RESTART GAME da Game Over
     if (this.restartBtn) {
       this.restartBtn.addEventListener("click", () => this.returnToMainMenu());
     }
 
     this.pauseBtn.addEventListener("click", () => this.toggleSettings());
-    this.closeSettingsBtn.addEventListener("click", () =>
-      this.toggleSettings(),
-    );
+    this.closeSettingsBtn.addEventListener("click", () => this.toggleSettings());
 
     window.addEventListener("keydown", (e) => {
       if (
@@ -146,7 +145,7 @@ export default class UIManager {
     // Se era già a 0 vite (ultima vita) ed è morto di nuovo -> GAME OVER
     if (this.lives <= 0) {
       this.showGameOver(audio);
-      return true; // Restituisce true se è Game Over
+      return true;
     }
 
     // Altrimenti scala la vita (es. da 1 passa a 0 ed è ancora in gioco)
@@ -184,28 +183,18 @@ export default class UIManager {
     if (this.gameOverScreen) this.gameOverScreen.classList.remove("hidden");
 
     // 🎵 Stop BGM + Play gameover.mp3
-    if (audio) {
-      // 1. Ferma la musica di sottofondo
+    const soundManager = audio || this.audio;
+    if (soundManager) {
       try {
-        if (typeof audio.stopBGM === "function") audio.stopBGM();
-        else if (typeof audio.stop === "function") audio.stop("bgm");
-        else if (audio.bgm && audio.bgm.pause) audio.bgm.pause();
-        else if (audio.sounds && audio.sounds.bgm && audio.sounds.bgm.pause)
-          audio.sounds.bgm.pause();
-      } catch (e) {
-        console.warn("Errore nello stop della musica BGM:", e);
-      }
+        if (typeof soundManager.stopBGM === "function") soundManager.stopBGM();
+        else if (typeof soundManager.stop === "function") soundManager.stop("bgm");
+      } catch (e) {}
 
-      // 2. Riproduce il suono di Game Over
       try {
-        if (typeof audio.playSFX === "function") {
-          audio.playSFX("gameover");
-        } else if (typeof audio.play === "function") {
-          audio.play("gameover");
+        if (typeof soundManager.playSFX === "function") {
+          soundManager.playSFX("gameover");
         }
-      } catch (e) {
-        console.warn("Errore nella riproduzione di gameover.mp3:", e);
-      }
+      } catch (e) {}
     }
   }
 
@@ -251,16 +240,12 @@ export default class UIManager {
     this.isPaused = !this.isPaused;
 
     // 🔊 Riproduce menu_pause.wav sia all'apertura che alla chiusura
-    if (this.audio) {
-      if (typeof this.audio.playSFX === "function") {
-        this.audio.playSFX("pause");
-      } else if (typeof this.audio.play === "function") {
-        this.audio.play("pause");
-      }
+    if (this.audio && typeof this.audio.playSFX === "function") {
+      this.audio.playSFX("pause");
     }
 
     if (this.isPaused) {
-      if (this.settingsTitle) this.settingsTitle.textContent = "Settings";
+      if (this.settingsTitle) this.settingsTitle.textContent = "Pause";
       this.pauseOverlay.classList.remove("hidden");
     } else {
       this.pauseOverlay.classList.add("hidden");
@@ -284,7 +269,7 @@ export default class UIManager {
 
     this.gameState = "PLAYING";
 
-    if (this.pauseBtn) this.pauseBtn.textContent = "☰ Settings";
+    if (this.pauseBtn) this.pauseBtn.textContent = "☰ Pause";
 
     this.nameScreen.style.display = "none";
     this.hud.style.display = "block";
@@ -301,22 +286,15 @@ export default class UIManager {
       });
     }
   }
+
   _updateMuteButtonUI() {
     if (this.btnMute) {
-      this.btnMute.innerText = this.isMuted ? "🔇" : "🔊";
+      this.btnMute.innerText = this.isMuted ? "🔇 MUTED" : "🔊 UNMUTED";
     }
   }
 
-  onResetToMenu(cb) {
-    this.onResetToMenuCallback = cb;
-  }
-  onWelcomeStart(cb) {
-    this.onWelcomeStartCallback = cb;
-  }
-  onCharacterSelect(cb) {
-    this.onSelectCallback = cb;
-  }
-  onGameStart(cb) {
-    this.onStartCallback = cb;
-  }
+  onResetToMenu(cb) { this.onResetToMenuCallback = cb; }
+  onWelcomeStart(cb) { this.onWelcomeStartCallback = cb; }
+  onCharacterSelect(cb) { this.onSelectCallback = cb; }
+  onGameStart(cb) { this.onStartCallback = cb; }
 }

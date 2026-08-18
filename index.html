@@ -79,9 +79,9 @@
         <button id="continue-btn" class="btn-retro">CONTINUE</button>
       </div>
 
-      <!-- HUD DISTRIBUITA NEGLI ANGOLI -->
+      <!-- HUD -->
       <div id="hud">
-        <!-- ANGOLO IN ALTO A SINISTRA: Profilo (con Box) + Stelle (Senza Box) -->
+        <!-- ANGOLO IN ALTO A SINISTRA: Profilo + Stelle -->
         <div class="hud-top-left">
           <div class="hud-profile">
             <img
@@ -107,7 +107,7 @@
           </div>
         </div>
 
-        <!-- ANGOLO IN BASSO A SINISTRA: Vite / Fungo (Senza Box) -->
+        <!-- ANGOLO IN BASSO A SINISTRA: Vite / Fungo -->
         <div class="hud-bottom-left">
           <div class="hud-stat-clean">
             <img
@@ -125,7 +125,7 @@
           </div>
         </div>
 
-        <!-- ANGOLO IN BASSO A DESTRA: Monete (Senza Box) -->
+        <!-- ANGOLO IN BASSO A DESTRA: Monete -->
         <div class="hud-bottom-right">
           <div class="hud-stat-clean">
             <img
@@ -145,20 +145,16 @@
       </div>
     </div>
 
-    <script type="module" src="js/main.js"></script>
+    <!-- Pulsante Pausa in alto a destra -->
+    <button id="pause-btn" class="pause-btn">☰ Pause</button>
 
-    <!-- Pulsante in alto a destra -->
-    <button id="pause-btn" class="pause-btn">☰ Settings</button>
-
-    <button id="btn-mute" class="mute-button">🔊</button>
-    <!-- Overlay scuro a schermo intero con dentro il pannello -->
+    <!-- Overlay Pausa / Impostazioni -->
     <div id="pause-overlay" class="pause-overlay hidden">
-      <!-- 🔴 Tasto RESUME posizionato nell'angolo in alto a destra (al posto di Settings) -->
       <button id="close-settings-btn" class="resume-btn">Resume</button>
 
       <div id="settings-panel" class="settings-panel">
         <div class="settings-header">
-          <h2 id="settings-title">Settings</h2>
+          <h2 id="settings-title">Pause</h2>
         </div>
 
         <div class="settings-body">
@@ -192,9 +188,17 @@
             </div>
           </div>
 
-          <button id="btn-return-menu">MENU PRINCIPALE</button>
+          <!-- Tasto Muto nel Menù -->
+          <div class="setting-item">
+            <label>Master Mute</label>
+            <button id="btn-mute" class="btn-retro" style="padding: 8px 16px; font-size: 0.75rem;">🔊 UNMUTED</button>
+          </div>
+
+          <button id="btn-return-menu" class="btn-retro" style="margin-top: 10px; width: 100%;">RESTART GAME</button>
+          
           <hr class="settings-divider" />
-          <!-- Schema Comandi di Gioco -->
+          
+          <!-- Schema Comandi -->
           <div class="controls-section">
             <h3>CONTROLS</h3>
 
@@ -246,5 +250,7 @@
         <button id="restart-btn" class="btn-retro btn-red">RESTART GAME</button>
       </div>
     </div>
+
+    <script type="module" src="js/main.js"></script>
   </body>
 </html>
