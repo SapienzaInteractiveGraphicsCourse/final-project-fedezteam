@@ -1,16 +1,24 @@
 import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
+// 🛠️ FIX: was previously imported from a hardcoded jsdelivr URL
+// ("https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js"),
+// which bundles its OWN copy of three.module.js — separate from the "three"
+// bare specifier used everywhere else (via the import map). That mismatch is
+// exactly what triggers "Multiple instances of Three.js being imported."
+// Using the same bare specifier as DRACOLoader/BufferGeometryUtils below
+// guarantees a single shared THREE instance across the whole app.
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import EntityManager from "./EntityManager.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js";
+import BuildingFactory from "./buildings/BuildingFactory.js";
 
 export default class Map extends EntityManager {
   constructor(physicsWorld) {
     super(new THREE.Group());
     this.physicsWorld = physicsWorld;
-    this.questionMarkBlocks = []; // Array per i blocchi
-    this.mushroomGlb = null; // Salviamo il modello per usarlo nei blocchi
+    this.questionMarkBlocks = [];
+    this.mushroomGlb = null;
 
     this.loader = new GLTFLoader();
 
@@ -40,14 +48,14 @@ export default class Map extends EntityManager {
       const response = await fetch(levelJsonPath);
       levelData = await response.json();
     } catch (e) {
-      console.warn("Impossibile caricare level1.json");
+      console.warn("Could not load level1.json");
     }
 
-    // 1. SPAWNS (Dal JSON)
+    // 1. SPAWNS (from JSON)
     this.playerSpawn = levelData?.playerSpawn || { x: 0, y: 2, z: 0 };
     this.yoshiSpawn = levelData?.yoshiSpawn || { x: 5, y: 2, z: -5 };
 
-    // 2. TEXTURE ERBA
+    // 2. GRASS TEXTURE
     const textureLoader = new THREE.TextureLoader();
     const grassTexture = textureLoader.load("assets/textures/field/grass2.jpg");
     grassTexture.wrapS = THREE.RepeatWrapping;
@@ -55,12 +63,11 @@ export default class Map extends EntityManager {
     grassTexture.repeat.set(55, 55);
     grassTexture.colorSpace = THREE.SRGBColorSpace;
 
-    // 3. CREA LE ISOLE DAL JSON
+    // 3. CREATE ISLANDS FROM JSON
     const platformsData = levelData?.platforms || [];
     const world = this.physicsWorld?.world || this.physicsWorld;
 
     platformsData.forEach((plat) => {
-      // Grafica (Three.js)
       const geo = new THREE.BoxGeometry(plat.size.x, plat.size.y, plat.size.z);
       const mat = new THREE.MeshStandardMaterial({
         map: grassTexture,
@@ -72,7 +79,6 @@ export default class Map extends EntityManager {
       mesh.castShadow = true;
       this.scene.add(mesh);
 
-      // Fisica (Cannon.js)
       const halfSize = new CANNON.Vec3(
         plat.size.x / 2,
         plat.size.y / 2,
@@ -92,74 +98,101 @@ export default class Map extends EntityManager {
       if (world) world.addBody(body);
     });
 
-    // 4. PRE-CARICA IL FUNGO
-    // Lo salviamo in memoria per averlo disponibile quando colpisci i blocchi
+    // 4. PRELOAD THE MUSHROOM MODEL FOR ? BLOCKS
     try {
       this.mushroomGlb = await this.loader.loadAsync(
         "assets/models/Super_Mario/Items/mushroom.glb",
       );
     } catch (e) {}
 
-    // 5. METTI MONETE, STELLE, FUNGHI E BLOCCHI SULLA MAPPA
-    // Prende la dimensione dell'Isola Principale (es: 60) per spargere monete e fiori senza farli cadere nel vuoto
+    // 5. SPAWN MAP ELEMENTS
     const mainIslandSize = platformsData[0]?.size.x || 60;
 
-    // Chiama i generatori una volta sola e nell'ordine corretto
     await this._spawnDecorations(mainIslandSize);
     await this._spawnStars(levelData?.stars);
     await this._spawnMushrooms(levelData?.mushrooms);
     await this._spawnQuestionMarkBlocks(levelData?.questionMarkBlocks);
-    await this._spawnHills(levelData?.hills);
-    await this._spawnBuildingsAndNPCs(levelData?.buildings, levelData?.npcs);
+    await this._spawnBuildingsAndNPCs(
+      levelData?.buildings,
+      levelData?.npcs,
+      levelData?.hills,
+    );
     await this._spawnGrass(mainIslandSize);
   }
-  // 🏠 NUOVO METODO: Spawna Edifici e NPC (Toad)
-  async _spawnBuildingsAndNPCs(buildingsData = [], npcsData = []) {
-    const world = this.physicsWorld?.world || this.physicsWorld;
 
-    // 1. CARICA LE CASE
-    for (const b of buildingsData) {
+  // 🏠 SPAWN BUILDINGS, HILLS AND NPCS VIA BUILDINGFACTORY
+  async _spawnBuildingsAndNPCs(
+    buildingsData = [],
+    npcsData = [],
+    hillsData = [],
+  ) {
+    // 🛠️ DIAGNOSTIC: if this ever logs, EVERY building/hill spawned below will
+    // render visually but get ZERO collision, with no other error anywhere.
+    // This is the #1 thing to rule out for a "model has no collider" bug.
+    const worldCheck = this.physicsWorld?.world || this.physicsWorld;
+    if (!worldCheck) {
+      console.warn(
+        "[Map] _spawnBuildingsAndNPCs: this.physicsWorld is missing/undefined. " +
+        "No structure spawned in this call will have a collider."
+      );
+    }
+
+    // Merge buildings and hills so they can all be handled through the Factory.
+    const allStructures = [
+      ...buildingsData,
+      ...hillsData.map((h) => ({
+        ...h,
+        type: h.type || "block_grass_large",
+      })),
+    ];
+
+    // 1. STRUCTURES (MarioHouse, HillBlock, ToadHouse, etc.)
+    for (const b of allStructures) {
       try {
-        const glb = await this.loader.loadAsync(
-          `assets/models/Super_Mario/Map/${b.type}.glb`,
-        );
+        let glbPath;
+
+        if (
+          b.type.includes("block-grass") ||
+          b.type.includes("hill") ||
+          b.type === "block_grass_large"
+        ) {
+          glbPath = `assets/models/Super_Mario/Map/block-grass-large.glb`;
+        } else if (b.type.includes("toad_house")) {
+          // Handles both "toad_house" and "toad_house_red" by pointing to the
+          // correct file in the folder.
+          // 🛠️ NOTE: every Toad House variant (including "toad_house_blue")
+          // currently loads the SAME red model file. If you actually have a
+          // blue variant in the JSON, this is why it looks red — it's not a
+          // collision bug, just a visual model mismatch worth checking.
+          glbPath = `assets/models/Super_Mario/Map/toad_house_red.glb`;
+        } else {
+          glbPath = `assets/models/Super_Mario/Map/${b.type}.glb`;
+        }
+
+        const glb = await this.loader.loadAsync(glbPath);
         const mesh = glb.scene.clone();
 
-        mesh.scale.set(b.scale, b.scale, b.scale);
-        mesh.position.set(b.x, b.y, b.z);
+        const structureInstance = BuildingFactory.create(
+          b.type,
+          mesh,
+          this.physicsWorld,
+          b,
+        );
 
-        // 🔄 Angolo di rotazione sull'asse Y (default 0 se non specificato)
-        const rotY = b.rotationY || 0;
-        mesh.rotation.y = rotY;
-
-        mesh.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
-        this.scene.add(mesh);
-
-        // 🧱 FISICA DELLA CASA (Hitbox allineata con la rotazione della mesh)
-        if (world) {
-          const halfExtents = new CANNON.Vec3(b.hitboxX / 2, 5, b.hitboxZ / 2);
-          const houseBody = new CANNON.Body({
-            mass: 0, // Statico
-            shape: new CANNON.Box(halfExtents),
-            position: new CANNON.Vec3(b.x, b.y + 5, b.z),
-          });
-
-          // Applica la stessa rotazione al corpo fisico
-          houseBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), rotY);
-
-          world.addBody(houseBody);
+        if (structureInstance) {
+          this.scene.add(structureInstance.mesh);
+        } else {
+          // BuildingFactory.create() already warns about unknown types, but
+          // we surface the raw JSON entry here too so you can see exactly
+          // what was in level1.json for this structure.
+          console.warn("[Map] Structure not added to scene, raw JSON entry:", b);
         }
       } catch (e) {
-        console.warn(`Impossibile caricare l'edificio: ${b.type}.glb`);
+        console.warn(`[Map] Could not load structure: ${b.type}`, e);
       }
     }
 
-    // 2. CARICA GLI NPC (TOAD)
+    // 2. LOAD NPCS (TOAD)
     for (const npc of npcsData) {
       try {
         const glb = await this.loader.loadAsync(
@@ -178,20 +211,15 @@ export default class Map extends EntityManager {
         });
         this.scene.add(mesh);
       } catch (e) {
-        console.warn(`Impossibile caricare NPC: ${npc.type}.glb`);
+        console.warn(`[Map] Could not load NPC: ${npc.type}.glb`);
       }
     }
   }
 
-  /**
-   * Spawna i Funghi sulla mappa
-   */
-
-  // 💡 HELPER: Genera un fungo dinamico (con gravità)
+  // 🍄 DYNAMIC MUSHROOM (for ? blocks)
   _spawnSingleMushroom(x, y, z) {
     if (!this.mushroomGlb) return;
 
-    // 1. GRAFICA
     const mesh = this.mushroomGlb.scene.clone();
     mesh.scale.set(0.4, 0.4, 0.4);
     mesh.position.set(x, y, z);
@@ -203,39 +231,32 @@ export default class Map extends EntityManager {
     });
     this.scene.add(mesh);
 
-    // 2. FISICA (Cannon.js)
     let body = null;
     const world = this.physicsWorld?.world || this.physicsWorld;
     if (world) {
-      const radius = 0.5; // Dimensione della sfera di collisione del fungo
+      const radius = 0.5;
       body = new CANNON.Body({
-        mass: 2, // Ha una massa! La gravità lo farà cadere a terra
+        mass: 2,
         shape: new CANNON.Sphere(radius),
         position: new CANNON.Vec3(x, y, z),
         material: this.physicsWorld?.defaultMaterial,
-        fixedRotation: true, // Evita che il modello 3D rotoli sottosopra
+        fixedRotation: true,
       });
 
-      // 🔥 SPINTA INIZIALE: Salta in alto (Y=7) e si muove in avanti (X=4)
       body.velocity.set(4, 7, 0);
-
       world.addBody(body);
     }
 
-    // Aggiungiamo 'body' all'oggetto per rintracciarlo nell'update
     this.mushrooms.push({
       mesh: mesh,
-      body: body, // <- Riferimento alla fisica
+      body: body,
       position: mesh.position,
       collected: false,
     });
   }
 
   async _spawnMushrooms(mushroomPositions) {
-    // 💡 Se l'array nel JSON è vuoto o non esiste, FERMATI. Niente funghi casuali!
-    if (!mushroomPositions || mushroomPositions.length === 0) {
-      return;
-    }
+    if (!mushroomPositions || mushroomPositions.length === 0) return;
 
     let mushroomGlb = null;
     try {
@@ -243,19 +264,17 @@ export default class Map extends EntityManager {
         "assets/models/Super_Mario/Items/mushroom.glb",
       );
     } catch (e) {
-      console.warn("Modello mushroom.glb non trovato.");
+      console.warn("mushroom.glb model not found.");
     }
 
     mushroomPositions.forEach((pos) => {
       let mushroomMesh;
       if (mushroomGlb) {
         mushroomMesh = mushroomGlb.scene.clone();
-        mushroomMesh.scale.set(0.4, 0.4, 0.4); // <-- Assicurati che qui ci sia la scala piccola!
+        mushroomMesh.scale.set(0.4, 0.4, 0.4);
         mushroomMesh.position.set(pos.x, pos.y, pos.z);
       } else {
-        // Fallback: Fungo geometrico composto da cappello rosso e gambo bianco
         const group = new THREE.Group();
-
         const capGeo = new THREE.SphereGeometry(
           1,
           16,
@@ -298,15 +317,12 @@ export default class Map extends EntityManager {
 
   async _spawnStars(starPositions) {
     let starGlb = null;
-
     try {
       starGlb = await this.loader.loadAsync(
         "assets/models/Super_Mario/Items/star.glb",
       );
     } catch (e) {
-      console.warn(
-        "Modello star.glb non trovato. Creo stella geometrica dorata di fallback.",
-      );
+      console.warn("star.glb model not found.");
     }
 
     const positions = starPositions || [
@@ -319,7 +335,6 @@ export default class Map extends EntityManager {
 
     positions.forEach((pos) => {
       let starMesh;
-
       if (starGlb) {
         starMesh = starGlb.scene.clone();
         starMesh.position.set(pos.x, pos.y, pos.z);
@@ -378,13 +393,11 @@ export default class Map extends EntityManager {
 
     for (let x = -half; x <= half; x += step) {
       for (let z = -half; z <= half; z += step) {
-        // ZONA SICURA VILLAGGIO MAGGIORATA
         if (x > -40 && x < 80 && z > -50 && z < 50) continue;
 
         const posX = x + (Math.random() - 0.5) * 6;
         const posZ = z + (Math.random() - 0.5) * 6;
 
-        // 🌴 1. Alberi (Palme) - HANNO LE OMBRE
         if (treeGlb && Math.random() > 0.85) {
           const tree = treeGlb.scene.clone();
           const scale = 0.04 + Math.random() * 0.03;
@@ -399,10 +412,7 @@ export default class Map extends EntityManager {
             }
           });
           this.scene.add(tree);
-        }
-
-        // 🌸 2. Fiori - NIENTE OMBRE (Ottimizzazione FPS)
-        else if (flowerGlb && Math.random() > 0.75) {
+        } else if (flowerGlb && Math.random() > 0.75) {
           const plant = flowerGlb.scene.clone();
           const scale = 0.7 + Math.random() * 0.8;
           plant.scale.set(scale, scale, scale);
@@ -411,15 +421,12 @@ export default class Map extends EntityManager {
 
           plant.traverse((child) => {
             if (child.isMesh) {
-              child.castShadow = false; // Corretto qui!
+              child.castShadow = false;
               child.receiveShadow = true;
             }
           });
           this.scene.add(plant);
-        }
-
-        // 🪙 3. Monete - NIENTE OMBRE
-        else if (coinGlb && Math.random() > 0.9) {
+        } else if (coinGlb && Math.random() > 0.9) {
           const coin = coinGlb.scene.clone();
           coin.scale.set(0.6, 0.6, 0.6);
           coin.position.set(posX, 1.5, posZ);
@@ -441,137 +448,7 @@ export default class Map extends EntityManager {
       }
     }
   }
-  /**
-   * Update con gestione per Monete (ruotano), Stelle (ruotano) e Funghi (STATICI)
-   */
-  update(player, onCoinCollected, onStarCollected, onMushroomCollected) {
-    if (!player) return;
 
-    const playerPos = player.position;
-    const coinRadiusSq = this.coinCollectRadius * this.coinCollectRadius;
-    // 🪙 1. Monete (Ruotano)
-    for (const coin of this.coins) {
-      if (coin.collected) continue;
-
-      coin.mesh.rotation.y += 0.04;
-
-      const distanceSq = playerPos.distanceToSquared(coin.position);
-
-      if (distanceSq <= coinRadiusSq) {
-        coin.collected = true;
-        this.scene.remove(coin.mesh);
-        coin.mesh.traverse((child) => {
-          if (child.isMesh) {
-            child.geometry.dispose();
-            if (Array.isArray(child.material)) {
-              child.material.forEach((mat) => mat.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        });
-        if (onCoinCollected) onCoinCollected();
-      }
-    }
-
-    // ⭐ 2. Stelle (Ruotano)
-    for (const star of this.stars) {
-      if (star.collected) continue;
-
-      star.mesh.rotation.y += 0.015;
-
-      const distance = playerPos.distanceTo(star.position);
-      if (distance <= this.starCollectRadius) {
-        star.collected = true;
-        this.scene.remove(star.mesh);
-        if (onStarCollected) onStarCollected();
-      }
-    }
-
-    // 🍄 3. Funghi (Fissi a terra o in movimento)
-    // 🍄 Aggiornamento Funghi Fisica + Raccolta
-    for (const shroom of this.mushrooms) {
-      if (shroom.collected) continue;
-
-      // Se ha la fisica, aggiorna la grafica in base alla caduta
-      if (shroom.body) {
-        // Applica una spinta costante per farlo camminare sul terreno
-        shroom.body.velocity.x = 3;
-
-        // Sincronizza posizione grafica con corpo Cannon.js
-        shroom.mesh.position.copy(shroom.body.position);
-        shroom.mesh.quaternion.copy(shroom.body.quaternion);
-
-        shroom.position = shroom.mesh.position;
-      }
-
-      // Raccolta da parte di Mario
-      const distance = playerPos.distanceTo(shroom.position);
-      if (distance <= 1.8) {
-        shroom.collected = true;
-        this.scene.remove(shroom.mesh);
-
-        const world = this.physicsWorld?.world || this.physicsWorld;
-        if (shroom.body && world) {
-          world.removeBody(shroom.body);
-        }
-
-        if (onMushroomCollected) onMushroomCollected();
-      }
-    }
-    // ❓ Collisione Testa-Blocco Punto Interrogativo
-    if (this.questionMarkBlocks) {
-      for (const block of this.questionMarkBlocks) {
-        if (block.isHit) continue;
-
-        // 1. Calcola le distanze sugli assi X, Z e Y
-        const dx = Math.abs(playerPos.x - block.position.x);
-        const dz = Math.abs(playerPos.z - block.position.z);
-        const dy = block.position.y - playerPos.y; // Distanza dal blocco a Mario
-
-        // 2. Se Mario è sotto al blocco (dx e dz vicini a 0)
-        // e la distanza verticale è quella giusta quando sbatte la testa (tra 1.2m e 2.8m)
-        if (dx < 1.2 && dz < 1.2 && dy > 1.2 && dy < 2.8) {
-          block.isHit = true;
-
-          // Animazione sobbalzo verso l'alto
-          block.mesh.position.y += 0.25;
-          setTimeout(() => {
-            if (block.mesh) block.mesh.position.y -= 0.25;
-          }, 100);
-
-          // Spawna il fungo
-          this._spawnSingleMushroom(
-            block.position.x,
-            block.position.y + 1.2,
-            block.position.z,
-          );
-
-          // Rimuovi il blocco giallo e crea il blocco marrone vuoto
-          this.scene.remove(block.mesh);
-
-          const smoothGeo = new THREE.BoxGeometry(
-            block.hitboxX,
-            block.hitboxY,
-            block.hitboxZ,
-          );
-          const smoothMat = new THREE.MeshStandardMaterial({
-            color: 0x8b5a2b, // Marrone blocco svuotato
-            roughness: 0.6,
-          });
-
-          const smoothMesh = new THREE.Mesh(smoothGeo, smoothMat);
-          smoothMesh.position.copy(block.position);
-          smoothMesh.castShadow = true;
-          smoothMesh.receiveShadow = true;
-
-          this.scene.add(smoothMesh);
-          block.mesh = smoothMesh;
-        }
-      }
-    }
-  }
-  // 🌾 METODO ULTRA-OTTIMIZZATO (Erba molto densa e folta)
   async _spawnGrass(arenaSize) {
     let grassGlb = null;
     try {
@@ -606,8 +483,6 @@ export default class Map extends EntityManager {
     const dummy = new THREE.Object3D();
 
     const step = 0.9;
-
-    // Margine di sicurezza per evitare che le mesh estese sporgano ai bordi
     const margin = 18;
     const half = arenaSize / 2 - margin;
 
@@ -617,7 +492,6 @@ export default class Map extends EntityManager {
           const posX = x + (Math.random() - 0.5) * step * 0.8;
           const posZ = z + (Math.random() - 0.5) * step * 0.8;
 
-          // Scarta l'istanza se la variazione casuale la spinge fuori dalla zona sicura
           if (Math.abs(posX) > half || Math.abs(posZ) > half) continue;
 
           const scale = 0.0004 + Math.random() * 0.0025;
@@ -646,54 +520,7 @@ export default class Map extends EntityManager {
 
     this.scene.add(instancedGrass);
   }
-  // ⛰️ NUOVO METODO: Spawna le "Montagnette" d'erba larghe e basse
-  async _spawnHills(hillsData = []) {
-    let hillGlb = null;
-    try {
-      hillGlb = await this.loader.loadAsync(
-        "assets/models/Super_Mario/Map/block-grass-large.glb",
-      );
-    } catch (e) {
-      console.warn("Modello block-grass-large.glb non trovato.");
-      return;
-    }
 
-    const world = this.physicsWorld?.world || this.physicsWorld;
-
-    hillsData.forEach((h) => {
-      const mesh = hillGlb.scene.clone();
-
-      // 💡 Scaliamo in modo non uniforme (Largo ma Basso)
-      mesh.scale.set(h.scaleX, h.scaleY, h.scaleZ);
-      mesh.position.set(h.x, h.y, h.z);
-
-      mesh.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-          // Nessuna modifica ai colori! Usa la texture del GLB.
-        }
-      });
-      this.scene.add(mesh);
-
-      // Fisica (pavimento rialzato)
-      if (world) {
-        const halfExtents = new CANNON.Vec3(
-          h.hitboxX / 2,
-          h.hitboxY / 2,
-          h.hitboxZ / 2,
-        );
-        const body = new CANNON.Body({
-          mass: 0, // Corpo statico (terreno)
-          shape: new CANNON.Box(halfExtents),
-          // Posizioniamo il centro della hitbox in base all'altezza
-          position: new CANNON.Vec3(h.x, h.y + h.hitboxY / 2, h.z),
-        });
-        world.addBody(body);
-      }
-    });
-  }
-  // 💡 NUOVO METODO: Spawna i blocchi sospesi
   async _spawnQuestionMarkBlocks(positions) {
     let questionMarkGlb = null;
     try {
@@ -701,7 +528,7 @@ export default class Map extends EntityManager {
         "assets/models/Super_Mario/Items/question_mark_block.glb",
       );
     } catch (e) {
-      console.warn("Modello question_mark_block.glb non trovato.");
+      console.warn("question_mark_block.glb model not found.");
     }
 
     const blocks =
@@ -715,10 +542,8 @@ export default class Map extends EntityManager {
 
     blocks.forEach((pos) => {
       let mesh;
-
       if (questionMarkGlb) {
         mesh = questionMarkGlb.scene.clone();
-        // 💡 SCALA PERFETTA: Ridotta ulteriormente per essere proporzionata a Mario
         mesh.scale.set(0.0012, 0.0012, 0.0012);
       } else {
         const geo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
@@ -738,13 +563,12 @@ export default class Map extends EntityManager {
       });
       this.scene.add(mesh);
 
-      // FISICA (Hitbox rimpicciolita a 0.75 per matchare la nuova grafica)
       const world = this.physicsWorld?.world || this.physicsWorld;
       let body = null;
       if (world) {
         const shape = new CANNON.Box(new CANNON.Vec3(0.75, 0.75, 0.75));
         body = new CANNON.Body({
-          mass: 0, // Statico
+          mass: 0,
           shape: shape,
           position: new CANNON.Vec3(pos.x, pos.y, pos.z),
           material: this.physicsWorld?.defaultMaterial,
@@ -761,48 +585,116 @@ export default class Map extends EntityManager {
     });
   }
 
-  // 💡 NUOVO METODO HELPER: Genera un singolo fungo a runtime
-  // 🍄 Genera il fungo che cade
-  _spawnSingleMushroom(x, y, z) {
-    if (!this.mushroomGlb) return;
+  update(player, onCoinCollected, onStarCollected, onMushroomCollected) {
+    if (!player) return;
 
-    const mesh = this.mushroomGlb.scene.clone();
-    mesh.scale.set(0.4, 0.4, 0.4);
-    mesh.position.set(x, y, z);
+    const playerPos = player.position;
+    const coinRadiusSq = this.coinCollectRadius * this.coinCollectRadius;
 
-    mesh.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+    // 1. Coins
+    for (const coin of this.coins) {
+      if (coin.collected) continue;
+      coin.mesh.rotation.y += 0.04;
+
+      const distanceSq = playerPos.distanceToSquared(coin.position);
+      if (distanceSq <= coinRadiusSq) {
+        coin.collected = true;
+        this.scene.remove(coin.mesh);
+        coin.mesh.traverse((child) => {
+          if (child.isMesh) {
+            child.geometry.dispose();
+            if (Array.isArray(child.material)) {
+              child.material.forEach((mat) => mat.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        });
+        if (onCoinCollected) onCoinCollected();
       }
-    });
-    this.scene.add(mesh);
-
-    // Corpo fisico dinamico
-    const world = this.physicsWorld?.world || this.physicsWorld;
-    let body = null;
-
-    if (world) {
-      // Sfera di collisione per farlo scivolare e cadere
-      const shape = new CANNON.Sphere(0.5);
-      body = new CANNON.Body({
-        mass: 2, // 👈 Ha peso: la gravità lo farà cadere a terra!
-        shape: shape,
-        position: new CANNON.Vec3(x, y, z),
-        material: this.physicsWorld?.defaultMaterial,
-      });
-
-      // Spinta iniziale verso l'alto e leggermente di lato
-      body.velocity.set(2, 5, 0);
-
-      world.addBody(body);
     }
 
-    this.mushrooms.push({
-      mesh: mesh,
-      body: body,
-      position: mesh.position,
-      collected: false,
-    });
+    // 2. Stars
+    for (const star of this.stars) {
+      if (star.collected) continue;
+      star.mesh.rotation.y += 0.015;
+
+      const distance = playerPos.distanceTo(star.position);
+      if (distance <= this.starCollectRadius) {
+        star.collected = true;
+        this.scene.remove(star.mesh);
+        if (onStarCollected) onStarCollected();
+      }
+    }
+
+    // 3. Dynamic mushrooms
+    for (const shroom of this.mushrooms) {
+      if (shroom.collected) continue;
+
+      if (shroom.body) {
+        shroom.body.velocity.x = 3;
+        shroom.mesh.position.copy(shroom.body.position);
+        shroom.mesh.quaternion.copy(shroom.body.quaternion);
+        shroom.position = shroom.mesh.position;
+      }
+
+      const distance = playerPos.distanceTo(shroom.position);
+      if (distance <= 1.8) {
+        shroom.collected = true;
+        this.scene.remove(shroom.mesh);
+
+        const world = this.physicsWorld?.world || this.physicsWorld;
+        if (shroom.body && world) {
+          world.removeBody(shroom.body);
+        }
+
+        if (onMushroomCollected) onMushroomCollected();
+      }
+    }
+
+    // 4. ? Blocks
+    if (this.questionMarkBlocks) {
+      for (const block of this.questionMarkBlocks) {
+        if (block.isHit) continue;
+
+        const dx = Math.abs(playerPos.x - block.position.x);
+        const dz = Math.abs(playerPos.z - block.position.z);
+        const dy = block.position.y - playerPos.y;
+
+        if (dx < 1.2 && dz < 1.2 && dy > 1.2 && dy < 2.8) {
+          block.isHit = true;
+          block.mesh.position.y += 0.25;
+          setTimeout(() => {
+            if (block.mesh) block.mesh.position.y -= 0.25;
+          }, 100);
+
+          this._spawnSingleMushroom(
+            block.position.x,
+            block.position.y + 1.2,
+            block.position.z,
+          );
+
+          this.scene.remove(block.mesh);
+
+          const smoothGeo = new THREE.BoxGeometry(
+            block.hitboxX || 1.5,
+            block.hitboxY || 1.5,
+            block.hitboxZ || 1.5,
+          );
+          const smoothMat = new THREE.MeshStandardMaterial({
+            color: 0x8b5a2b,
+            roughness: 0.6,
+          });
+
+          const smoothMesh = new THREE.Mesh(smoothGeo, smoothMat);
+          smoothMesh.position.copy(block.position);
+          smoothMesh.castShadow = true;
+          smoothMesh.receiveShadow = true;
+
+          this.scene.add(smoothMesh);
+          block.mesh = smoothMesh;
+        }
+      }
+    }
   }
 }

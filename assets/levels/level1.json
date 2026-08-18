@@ -1,84 +1,205 @@
 {
-  "playerSpawn": { "x": 0, "y": 2, "z": 10 },
-  "yoshiSpawn": { "x": 10, "y": 2, "z": 10 },
+  "playerSpawn": {
+    "x": 0,
+    "y": 2,
+    "z": 10
+  },
+  "yoshiSpawn": {
+    "x": 10,
+    "y": 2,
+    "z": 10
+  },
   "platforms": [
     {
       "name": "Isola Principale (Villaggio e Foresta)",
-      "position": { "x": 0, "y": -1, "z": 0 },
-      "size": { "x": 250, "y": 2, "z": 250 }
+      "position": {
+        "x": 0,
+        "y": -1,
+        "z": 0
+      },
+      "size": {
+        "x": 250,
+        "y": 2,
+        "z": 250
+      }
     }
   ],
   "stars": [
-    { "x": 40, "y": 5, "z": -40 },
-    { "x": -50, "y": 5, "z": 60 }
+    {
+      "x": 40,
+      "y": 5,
+      "z": -40
+    },
+    {
+      "x": -50,
+      "y": 5,
+      "z": 60
+    }
   ],
   "buildings": [
-    { "type": "mario_house", "x": -20, "y": 4, "z": -40, "scale": 1.5, "rotationY": -1.5708, "hitboxX": 6, "hitboxZ": 6 },
-    { "type": "toad_house_red", "x": 35, "y": 0, "z": -15, "scale": 0.01, "hitboxX": 5, "hitboxZ": 5 }
+    {
+      "type": "mario_house",
+      "x": 0,
+      "y": 4,
+      "z": 0,
+      "scale": 1.5,
+      "rotationY": -1.57079632679,
+      "hitboxX": 6.5,
+      "hitboxZ": 7.0,
+      "hitboxOffsetX": 3.8,
+      "hitboxOffsetZ": 0.0
+    },
+    {
+      "type": "toad_house_red",
+      "x": 35,
+      "y": 0,
+      "z": -15,
+      "scale": 0.01,
+      "rotationY": 0,
+      "hitboxX": 6.0,
+      "hitboxZ": 6.0,
+      "hitboxOffsetX": 3.5,
+      "hitboxOffsetZ": 0.0
+    }
   ],
-  "mushrooms":[],
+  "mushrooms": [],
   "npcs": [
-    { "type": "toad", "x": 35, "y": 0, "z": 5, "scale": 0.4 }
+    {
+      "type": "toad",
+      "x": 35,
+      "y": 0,
+      "z": 5,
+      "scale": 0.4
+    }
   ],
   "hills": [
-
-    { 
+    {
       "name": "Scalino 1 (Basso)",
-      "x": 30, "y": 0, "z": 20, 
-      "scaleX": 5, "scaleY": 1.0, "scaleZ": 5, 
-      "hitboxX": 10, "hitboxY": 2, "hitboxZ": 10 
+      "x": 30,
+      "y": 0,
+      "z": 20,
+      "scaleX": 5,
+      "scaleY": 1.0,
+      "scaleZ": 5,
+      "hitboxX": 10,
+      "hitboxY": 2,
+      "hitboxZ": 10
     },
-    { 
+    {
       "name": "Scalino 2 (Medio)",
-      "x": 40, "y": 1.5, "z": 20, 
-      "scaleX": 5, "scaleY": 2.0, "scaleZ": 5, 
-      "hitboxX": 10, "hitboxY": 4, "hitboxZ": 10 
+      "x": 40,
+      "y": 1.5,
+      "z": 20,
+      "scaleX": 5,
+      "scaleY": 2.0,
+      "scaleZ": 5,
+      "hitboxX": 10,
+      "hitboxY": 4,
+      "hitboxZ": 10
     },
-    { 
+    {
       "name": "Scalino 3 (Alto)",
-      "x": 50, "y": 3.0, "z": 20, 
-      "scaleX": 6, "scaleY": 3.0, "scaleZ": 6, 
-      "hitboxX": 12, "hitboxY": 6, "hitboxZ": 12 
+      "x": 50,
+      "y": 3.0,
+      "z": 20,
+      "scaleX": 6,
+      "scaleY": 3.0,
+      "scaleZ": 6,
+      "hitboxX": 12,
+      "hitboxY": 6,
+      "hitboxZ": 12
     },
-
-
-    { 
+    {
       "name": "Base Bassa",
-      "x": -35, "y": 0, "z": -10, 
-      "scaleX": 6, "scaleY": 1.2, "scaleZ": 6, 
-      "hitboxX": 12, "hitboxY": 2.4, "hitboxZ": 12 
+      "x": -35,
+      "y": 0,
+      "z": -10,
+      "scaleX": 6,
+      "scaleY": 1.2,
+      "scaleZ": 6,
+      "hitboxX": 12,
+      "hitboxY": 2.4,
+      "hitboxZ": 12
     },
-    { 
+    {
       "name": "Cima Alta",
-      "x": -45, "y": 2.0, "z": -10, 
-      "scaleX": 6, "scaleY": 2.5, "scaleZ": 6, 
-      "hitboxX": 12, "hitboxY": 5, "hitboxZ": 12 
+      "x": -45,
+      "y": 2.0,
+      "z": -10,
+      "scaleX": 6,
+      "scaleY": 2.5,
+      "scaleZ": 6,
+      "hitboxX": 12,
+      "hitboxY": 5,
+      "hitboxZ": 12
     },
-
-
-    { 
+    {
       "name": "Gradino Nord",
-      "x": 0, "y": 0, "z": -60, 
-      "scaleX": 8, "scaleY": 1.5, "scaleZ": 6, 
-      "hitboxX": 16, "hitboxY": 3, "hitboxZ": 12 
+      "x": 0,
+      "y": 0,
+      "z": -60,
+      "scaleX": 8,
+      "scaleY": 1.5,
+      "scaleZ": 6,
+      "hitboxX": 16,
+      "hitboxY": 3,
+      "hitboxZ": 12
     },
-    { 
+    {
       "name": "Altopiano Gigante Nord",
-      "x": 0, "y": 2.5, "z": -75, 
-      "scaleX": 12, "scaleY": 3.0, "scaleZ": 10, 
-      "hitboxX": 24, "hitboxY": 6, "hitboxZ": 20 
+      "x": 0,
+      "y": 2.5,
+      "z": -75,
+      "scaleX": 12,
+      "scaleY": 3.0,
+      "scaleZ": 10,
+      "hitboxX": 24,
+      "hitboxY": 6,
+      "hitboxZ": 20
     }
   ],
   "brickBlocks": [
-    { "x": 0, "y": 4.5, "z": 0 },
-    { "x": 3, "y": 4.5, "z": 0 },
-    { "x": 6, "y": 4.5, "z": 0 },
-    { "x": -10, "y": 4.5, "z": -10 },
-    { "x": -13, "y": 4.5, "z": -10 }
+    {
+      "x": 0,
+      "y": 4.5,
+      "z": 0
+    },
+    {
+      "x": 3,
+      "y": 4.5,
+      "z": 0
+    },
+    {
+      "x": 6,
+      "y": 4.5,
+      "z": 0
+    },
+    {
+      "x": -10,
+      "y": 4.5,
+      "z": -10
+    },
+    {
+      "x": -13,
+      "y": 4.5,
+      "z": -10
+    }
   ],
   "questionMarkBlocks": [
-    { "x": 0, "y": 4.5, "z": 0 },
-    { "x": 3, "y": 4.5, "z": 0 },
-    { "x": 6, "y": 4.5, "z": 0 }
+    {
+      "x": -20,
+      "y": 4.5,
+      "z": 0
+    },
+    {
+      "x": -23,
+      "y": 4.5,
+      "z": 0
+    },
+    {
+      "x": -26,
+      "y": 4.5,
+      "z": 0
+    }
   ]
 }

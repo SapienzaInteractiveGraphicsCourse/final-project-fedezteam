@@ -12,6 +12,7 @@ import Yoshi from "./entities/Yoshi.js";
 import Map from "./entities/Map.js";
 import EntityManager from "./entities/EntityManager.js";
 import * as THREE from "three";
+import CannonDebugger from "https://cdn.jsdelivr.net/npm/cannon-es-debugger@1.0.0/+esm";
 
 // 1. CORE MODULES
 const renderer = new RendererManager("#webgl-canvas");
@@ -23,7 +24,7 @@ const ui = new UIManager();
 const audio = new AudioManager();
 initGameAudio(audio);
 
-// 🔊 Collega l'istanza audio a UIManager
+// Collega l'istanza audio a UIManager
 ui.setAudio(audio);
 
 // All'avvio, applica subito il muto se salvato nel LocalStorage
@@ -45,6 +46,7 @@ const physics = new PhysicsEngine({
   gravity: -35,
   fallThreshold: -50,
 });
+const cannonDebugger = new CannonDebugger(renderer.scene, physics.world);
 
 const entityManager = new EntityManager(renderer.scene, physics);
 let mapEntity = null;
@@ -81,7 +83,7 @@ ui.onGameStart(({ character }) => {
   const spawn = mapEntity?.playerSpawn;
 
   if (spawn) {
-    // 👈 Aggiungi 'character' come 5° parametro alla fine![cite: 9]
+    // Aggiungi 'character' come 5° parametro alla fine![cite: 9]
     entityManager.spawnPlayer(
       rawModels[character],
       spawn.x,
@@ -113,7 +115,7 @@ function updateGame(delta) {
 
   entityManager.update(delta, input, ui, audio, renderer.camera);
   cameraManager.update(entityManager.player, input, delta);
-
+  cannonDebugger.update();
 }
 
 // 💡 1. CONFIGURAZIONE DEL MANAGER DI CARICAMENTO GLOBALE
