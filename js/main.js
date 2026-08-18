@@ -9,53 +9,67 @@ import AudioManager from "./core/Audio/AudioManager.js";
 import CameraManager from "./core/CameraManager.js";
 import { initGameAudio } from "./core/Audio/soundConfig.js";
 import Yoshi from "./entities/Yoshi.js";
-import Map from "./entities/Map.js";
+import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
 import * as THREE from "three";
 import CannonDebugger from "https://cdn.jsdelivr.net/npm/cannon-es-debugger@1.0.0/+esm";
 
 // 1. CORE MODULES
+
 const renderer = new RendererManager("#webgl-canvas");
 const cameraManager = new CameraManager(renderer.camera);
 const assetLoader = new AssetLoader();
 const input = new InputManager();
-const ui = new UIManager();
-
-const audio = new AudioManager();
-initGameAudio(audio);
-
-// Collega l'istanza audio a UIManager
-ui.setAudio(audio);
-
-// All'avvio, applica subito il muto se salvato nel LocalStorage
-const initialMuteState = localStorage.getItem("game_is_muted") === "true";
-audio.setMute(initialMuteState);
-
-// Ascolta il click sul tasto muto
-ui.onMuteToggle = (isMuted) => {
-  audio.setMute(isMuted);
-};
-
-// Ascolta il click su "Ritorna al Menu"
-ui.onReturnToMenu = () => {
-  // Ricarica la pagina per resettare istantaneamente grafica, memoria e fisica
-  window.location.reload();
-};
 
 const physics = new PhysicsEngine({
   gravity: -35,
   fallThreshold: -50,
 });
+
+// Draws the physics colliders as wireframes on top of the scene, for debugging.
 const cannonDebugger = new CannonDebugger(renderer.scene, physics.world);
 
-const entityManager = new EntityManager(renderer.scene, physics);
+// Owns the Player, Yoshi, and the level, and drives their update() each frame.
+const entityManager = new EntityManager(
+  renderer.scene,
+  physics,
+  renderer.dirLight,
+);
 let mapEntity = null;
 
+const ui = new UIManager();
+const audio = new AudioManager();
+initGameAudio(audio);
+ui.setAudio(audio);
+
+// Restore the mute state saved from a previous session, if any.
+const initialMuteState = localStorage.getItem("game_is_muted") === "true";
+audio.setMute(initialMuteState);
+
 // 2. STATE VARIABLES
+
+// Angle driving the slow orbiting camera shown behind the menu screens.
 let menuCameraAngle = 0;
+
+// Raw GLTF models, loaded once and reused whenever a character is spawned.
 const rawModels = { mario: null, luigi: null };
 
-// Volume Controls
+// 3. UI EVENT WIRING
+
+ui.onCharacterSelect((character) => {
+  audio.setCharacter(character);
+  audio.playSFX("selected");
+});
+
+ui.onMuteToggle = (isMuted) => {
+  audio.setMute(isMuted);
+};
+
+ui.onReturnToMenu = () => {
+  // Reloading is the simplest way to reset scene, physics, and UI state at once.
+  window.location.reload();
+};
+
 ui.onBGMVolumeChange = (volume) => {
   audio.setBGMVolume(volume);
 };
@@ -63,16 +77,9 @@ ui.onSFXVolumeChange = (volume) => {
   audio.setSFXVolume(volume);
 };
 
-// On start click, play background music
-
+// Require a user gesture before audio can play, so BGM starts on click.
 ui.onWelcomeStart(() => {
   audio.playBGM();
-});
-
-//3. UI
-ui.onCharacterSelect((character) => {
-  audio.setCharacter(character);
-  audio.playSFX("selected");
 });
 
 ui.onGameStart(({ character }) => {
@@ -83,7 +90,6 @@ ui.onGameStart(({ character }) => {
   const spawn = mapEntity?.playerSpawn;
 
   if (spawn) {
-    // Aggiungi 'character' come 5° parametro alla fine![cite: 9]
     entityManager.spawnPlayer(
       rawModels[character],
       spawn.x,
@@ -92,16 +98,18 @@ ui.onGameStart(({ character }) => {
       character,
     );
   } else {
-    // 👈 Aggiungi 'character' anche nel fallback[cite: 9]
-    entityManager.spawnPlayer(rawModels[character], 0, 2, 0, character);
+    // Fallback spawn point if the level didn't define one.
+    entityManager.spawnPlayer(rawModels[character], 0, 1, 0, character);
   }
 });
 
 // 4. GAME LOOP
 
 function updateGame(delta) {
+  // While on a menu screen, only orbit the camera around the scene; nothing
+  // else updates (physics, player, entities all stay frozen).
   if (ui.gameState === "MENU_WELCOME" || ui.gameState === "MENU_NAME") {
-    menuCameraAngle += 0.5 * delta;
+    menuCameraAngle += 0.2 * delta;
     const radius = 25;
     renderer.camera.position.x = 0 + Math.sin(menuCameraAngle) * radius;
     renderer.camera.position.z = 0 + Math.cos(menuCameraAngle) * radius;
@@ -110,7 +118,8 @@ function updateGame(delta) {
     return;
   }
 
-  // If player is dead or game is paused, skip updating entities
+  // Paused or no player yet: skip the update, which also freezes physics
+  // since entityManager.update() is what steps the physics world.
   if (ui.isPaused || !entityManager.player) return;
 
   entityManager.update(delta, input, ui, audio, renderer.camera);
@@ -118,7 +127,7 @@ function updateGame(delta) {
   cannonDebugger.update();
 }
 
-// 💡 1. CONFIGURAZIONE DEL MANAGER DI CARICAMENTO GLOBALE
+// Drives the loading bar shown on the initial screen while assets download.
 THREE.DefaultLoadingManager.onProgress = function (
   url,
   itemsLoaded,
@@ -133,20 +142,18 @@ THREE.DefaultLoadingManager.onProgress = function (
   if (loadingText) loadingText.innerText = Math.floor(progress) + "%";
 };
 
-// 2. AVVIO DEL CARICAMENTO DEGLI ASSET
+// 5. STARTUP SEQUENCE
+// Load characters, then the level, then reveal the game and start the loop.
+
 initGameModels(assetLoader)
   .then(async (assets) => {
-    // 💡 ATTENZIONE: Non nascondiamo più la schermata qui!
-    // Prima aspettiamo che la Mappa carichi e sparpagli TUTTI i suoi oggetti
+    mapEntity = new GameLevel(physics);
 
-    mapEntity = new Map(physics);
-
-    // Questo await mette in pausa finché case, alberi e funghi non sono posizionati
+    // Blocks until every platform, building, and collectible is in the scene.
     await mapEntity.loadLevel("./assets/levels/level1.json");
 
     entityManager.setMap(mapEntity);
 
-    // 2. Yoshi Spawn point
     if (mapEntity.yoshiSpawn) {
       const ySpawn = mapEntity.yoshiSpawn;
       const yoshiEntity = new Yoshi(assets.yoshi, physics);
@@ -154,26 +161,23 @@ initGameModels(assetLoader)
       entityManager.setYoshi(yoshiEntity);
     }
 
-    // 3. Assign loaded models to rawModels for later use
     rawModels.mario = assets.mario;
     rawModels.luigi = assets.luigi;
 
-    // 💡 3. FINE CARICAMENTO! ORA POSSIAMO MOSTRARE IL GIOCO
+    // Everything is ready: fade out and hide the loading screen.
     const loadingScreen = document.getElementById("loading-screen");
     if (loadingScreen) {
-      // Usiamo una piccola transizione di fade out per renderlo più elegante
       loadingScreen.style.opacity = "0";
       setTimeout(() => {
         loadingScreen.style.display = "none";
       }, 500);
     }
 
-    // 4. Start the game loop
     const gameLoop = new GameLoop(renderer, updateGame);
     gameLoop.start();
   })
   .catch((error) => {
-    console.error("Errore durante il caricamento degli asset:", error);
+    console.error("Error while loading assets:", error);
     const loadingText = document.getElementById("loading-text");
-    if (loadingText) loadingText.innerText = "ERRORE DI CARICAMENTO";
+    if (loadingText) loadingText.innerText = "LOADING ERROR";
   });

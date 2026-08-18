@@ -5,15 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Super Mario 3D Game</title>
 
-    <!-- Font Retro Arcade -->
+    <!-- Retro arcade typography -->
     <link
       href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
       rel="stylesheet"
     />
     <link rel="shortcut icon" href="assets/images/marioicon.ico" />
-    <!-- CSS -->
+
+    <!-- Application stylesheet -->
     <link rel="stylesheet" href="CSS/style.css" />
 
+    <!-- Three.js ES module import map -->
     <script type="importmap">
       {
         "imports": {
@@ -25,21 +27,25 @@
   </head>
 
   <body>
-    <!-- SCHERMATA DI CARICAMENTO -->
+    <!-- 1. PRELOADER OVERLAY -->
+    <!-- Displays asset loading progress managed by THREE.DefaultLoadingManager -->
     <div id="loading-screen" class="loading-overlay">
       <h1 class="loading-title">LOADING...</h1>
       <div class="loader-spinner"></div>
 
-      <!-- 💡 NUOVO: Barra di caricamento -->
       <div class="loading-bar-container">
         <div id="loading-bar" class="loading-bar"></div>
       </div>
       <p id="loading-text">0%</p>
     </div>
+
+    <!-- 2. RENDER TARGET -->
+    <!-- Target canvas used by RendererManager for the WebGL scene -->
     <canvas id="webgl-canvas"></canvas>
 
+    <!-- 3. UI LAYER -->
     <div id="ui-layer">
-      <!-- STEP 1: WELCOME SCREEN -->
+      <!-- Step 1: Initial welcome screen; user gesture unlocks WebAudio playback -->
       <div id="welcome-screen" class="menu-card">
         <h1>SUPER MARIO 3D</h1>
         <p>
@@ -49,7 +55,7 @@
         <button id="start-btn" class="btn-retro">START</button>
       </div>
 
-      <!-- STEP 2: NAME & CHARACTER SELECTION -->
+      <!-- Step 2: Character selection and profile configuration -->
       <div id="name-screen" class="menu-card">
         <div class="subtitle">BEFORE THE JOURNEY BEGINS</div>
         <h2>CHOOSE CHARACTER & NAME</h2>
@@ -79,9 +85,9 @@
         <button id="continue-btn" class="btn-retro">CONTINUE</button>
       </div>
 
-      <!-- HUD -->
+      <!-- In-game Heads-Up Display -->
       <div id="hud">
-        <!-- ANGOLO IN ALTO A SINISTRA: Profilo + Stelle -->
+        <!-- Top-left viewport: Player profile and star progress -->
         <div class="hud-top-left">
           <div class="hud-profile">
             <img
@@ -102,12 +108,12 @@
                 this.nextElementSibling.style.display = 'inline';
               "
             />
-            <span class="emoji-fallback-lg" style="display: none">⭐</span>
+            <span class="emoji-fallback-lg" style="display: none">STAR</span>
             <span id="stars-count" style="color: #fbd000">0/5</span>
           </div>
         </div>
 
-        <!-- ANGOLO IN BASSO A SINISTRA: Vite / Fungo -->
+        <!-- Bottom-left viewport: Life and stock counter -->
         <div class="hud-bottom-left">
           <div class="hud-stat-clean">
             <img
@@ -119,13 +125,13 @@
                 this.nextElementSibling.style.display = 'inline';
               "
             />
-            <span class="emoji-fallback-lg" style="display: none">🍄</span>
+            <span class="emoji-fallback-lg" style="display: none">LIFE</span>
             <span class="count-prefix">x</span>
             <span id="lives-count" style="color: #e52521">4</span>
           </div>
         </div>
 
-        <!-- ANGOLO IN BASSO A DESTRA: Monete -->
+        <!-- Bottom-right viewport: Coin collectible counter -->
         <div class="hud-bottom-right">
           <div class="hud-stat-clean">
             <img
@@ -137,7 +143,7 @@
                 this.nextElementSibling.style.display = 'inline';
               "
             />
-            <span class="emoji-fallback-lg" style="display: none">🪙</span>
+            <span class="emoji-fallback-lg" style="display: none">COIN</span>
             <span class="count-prefix">x</span>
             <span id="coins-count" style="color: #fbd000">0</span>
           </div>
@@ -145,10 +151,10 @@
       </div>
     </div>
 
-    <!-- Pulsante Pausa in alto a destra -->
-    <button id="pause-btn" class="pause-btn">☰ Pause</button>
+    <!-- Pause toggle trigger -->
+    <button id="pause-btn" class="pause-btn">Pause</button>
 
-    <!-- Overlay Pausa / Impostazioni -->
+    <!-- 4. PAUSE & SETTINGS MODAL -->
     <div id="pause-overlay" class="pause-overlay hidden">
       <button id="close-settings-btn" class="resume-btn">Resume</button>
 
@@ -158,7 +164,7 @@
         </div>
 
         <div class="settings-body">
-          <!-- Regolazione Volume Musica -->
+          <!-- Background music volume control -->
           <div class="setting-item">
             <label for="bgm-slider">Music volume</label>
             <div class="slider-group">
@@ -173,7 +179,7 @@
             </div>
           </div>
 
-          <!-- Regolazione Volume Effetti Sonori -->
+          <!-- Sound effects volume control -->
           <div class="setting-item">
             <label for="sfx-slider">SFX volume</label>
             <div class="slider-group">
@@ -188,21 +194,33 @@
             </div>
           </div>
 
-          <!-- Tasto Muto nel Menù -->
+          <!-- Master audio mute toggle -->
           <div class="setting-item">
             <label>Master Mute</label>
-            <button id="btn-mute" class="btn-retro" style="padding: 8px 16px; font-size: 0.75rem;">🔊 UNMUTED</button>
+            <button
+              id="btn-mute"
+              class="btn-retro"
+              style="padding: 8px 16px; font-size: 0.75rem;"
+            >
+              UNMUTED
+            </button>
           </div>
 
-          <button id="btn-return-menu" class="btn-retro" style="margin-top: 10px; width: 100%;">RESTART GAME</button>
-          
+          <button
+            id="btn-return-menu"
+            class="btn-retro"
+            style="margin-top: 10px; width: 100%;"
+          >
+            RESTART GAME
+          </button>
+
           <hr class="settings-divider" />
-          
-          <!-- Schema Comandi -->
+
+          <!-- Input bindings reference -->
           <div class="controls-section">
             <h3>CONTROLS</h3>
 
-            <!-- Movimento WASD -->
+            <!-- Locomotion: WASD -->
             <div class="control-row">
               <div class="keys-group">
                 <div class="key-row"><span class="key-badge">W</span></div>
@@ -215,7 +233,7 @@
               <span class="control-label">MOVE</span>
             </div>
 
-            <!-- Scatto SHIFT -->
+            <!-- Sprint modifier -->
             <div class="control-row">
               <div class="keys-group">
                 <span class="key-badge wide">SHIFT</span>
@@ -223,7 +241,7 @@
               <span class="control-label">SPRINT</span>
             </div>
 
-            <!-- Salto SPACE -->
+            <!-- Jump action -->
             <div class="control-row">
               <div class="keys-group">
                 <span class="key-badge wide">SPACE</span>
@@ -235,7 +253,7 @@
       </div>
     </div>
 
-    <!-- OVERLAY GAME OVER -->
+    <!-- 5. GAME OVER STATE -->
     <div id="game-over-screen" class="game-over-overlay hidden">
       <div class="menu-card game-over-card">
         <h1 class="game-over-title">GAME OVER</h1>
@@ -251,6 +269,7 @@
       </div>
     </div>
 
+    <!-- 6. APPLICATION ENTRY POINT -->
     <script type="module" src="js/main.js"></script>
   </body>
 </html>

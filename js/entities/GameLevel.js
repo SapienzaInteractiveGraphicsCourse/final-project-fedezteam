@@ -1,22 +1,18 @@
 import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
-// 🛠️ FIX: was previously imported from a hardcoded jsdelivr URL
-// ("https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js"),
-// which bundles its OWN copy of three.module.js — separate from the "three"
-// bare specifier used everywhere else (via the import map). That mismatch is
-// exactly what triggers "Multiple instances of Three.js being imported."
-// Using the same bare specifier as DRACOLoader/BufferGeometryUtils below
-// guarantees a single shared THREE instance across the whole app.
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import EntityManager from "./EntityManager.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js";
 import BuildingFactory from "./buildings/BuildingFactory.js";
 
-export default class Map extends EntityManager {
+// Renamed from "Map" to avoid shadowing the native JS Map class,
+// and no longer extends EntityManager: it only ever needed a THREE.Group
+// to act as its scene container, not any of EntityManager's entity logic.
+export default class GameLevel {
   constructor(physicsWorld) {
-    super(new THREE.Group());
+    this.scene = new THREE.Group();
     this.physicsWorld = physicsWorld;
+
     this.questionMarkBlocks = [];
     this.mushroomGlb = null;
 
@@ -48,14 +44,13 @@ export default class Map extends EntityManager {
       const response = await fetch(levelJsonPath);
       levelData = await response.json();
     } catch (e) {
-      console.warn("Could not load level1.json");
+      console.warn("[GameLevel] Could not load level JSON:", levelJsonPath);
     }
 
-    // 1. SPAWNS (from JSON)
     this.playerSpawn = levelData?.playerSpawn || { x: 0, y: 2, z: 0 };
     this.yoshiSpawn = levelData?.yoshiSpawn || { x: 5, y: 2, z: -5 };
 
-    // 2. GRASS TEXTURE
+    // Ground texture shared by every platform.
     const textureLoader = new THREE.TextureLoader();
     const grassTexture = textureLoader.load("assets/textures/field/grass2.jpg");
     grassTexture.wrapS = THREE.RepeatWrapping;
@@ -63,7 +58,6 @@ export default class Map extends EntityManager {
     grassTexture.repeat.set(55, 55);
     grassTexture.colorSpace = THREE.SRGBColorSpace;
 
-    // 3. CREATE ISLANDS FROM JSON
     const platformsData = levelData?.platforms || [];
     const world = this.physicsWorld?.world || this.physicsWorld;
 
@@ -98,14 +92,15 @@ export default class Map extends EntityManager {
       if (world) world.addBody(body);
     });
 
-    // 4. PRELOAD THE MUSHROOM MODEL FOR ? BLOCKS
+    // Preload the mushroom model once, reused by "?" blocks at runtime.
     try {
       this.mushroomGlb = await this.loader.loadAsync(
         "assets/models/Super_Mario/Items/mushroom.glb",
       );
-    } catch (e) {}
+    } catch (e) {
+      console.warn("[GameLevel] mushroom.glb not found.");
+    }
 
-    // 5. SPAWN MAP ELEMENTS
     const mainIslandSize = platformsData[0]?.size.x || 60;
 
     await this._spawnDecorations(mainIslandSize);
@@ -118,253 +113,6 @@ export default class Map extends EntityManager {
       levelData?.hills,
     );
     await this._spawnGrass(mainIslandSize);
-  }
-
-  // 🏠 SPAWN BUILDINGS, HILLS AND NPCS VIA BUILDINGFACTORY
-  async _spawnBuildingsAndNPCs(
-    buildingsData = [],
-    npcsData = [],
-    hillsData = [],
-  ) {
-    // 🛠️ DIAGNOSTIC: if this ever logs, EVERY building/hill spawned below will
-    // render visually but get ZERO collision, with no other error anywhere.
-    // This is the #1 thing to rule out for a "model has no collider" bug.
-    const worldCheck = this.physicsWorld?.world || this.physicsWorld;
-    if (!worldCheck) {
-      console.warn(
-        "[Map] _spawnBuildingsAndNPCs: this.physicsWorld is missing/undefined. " +
-        "No structure spawned in this call will have a collider."
-      );
-    }
-
-    // Merge buildings and hills so they can all be handled through the Factory.
-    const allStructures = [
-      ...buildingsData,
-      ...hillsData.map((h) => ({
-        ...h,
-        type: h.type || "block_grass_large",
-      })),
-    ];
-
-    // 1. STRUCTURES (MarioHouse, HillBlock, ToadHouse, etc.)
-    for (const b of allStructures) {
-      try {
-        let glbPath;
-
-        if (
-          b.type.includes("block-grass") ||
-          b.type.includes("hill") ||
-          b.type === "block_grass_large"
-        ) {
-          glbPath = `assets/models/Super_Mario/Map/block-grass-large.glb`;
-        } else if (b.type.includes("toad_house")) {
-          // Handles both "toad_house" and "toad_house_red" by pointing to the
-          // correct file in the folder.
-          // 🛠️ NOTE: every Toad House variant (including "toad_house_blue")
-          // currently loads the SAME red model file. If you actually have a
-          // blue variant in the JSON, this is why it looks red — it's not a
-          // collision bug, just a visual model mismatch worth checking.
-          glbPath = `assets/models/Super_Mario/Map/toad_house_red.glb`;
-        } else {
-          glbPath = `assets/models/Super_Mario/Map/${b.type}.glb`;
-        }
-
-        const glb = await this.loader.loadAsync(glbPath);
-        const mesh = glb.scene.clone();
-
-        const structureInstance = BuildingFactory.create(
-          b.type,
-          mesh,
-          this.physicsWorld,
-          b,
-        );
-
-        if (structureInstance) {
-          this.scene.add(structureInstance.mesh);
-        } else {
-          // BuildingFactory.create() already warns about unknown types, but
-          // we surface the raw JSON entry here too so you can see exactly
-          // what was in level1.json for this structure.
-          console.warn("[Map] Structure not added to scene, raw JSON entry:", b);
-        }
-      } catch (e) {
-        console.warn(`[Map] Could not load structure: ${b.type}`, e);
-      }
-    }
-
-    // 2. LOAD NPCS (TOAD)
-    for (const npc of npcsData) {
-      try {
-        const glb = await this.loader.loadAsync(
-          `assets/models/Super_Mario/NPC/${npc.type}.glb`,
-        );
-        const mesh = glb.scene.clone();
-
-        mesh.scale.set(npc.scale, npc.scale, npc.scale);
-        mesh.position.set(npc.x, npc.y, npc.z);
-
-        mesh.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
-        this.scene.add(mesh);
-      } catch (e) {
-        console.warn(`[Map] Could not load NPC: ${npc.type}.glb`);
-      }
-    }
-  }
-
-  // 🍄 DYNAMIC MUSHROOM (for ? blocks)
-  _spawnSingleMushroom(x, y, z) {
-    if (!this.mushroomGlb) return;
-
-    const mesh = this.mushroomGlb.scene.clone();
-    mesh.scale.set(0.4, 0.4, 0.4);
-    mesh.position.set(x, y, z);
-    mesh.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-    this.scene.add(mesh);
-
-    let body = null;
-    const world = this.physicsWorld?.world || this.physicsWorld;
-    if (world) {
-      const radius = 0.5;
-      body = new CANNON.Body({
-        mass: 2,
-        shape: new CANNON.Sphere(radius),
-        position: new CANNON.Vec3(x, y, z),
-        material: this.physicsWorld?.defaultMaterial,
-        fixedRotation: true,
-      });
-
-      body.velocity.set(4, 7, 0);
-      world.addBody(body);
-    }
-
-    this.mushrooms.push({
-      mesh: mesh,
-      body: body,
-      position: mesh.position,
-      collected: false,
-    });
-  }
-
-  async _spawnMushrooms(mushroomPositions) {
-    if (!mushroomPositions || mushroomPositions.length === 0) return;
-
-    let mushroomGlb = null;
-    try {
-      mushroomGlb = await this.loader.loadAsync(
-        "assets/models/Super_Mario/Items/mushroom.glb",
-      );
-    } catch (e) {
-      console.warn("mushroom.glb model not found.");
-    }
-
-    mushroomPositions.forEach((pos) => {
-      let mushroomMesh;
-      if (mushroomGlb) {
-        mushroomMesh = mushroomGlb.scene.clone();
-        mushroomMesh.scale.set(0.4, 0.4, 0.4);
-        mushroomMesh.position.set(pos.x, pos.y, pos.z);
-      } else {
-        const group = new THREE.Group();
-        const capGeo = new THREE.SphereGeometry(
-          1,
-          16,
-          16,
-          0,
-          Math.PI * 2,
-          0,
-          Math.PI / 2,
-        );
-        const capMat = new THREE.MeshStandardMaterial({ color: 0xe52521 });
-        const cap = new THREE.Mesh(capGeo, capMat);
-        cap.position.y = 0.5;
-
-        const stemGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.8, 16);
-        const stemMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-        const stem = new THREE.Mesh(stemGeo, stemMat);
-        stem.position.y = 0.1;
-
-        group.add(cap);
-        group.add(stem);
-        mushroomMesh = group;
-        mushroomMesh.position.set(pos.x, pos.y, pos.z);
-      }
-
-      mushroomMesh.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-
-      this.scene.add(mushroomMesh);
-      this.mushrooms.push({
-        mesh: mushroomMesh,
-        position: mushroomMesh.position,
-        collected: false,
-      });
-    });
-  }
-
-  async _spawnStars(starPositions) {
-    let starGlb = null;
-    try {
-      starGlb = await this.loader.loadAsync(
-        "assets/models/Super_Mario/Items/star.glb",
-      );
-    } catch (e) {
-      console.warn("star.glb model not found.");
-    }
-
-    const positions = starPositions || [
-      { x: -30, y: 2, z: -30 },
-      { x: 30, y: 2, z: -30 },
-      { x: -30, y: 2, z: 30 },
-      { x: 30, y: 2, z: 30 },
-      { x: 0, y: 2, z: -40 },
-    ];
-
-    positions.forEach((pos) => {
-      let starMesh;
-      if (starGlb) {
-        starMesh = starGlb.scene.clone();
-        starMesh.position.set(pos.x, pos.y, pos.z);
-      } else {
-        const geo = new THREE.OctahedronGeometry(1.2, 0);
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0xffd700,
-          emissive: 0xffa500,
-          emissiveIntensity: 0.4,
-          metalness: 0.8,
-          roughness: 0.2,
-        });
-        starMesh = new THREE.Mesh(geo, mat);
-        starMesh.position.set(pos.x, pos.y + 0.5, pos.z);
-      }
-
-      starMesh.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-
-      this.scene.add(starMesh);
-      this.stars.push({
-        mesh: starMesh,
-        position: starMesh.position,
-        collected: false,
-      });
-    });
   }
 
   async _spawnDecorations(arenaSize) {
@@ -393,6 +141,7 @@ export default class Map extends EntityManager {
 
     for (let x = -half; x <= half; x += step) {
       for (let z = -half; z <= half; z += step) {
+        // Skip the central area where buildings/NPCs are placed.
         if (x > -40 && x < 80 && z > -50 && z < 50) continue;
 
         const posX = x + (Math.random() - 0.5) * 6;
@@ -449,76 +198,157 @@ export default class Map extends EntityManager {
     }
   }
 
-  async _spawnGrass(arenaSize) {
-    let grassGlb = null;
+  async _spawnStars(starPositions) {
+    let starGlb = null;
     try {
-      grassGlb = await this.loader.loadAsync(
-        "assets/models/Super_Mario/Map/grass.glb",
+      starGlb = await this.loader.loadAsync(
+        "assets/models/Super_Mario/Items/star.glb",
       );
     } catch (e) {
-      return;
+      console.warn("[GameLevel] star.glb not found.");
     }
 
-    const geometries = [];
-    let grassMaterial = null;
+    const positions = starPositions || [
+      { x: -30, y: 2, z: -30 },
+      { x: 30, y: 2, z: -30 },
+      { x: -30, y: 2, z: 30 },
+      { x: 30, y: 2, z: 30 },
+      { x: 0, y: 2, z: -40 },
+    ];
 
-    grassGlb.scene.traverse((child) => {
+    positions.forEach((pos) => {
+      let starMesh;
+      if (starGlb) {
+        starMesh = starGlb.scene.clone();
+        starMesh.position.set(pos.x, pos.y, pos.z);
+      } else {
+        // Fallback primitive if the model failed to load.
+        const geo = new THREE.OctahedronGeometry(1.2, 0);
+        const mat = new THREE.MeshStandardMaterial({
+          color: 0xffd700,
+          emissive: 0xffa500,
+          emissiveIntensity: 0.4,
+          metalness: 0.8,
+          roughness: 0.2,
+        });
+        starMesh = new THREE.Mesh(geo, mat);
+        starMesh.position.set(pos.x, pos.y + 0.5, pos.z);
+      }
+
+      starMesh.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      this.scene.add(starMesh);
+      this.stars.push({
+        mesh: starMesh,
+        position: starMesh.position,
+        collected: false,
+      });
+    });
+  }
+
+  async _spawnMushrooms(mushroomPositions) {
+    if (!mushroomPositions || mushroomPositions.length === 0) return;
+
+    let mushroomGlb = null;
+    try {
+      mushroomGlb = await this.loader.loadAsync(
+        "assets/models/Super_Mario/Items/mushroom.glb",
+      );
+    } catch (e) {
+      console.warn("[GameLevel] mushroom.glb not found.");
+    }
+
+    mushroomPositions.forEach((pos) => {
+      let mushroomMesh;
+      if (mushroomGlb) {
+        mushroomMesh = mushroomGlb.scene.clone();
+        mushroomMesh.scale.set(0.4, 0.4, 0.4);
+        mushroomMesh.position.set(pos.x, pos.y, pos.z);
+      } else {
+        // Fallback primitive: a simple cap + stem.
+        const group = new THREE.Group();
+        const capGeo = new THREE.SphereGeometry(
+          1,
+          16,
+          16,
+          0,
+          Math.PI * 2,
+          0,
+          Math.PI / 2,
+        );
+        const capMat = new THREE.MeshStandardMaterial({ color: 0xe52521 });
+        const cap = new THREE.Mesh(capGeo, capMat);
+        cap.position.y = 0.5;
+
+        const stemGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.8, 16);
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const stem = new THREE.Mesh(stemGeo, stemMat);
+        stem.position.y = 0.1;
+
+        group.add(cap);
+        group.add(stem);
+        mushroomMesh = group;
+        mushroomMesh.position.set(pos.x, pos.y, pos.z);
+      }
+
+      mushroomMesh.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      this.scene.add(mushroomMesh);
+      this.mushrooms.push({
+        mesh: mushroomMesh,
+        position: mushroomMesh.position,
+        collected: false,
+      });
+    });
+  }
+
+  // Dynamic mushroom spawned at runtime when a "?" block is hit.
+  _spawnSingleMushroom(x, y, z) {
+    if (!this.mushroomGlb) return;
+
+    const mesh = this.mushroomGlb.scene.clone();
+    mesh.scale.set(0.4, 0.4, 0.4);
+    mesh.position.set(x, y, z);
+    mesh.traverse((child) => {
       if (child.isMesh) {
-        const clonedGeo = child.geometry.clone();
-        clonedGeo.applyMatrix4(child.matrixWorld);
-        geometries.push(clonedGeo);
-
-        if (!grassMaterial) {
-          grassMaterial = child.material.clone();
-          if (grassMaterial.color) grassMaterial.color.multiplyScalar(0.4);
-          grassMaterial.roughness = 1;
-        }
+        child.castShadow = true;
+        child.receiveShadow = true;
       }
     });
+    this.scene.add(mesh);
 
-    if (geometries.length === 0) return;
+    let body = null;
+    const world = this.physicsWorld?.world || this.physicsWorld;
+    if (world) {
+      const radius = 0.5;
+      body = new CANNON.Body({
+        mass: 2,
+        shape: new CANNON.Sphere(radius),
+        position: new CANNON.Vec3(x, y, z),
+        material: this.physicsWorld?.defaultMaterial,
+        fixedRotation: true,
+      });
 
-    const grassGeometry = BufferGeometryUtils.mergeGeometries(geometries);
-    const matrices = [];
-    const dummy = new THREE.Object3D();
-
-    const step = 0.9;
-    const margin = 18;
-    const half = arenaSize / 2 - margin;
-
-    for (let x = -half; x <= half; x += step) {
-      for (let z = -half; z <= half; z += step) {
-        if (Math.random() > 0.2) {
-          const posX = x + (Math.random() - 0.5) * step * 0.8;
-          const posZ = z + (Math.random() - 0.5) * step * 0.8;
-
-          if (Math.abs(posX) > half || Math.abs(posZ) > half) continue;
-
-          const scale = 0.0004 + Math.random() * 0.0025;
-
-          dummy.position.set(posX, 0, posZ);
-          dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
-          dummy.scale.set(scale * 3, scale, scale * 3);
-          dummy.updateMatrix();
-
-          matrices.push(dummy.matrix.clone());
-        }
-      }
+      body.velocity.set(4, 7, 0);
+      world.addBody(body);
     }
 
-    const instancedGrass = new THREE.InstancedMesh(
-      grassGeometry,
-      grassMaterial,
-      matrices.length,
-    );
-    instancedGrass.receiveShadow = true;
-    instancedGrass.castShadow = false;
-
-    matrices.forEach((matrix, i) => {
-      instancedGrass.setMatrixAt(i, matrix);
+    this.mushrooms.push({
+      mesh: mesh,
+      body: body,
+      position: mesh.position,
+      collected: false,
     });
-
-    this.scene.add(instancedGrass);
   }
 
   async _spawnQuestionMarkBlocks(positions) {
@@ -528,7 +358,7 @@ export default class Map extends EntityManager {
         "assets/models/Super_Mario/Items/question_mark_block.glb",
       );
     } catch (e) {
-      console.warn("question_mark_block.glb model not found.");
+      console.warn("[GameLevel] question_mark_block.glb not found.");
     }
 
     const blocks =
@@ -583,6 +413,159 @@ export default class Map extends EntityManager {
         isHit: false,
       });
     });
+  }
+
+  // Spawns buildings, hills and NPCs described in the level JSON via BuildingFactory.
+  async _spawnBuildingsAndNPCs(
+    buildingsData = [],
+    npcsData = [],
+    hillsData = [],
+  ) {
+    const worldCheck = this.physicsWorld?.world || this.physicsWorld;
+    if (!worldCheck) {
+      // If this fires, every structure below spawns visually but with no collider.
+      console.warn(
+        "[GameLevel] physicsWorld is missing — structures will have no collider.",
+      );
+    }
+
+    // Hills go through the same factory as buildings, just tagged with a default type.
+    const allStructures = [
+      ...buildingsData,
+      ...hillsData.map((h) => ({
+        ...h,
+        type: h.type || "block_grass_large",
+      })),
+    ];
+
+    for (const b of allStructures) {
+      try {
+        let glbPath;
+
+        if (b.type.includes("hill") || b.type === "block_grass_large") {
+          glbPath = `assets/models/Super_Mario/Map/block-grass-large.glb`;
+        } else if (b.type.includes("toad_house")) {
+          // NOTE: every Toad House variant currently shares the same red model
+          // file. If "toad_house_blue" appears in the JSON it will still render red.
+          glbPath = `assets/models/Super_Mario/Map/toad_house_red.glb`;
+        } else {
+          glbPath = `assets/models/Super_Mario/Map/${b.type}.glb`;
+        }
+
+        const glb = await this.loader.loadAsync(glbPath);
+        const mesh = glb.scene.clone();
+
+        const structureInstance = BuildingFactory.create(
+          b.type,
+          mesh,
+          this.physicsWorld,
+          b,
+        );
+
+        if (structureInstance) {
+          this.scene.add(structureInstance.mesh);
+        } else {
+          console.warn("[GameLevel] Structure not added to scene:", b);
+        }
+      } catch (e) {
+        console.warn(`[GameLevel] Could not load structure: ${b.type}`, e);
+      }
+    }
+
+    for (const npc of npcsData) {
+      try {
+        const glb = await this.loader.loadAsync(
+          `assets/models/Super_Mario/NPC/${npc.type}.glb`,
+        );
+        const mesh = glb.scene.clone();
+
+        mesh.scale.set(npc.scale, npc.scale, npc.scale);
+        mesh.position.set(npc.x, npc.y, npc.z);
+
+        mesh.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+        this.scene.add(mesh);
+      } catch (e) {
+        console.warn(`[GameLevel] Could not load NPC: ${npc.type}.glb`);
+      }
+    }
+  }
+
+  async _spawnGrass(arenaSize) {
+    let grassGlb = null;
+    try {
+      grassGlb = await this.loader.loadAsync(
+        "assets/models/Super_Mario/Map/grass.glb",
+      );
+    } catch (e) {
+      return;
+    }
+
+    const geometries = [];
+    let grassMaterial = null;
+
+    grassGlb.scene.traverse((child) => {
+      if (child.isMesh) {
+        const clonedGeo = child.geometry.clone();
+        clonedGeo.applyMatrix4(child.matrixWorld);
+        geometries.push(clonedGeo);
+
+        if (!grassMaterial) {
+          grassMaterial = child.material.clone();
+          if (grassMaterial.color) grassMaterial.color.multiplyScalar(0.4);
+          grassMaterial.roughness = 1;
+        }
+      }
+    });
+
+    if (geometries.length === 0) return;
+
+    // Merge all grass blades into one instanced mesh for performance.
+    const grassGeometry = BufferGeometryUtils.mergeGeometries(geometries);
+    const matrices = [];
+    const dummy = new THREE.Object3D();
+
+    const step = 0.9;
+    const margin = 18;
+    const half = arenaSize / 2 - margin;
+
+    for (let x = -half; x <= half; x += step) {
+      for (let z = -half; z <= half; z += step) {
+        if (Math.random() > 0.2) {
+          const posX = x + (Math.random() - 0.5) * step * 0.8;
+          const posZ = z + (Math.random() - 0.5) * step * 0.8;
+
+          if (Math.abs(posX) > half || Math.abs(posZ) > half) continue;
+
+          const scale = 0.0004 + Math.random() * 0.0025;
+
+          dummy.position.set(posX, 0, posZ);
+          dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+          dummy.scale.set(scale * 3, scale, scale * 3);
+          dummy.updateMatrix();
+
+          matrices.push(dummy.matrix.clone());
+        }
+      }
+    }
+
+    const instancedGrass = new THREE.InstancedMesh(
+      grassGeometry,
+      grassMaterial,
+      matrices.length,
+    );
+    instancedGrass.receiveShadow = true;
+    instancedGrass.castShadow = false;
+
+    matrices.forEach((matrix, i) => {
+      instancedGrass.setMatrixAt(i, matrix);
+    });
+
+    this.scene.add(instancedGrass);
   }
 
   update(player, onCoinCollected, onStarCollected, onMushroomCollected) {
@@ -652,7 +635,7 @@ export default class Map extends EntityManager {
       }
     }
 
-    // 4. ? Blocks
+    // 4. "?" blocks
     if (this.questionMarkBlocks) {
       for (const block of this.questionMarkBlocks) {
         if (block.isHit) continue;
@@ -663,9 +646,12 @@ export default class Map extends EntityManager {
 
         if (dx < 1.2 && dz < 1.2 && dy > 1.2 && dy < 2.8) {
           block.isHit = true;
+
+          // Bump animation: nudge the block up, then back down.
           block.mesh.position.y += 0.25;
+          const hitMesh = block.mesh;
           setTimeout(() => {
-            if (block.mesh) block.mesh.position.y -= 0.25;
+            hitMesh.position.y -= 0.25;
           }, 100);
 
           this._spawnSingleMushroom(

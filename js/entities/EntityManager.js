@@ -1,15 +1,18 @@
 import Player from "./Player.js";
 
 export default class EntityManager {
-  constructor(scene, physicsEngine) {
+  constructor(scene, physicsEngine, dirLight = null) {
     this.scene = scene;
     this.physicsEngine = physicsEngine;
+    this.dirLight = dirLight;
+
     this.map = null;
     this.yoshi = null;
     this.player = null;
     this.entities = [];
 
     this.spaceWasPressed = false;
+    this.isFallingScreamPlaying = false;
   }
 
   setMap(mapEntity) {
@@ -26,8 +29,6 @@ export default class EntityManager {
     }
   }
 
-  // In EntityManager.js, aggiorna il metodo spawnPlayer[cite: 5]
-
   spawnPlayer(model, startX, startY, startZ, characterName = "mario") {
     if (this.player && this.player.mesh) {
       this.scene.remove(this.player.mesh);
@@ -35,23 +36,15 @@ export default class EntityManager {
         this.physicsEngine.world.removeBody(this.player.body);
     }
 
-    // 💡 Definisci le Statistiche in base al personaggio scelto!
+    // Per-character stats: Luigi is faster/higher-jumping but slippery,
+    // Mario is precise and stops/turns quickly.
     let stats = {};
     if (characterName === "luigi") {
-      stats = {
-        moveSpeed: 20, // Luigi è più veloce
-        jumpVelocity: 22, // Luigi salta molto più in alto (es. 22 vs 18)
-        control: 0.1, // Luigi è SCIVOLOSO! (Valore basso = tanta inerzia)
-      };
+      stats = { moveSpeed: 20, jumpVelocity: 22, control: 0.1 };
     } else {
-      stats = {
-        moveSpeed: 11, // Mario standard
-        jumpVelocity: 18, // Salto bilanciato
-        control: 0.6, // Mario è preciso e si ferma/gira molto in fretta
-      };
+      stats = { moveSpeed: 11, jumpVelocity: 18, control: 0.6 };
     }
 
-    // Passiamo 'stats' al costruttore del giocatore[cite: 5]
     this.player = new Player(model, this.physicsEngine, stats);
     this.player.spawn(startX, startY, startZ);
     this.scene.add(this.player.mesh);
@@ -64,33 +57,28 @@ export default class EntityManager {
     }
   }
 
-update(delta, input, ui, audio, camera) { 
+  update(delta, input, ui, audio, camera) {
     if (ui && ui.gameState !== "PLAYING") return;
 
-    // 1. Physics Engine Update
     if (this.physicsEngine) {
       this.physicsEngine.update(delta);
     }
 
     if (!this.player) return;
 
-    // 2. Unico update del player con la telecamera passata correttamente
     this.player.update(delta, input, ui, audio, camera);
 
-    // 3. Luce direzionale
-    const dirLight =
-      this.dirLight || (this.rendererManager && this.rendererManager.dirLight);
-    if (dirLight) {
-      dirLight.position.set(
+    // Directional light follows the player so shadows stay in range.
+    if (this.dirLight) {
+      this.dirLight.position.set(
         this.player.position.x + 30,
         this.player.position.y + 50,
         this.player.position.z + 30,
       );
-      dirLight.target.position.copy(this.player.position);
-      dirLight.target.updateMatrixWorld();
+      this.dirLight.target.position.copy(this.player.position);
+      this.dirLight.target.updateMatrixWorld();
     }
 
-    // 4. Caduta nel vuoto
     if (this.physicsEngine && this.physicsEngine.checkVoidFall) {
       const SCREAM_Y = -5;
       if (this.player.position.y < SCREAM_Y) {
@@ -98,6 +86,10 @@ update(delta, input, ui, audio, camera) {
           if (audio && audio.playSFX) audio.playSFX("fall");
           this.isFallingScreamPlaying = true;
         }
+      } else {
+        // Player climbed back above the threshold without falling into
+        // the void: allow the scream to play again next time they fall.
+        this.isFallingScreamPlaying = false;
       }
 
       this.physicsEngine.checkVoidFall(this.player.position, () => {
@@ -111,7 +103,6 @@ update(delta, input, ui, audio, camera) {
       });
     }
 
-    // 5. Mappa
     if (this.map && this.map.update) {
       this.map.update(
         this.player,
@@ -130,7 +121,6 @@ update(delta, input, ui, audio, camera) {
       );
     }
 
-    // 6. Yoshi
     if (this.yoshi && this.yoshi.update) {
       this.yoshi.update(delta, input, this.player);
     }

@@ -48,11 +48,7 @@ export default class HillBlock {
       material: this.physicsEngine.defaultMaterial,
     });
 
-    // Hitbox half-extents: 1.0 (X), 0.5 (Y), 1.0 (Z), slightly inset (0.98) to avoid
-    // Z-fighting/snagging with neighboring blocks.
     const shape = new CANNON.Box(new CANNON.Vec3(0.98 * sX, 0.5 * sY, 0.98 * sZ));
-
-    // Raise the shape by half its height so it sits flush on the ground.
     this.body.addShape(shape, new CANNON.Vec3(0, 0.5 * sY, 0));
 
     // --- 3. GLOBAL PLACEMENT ---
