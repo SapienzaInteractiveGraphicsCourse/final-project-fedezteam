@@ -23,10 +23,11 @@ export default class GameLoop {
         this.updateCallback(delta);
       }
 
-      this.rendererManager.renderer.render(
-        this.rendererManager.scene,
-        this.rendererManager.camera
-      );
+      // Passa da RendererManager.render() e non dal renderer nudo: è lì che lo
+      // skybox viene ricentrato sulla camera a ogni frame. Chiamando il renderer
+      // direttamente quel metodo non veniva mai eseguito e la sfera del cielo
+      // restava inchiodata all'origine.
+      this.rendererManager.render();
     });
   }
 

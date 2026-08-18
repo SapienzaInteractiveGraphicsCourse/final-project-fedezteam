@@ -3,7 +3,7 @@ import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js";
-import BuildingFactory from "./buildings/BuildingFactory.js";
+import BuildingFactory from "./Buildings/BuildingFactory.js";
 
 // Renamed from "Map" to avoid shadowing the native JS Map class,
 // and no longer extends EntityManager: it only ever needed a THREE.Group
@@ -36,6 +36,68 @@ export default class GameLevel {
 
     this.mushrooms = [];
     this.mushroomCollectRadius = 2.5;
+    this.islandHalfSize = 30;
+
+    // Erba suddivisa in chunk: ognuno è una InstancedMesh separata, così three.js
+    // può scartarli col frustum culling e noi possiamo spegnere quelli lontani.
+    this.grassChunks = [];
+    this.grassViewDistance = 60;
+  }
+
+  /**
+   * Fonde tutte le mesh di un GLB in una sola geometria (con i transform locali
+   * già applicati), pronta per essere usata da una InstancedMesh.
+   * Restituisce null se il modello non ha mesh o se le geometrie non sono fondibili.
+   */
+  _mergeGlb(glbScene) {
+    // updateMatrixWorld è necessario: il GLB non è mai stato aggiunto alla scena
+    // renderizzata, quindi le sue matrici mondo non sono ancora state calcolate.
+    glbScene.updateMatrixWorld(true);
+
+    const geometries = [];
+    let material = null;
+
+    glbScene.traverse((child) => {
+      if (child.isMesh && child.geometry) {
+        const geo = child.geometry.clone();
+        geo.applyMatrix4(child.matrixWorld);
+        geometries.push(geo);
+        if (!material) material = child.material;
+      }
+    });
+
+    if (geometries.length === 0) return null;
+
+    const merged =
+      geometries.length === 1
+        ? geometries[0]
+        : BufferGeometryUtils.mergeGeometries(geometries);
+
+    if (!merged) {
+      console.warn("[GameLevel] mergeGeometries fallito (attributi incompatibili).");
+      return null;
+    }
+    return { geometry: merged, material };
+  }
+
+  /** Crea una InstancedMesh da una lista di matrici. */
+  _buildInstanced(merged, matrices, { castShadow, receiveShadow }) {
+    if (!merged || matrices.length === 0) return null;
+
+    const inst = new THREE.InstancedMesh(
+      merged.geometry,
+      merged.material,
+      matrices.length,
+    );
+    inst.castShadow = castShadow;
+    inst.receiveShadow = receiveShadow;
+
+    for (let i = 0; i < matrices.length; i++) inst.setMatrixAt(i, matrices[i]);
+    inst.instanceMatrix.needsUpdate = true;
+    // Serve a three.js per il frustum culling di tutto il blocco.
+    inst.computeBoundingSphere();
+
+    return inst;
   }
 
   async loadLevel(levelJsonPath = "./assets/levels/level1.json") {
@@ -102,6 +164,7 @@ export default class GameLevel {
     }
 
     const mainIslandSize = platformsData[0]?.size.x || 60;
+    this.islandHalfSize = mainIslandSize / 2;
 
     await this._spawnDecorations(mainIslandSize);
     await this._spawnStars(levelData?.stars);
@@ -139,6 +202,14 @@ export default class GameLevel {
     const step = 12;
     const half = arenaSize / 2 - 10;
 
+    // Palme e fiori sono decorazioni statiche e identiche tra loro: invece di
+    // clonare un GLB per ciascuna (una draw call a testa) accumuliamo solo le
+    // matrici e alla fine costruiamo una InstancedMesh per tipo.
+    // Le monete NO: vanno rimosse singolarmente quando le raccogli.
+    const treeMatrices = [];
+    const flowerMatrices = [];
+    const dummy = new THREE.Object3D();
+
     for (let x = -half; x <= half; x += step) {
       for (let z = -half; z <= half; z += step) {
         // Skip the central area where buildings/NPCs are placed.
@@ -148,33 +219,19 @@ export default class GameLevel {
         const posZ = z + (Math.random() - 0.5) * 6;
 
         if (treeGlb && Math.random() > 0.85) {
-          const tree = treeGlb.scene.clone();
           const scale = 0.04 + Math.random() * 0.03;
-          tree.scale.set(scale, scale, scale);
-          tree.rotation.y = Math.random() * Math.PI * 2;
-          tree.position.set(posX, 0, posZ);
-
-          tree.traverse((child) => {
-            if (child.isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-            }
-          });
-          this.scene.add(tree);
+          dummy.position.set(posX, 0, posZ);
+          dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+          dummy.scale.set(scale, scale, scale);
+          dummy.updateMatrix();
+          treeMatrices.push(dummy.matrix.clone());
         } else if (flowerGlb && Math.random() > 0.75) {
-          const plant = flowerGlb.scene.clone();
           const scale = 0.7 + Math.random() * 0.8;
-          plant.scale.set(scale, scale, scale);
-          plant.rotation.y = Math.random() * Math.PI * 2;
-          plant.position.set(posX, 0, posZ);
-
-          plant.traverse((child) => {
-            if (child.isMesh) {
-              child.castShadow = false;
-              child.receiveShadow = true;
-            }
-          });
-          this.scene.add(plant);
+          dummy.position.set(posX, 0, posZ);
+          dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+          dummy.scale.set(scale, scale, scale);
+          dummy.updateMatrix();
+          flowerMatrices.push(dummy.matrix.clone());
         } else if (coinGlb && Math.random() > 0.9) {
           const coin = coinGlb.scene.clone();
           coin.scale.set(0.6, 0.6, 0.6);
@@ -195,6 +252,42 @@ export default class GameLevel {
           });
         }
       }
+    }
+
+    if (treeGlb) {
+      const merged = this._mergeGlb(treeGlb.scene);
+
+      if (merged) {
+        // palm_tree.glb dichiara alphaMode:BLEND, che il GLTFLoader traduce in
+        // transparent:true + depthWrite:false. Finché ogni albero era un oggetto
+        // a sé three.js li ordinava dal più lontano al più vicino e reggeva; con
+        // una sola InstancedMesh sono UN oggetto solo, l'ordinamento non è più
+        // possibile e gli alberi dietro finiscono sopra a quelli davanti.
+        //
+        // Le fronde però non sono traslucide: sono un ritaglio con bordo netto.
+        // Con l'alpha test il materiale torna opaco, scrive nel depth buffer e
+        // si ordina da solo per-pixel — corretto, e pure più veloce del blending.
+        merged.material = merged.material.clone();
+        merged.material.transparent = false;
+        merged.material.depthWrite = true;
+        merged.material.alphaTest = 0.5;
+        merged.material.needsUpdate = true;
+      }
+
+      const trees = this._buildInstanced(merged, treeMatrices, {
+        castShadow: true,
+        receiveShadow: true,
+      });
+      if (trees) this.scene.add(trees);
+    }
+
+    if (flowerGlb) {
+      const flowers = this._buildInstanced(
+        this._mergeGlb(flowerGlb.scene),
+        flowerMatrices,
+        { castShadow: false, receiveShadow: true },
+      );
+      if (flowers) this.scene.add(flowers);
     }
   }
 
@@ -254,14 +347,9 @@ export default class GameLevel {
   async _spawnMushrooms(mushroomPositions) {
     if (!mushroomPositions || mushroomPositions.length === 0) return;
 
-    let mushroomGlb = null;
-    try {
-      mushroomGlb = await this.loader.loadAsync(
-        "assets/models/Super_Mario/Items/mushroom.glb",
-      );
-    } catch (e) {
-      console.warn("[GameLevel] mushroom.glb not found.");
-    }
+    // Riusa il modello già caricato in loadLevel(): prima veniva scaricato una
+    // seconda volta, identico, per i funghi statici del JSON.
+    const mushroomGlb = this.mushroomGlb;
 
     mushroomPositions.forEach((pos) => {
       let mushroomMesh;
@@ -348,6 +436,7 @@ export default class GameLevel {
       body: body,
       position: mesh.position,
       collected: false,
+      dir: 1, // verso di marcia orizzontale, si inverte ai bordi dell'isola
     });
   }
 
@@ -475,7 +564,7 @@ export default class GameLevel {
     for (const npc of npcsData) {
       try {
         const glb = await this.loader.loadAsync(
-          `assets/models/Super_Mario/NPC/${npc.type}.glb`,
+          `assets/models/Super_Mario/npc/${npc.type}.glb`,
         );
         const mesh = glb.scene.clone();
 
@@ -505,33 +594,26 @@ export default class GameLevel {
       return;
     }
 
-    const geometries = [];
-    let grassMaterial = null;
+    const merged = this._mergeGlb(grassGlb.scene);
+    if (!merged) return;
 
-    grassGlb.scene.traverse((child) => {
-      if (child.isMesh) {
-        const clonedGeo = child.geometry.clone();
-        clonedGeo.applyMatrix4(child.matrixWorld);
-        geometries.push(clonedGeo);
-
-        if (!grassMaterial) {
-          grassMaterial = child.material.clone();
-          if (grassMaterial.color) grassMaterial.color.multiplyScalar(0.4);
-          grassMaterial.roughness = 1;
-        }
-      }
-    });
-
-    if (geometries.length === 0) return;
-
-    // Merge all grass blades into one instanced mesh for performance.
-    const grassGeometry = BufferGeometryUtils.mergeGeometries(geometries);
-    const matrices = [];
-    const dummy = new THREE.Object3D();
+    // Materiale scurito, come prima.
+    const grassMaterial = merged.material.clone();
+    if (grassMaterial.color) grassMaterial.color.multiplyScalar(0.4);
+    grassMaterial.roughness = 1;
 
     const step = 0.9;
     const margin = 18;
     const half = arenaSize / 2 - margin;
+
+    // Prima era UNA sola InstancedMesh da ~45.000 fili (≈15M vertici disegnati
+    // ogni frame, perché un singolo oggetto o è tutto dentro il frustum o è
+    // tutto fuori). Ora il campo è diviso in chunk quadrati: three.js scarta da
+    // solo quelli fuori inquadratura, e update() spegne quelli troppo lontani.
+    const CHUNK_SIZE = 24;
+    const chunks = new Map();
+
+    const dummy = new THREE.Object3D();
 
     for (let x = -half; x <= half; x += step) {
       for (let z = -half; z <= half; z += step) {
@@ -548,30 +630,61 @@ export default class GameLevel {
           dummy.scale.set(scale * 3, scale, scale * 3);
           dummy.updateMatrix();
 
-          matrices.push(dummy.matrix.clone());
+          const cx = Math.floor(posX / CHUNK_SIZE);
+          const cz = Math.floor(posZ / CHUNK_SIZE);
+          const key = cx + "|" + cz;
+
+          let bucket = chunks.get(key);
+          if (!bucket) {
+            bucket = { matrices: [], cx, cz };
+            chunks.set(key, bucket);
+          }
+          bucket.matrices.push(dummy.matrix.clone());
         }
       }
     }
 
-    const instancedGrass = new THREE.InstancedMesh(
-      grassGeometry,
-      grassMaterial,
-      matrices.length,
+    for (const bucket of chunks.values()) {
+      const inst = this._buildInstanced(
+        { geometry: merged.geometry, material: grassMaterial },
+        bucket.matrices,
+        { castShadow: false, receiveShadow: true },
+      );
+      if (!inst) continue;
+
+      this.scene.add(inst);
+      this.grassChunks.push({
+        mesh: inst,
+        center: new THREE.Vector3(
+          (bucket.cx + 0.5) * CHUNK_SIZE,
+          0,
+          (bucket.cz + 0.5) * CHUNK_SIZE,
+        ),
+      });
+    }
+
+    console.log(
+      `[GameLevel] Erba: ${this.grassChunks.length} chunk, ` +
+        `${this.grassChunks.reduce((n, c) => n + c.mesh.count, 0)} fili totali.`,
     );
-    instancedGrass.receiveShadow = true;
-    instancedGrass.castShadow = false;
-
-    matrices.forEach((matrix, i) => {
-      instancedGrass.setMatrixAt(i, matrix);
-    });
-
-    this.scene.add(instancedGrass);
   }
 
   update(player, onCoinCollected, onStarCollected, onMushroomCollected) {
     if (!player) return;
 
     const playerPos = player.position;
+
+    // 0. Erba: spegne i chunk lontani. I fili sono minuscoli (scala ~0.001),
+    // oltre qualche decina di unità sono sotto il pixel e non si vedono
+    // comunque. Il frustum culling di three.js fa il resto sui chunk laterali.
+    if (this.grassChunks.length > 0) {
+      const maxDistSq = this.grassViewDistance * this.grassViewDistance;
+      for (const chunk of this.grassChunks) {
+        const dx = playerPos.x - chunk.center.x;
+        const dz = playerPos.z - chunk.center.z;
+        chunk.mesh.visible = dx * dx + dz * dz <= maxDistSq;
+      }
+    }
     const coinRadiusSq = this.coinCollectRadius * this.coinCollectRadius;
 
     // 1. Coins
@@ -583,16 +696,14 @@ export default class GameLevel {
       if (distanceSq <= coinRadiusSq) {
         coin.collected = true;
         this.scene.remove(coin.mesh);
-        coin.mesh.traverse((child) => {
-          if (child.isMesh) {
-            child.geometry.dispose();
-            if (Array.isArray(child.material)) {
-              child.material.forEach((mat) => mat.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        });
+        // NB: nessun dispose() qui. Ogni moneta è un .clone() del GLB e i cloni
+        // CONDIVIDONO geometry e material con l'originale. Chiamare dispose()
+        // cancellerebbe i VBO usati anche da tutte le altre monete: three.js li
+        // ricrea da solo al frame dopo (quindi non si rompe nulla), ma è lavoro
+        // GPU sprecato e la dispose del material forza una ricompilazione dello
+        // shader. Le risorse condivise andranno liberate una volta sola, quando
+        // si distrugge il livello (oggi il restart ricarica la pagina, quindi
+        // ci pensa il browser).
         if (onCoinCollected) onCoinCollected();
       }
     }
@@ -615,10 +726,29 @@ export default class GameLevel {
       if (shroom.collected) continue;
 
       if (shroom.body) {
-        shroom.body.velocity.x = 3;
+        // Il fungo cammina in orizzontale come nell'originale. Prima la velocità
+        // era forzata a +3 per sempre: usciva dall'isola, cadeva nel vuoto e
+        // restava un corpo fisico vivo all'infinito, spinto verso +X.
+        // Ora inverte il verso prima del bordo e viene rimosso se cade comunque.
+        const limit = this.islandHalfSize - 3;
+        if (shroom.body.position.x > limit) shroom.dir = -1;
+        else if (shroom.body.position.x < -limit) shroom.dir = 1;
+
+        shroom.body.velocity.x = 3 * shroom.dir;
+
         shroom.mesh.position.copy(shroom.body.position);
         shroom.mesh.quaternion.copy(shroom.body.quaternion);
         shroom.position = shroom.mesh.position;
+
+        // Caduto fuori mappa: smaltisci mesh e corpo, altrimenti restano a
+        // consumare uno step di fisica per sempre.
+        if (shroom.body.position.y < -20) {
+          shroom.collected = true;
+          this.scene.remove(shroom.mesh);
+          const w = this.physicsWorld?.world || this.physicsWorld;
+          if (w) w.removeBody(shroom.body);
+          continue;
+        }
       }
 
       const distance = playerPos.distanceTo(shroom.position);

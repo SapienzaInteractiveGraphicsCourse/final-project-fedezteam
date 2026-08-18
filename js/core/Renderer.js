@@ -126,19 +126,36 @@ setupLights() {
     this.scene.add(this.dirLight.target);
 
 
-    const d = 200; 
-    this.dirLight.shadow.camera.left = -d;
-    this.dirLight.shadow.camera.right = d;
-    this.dirLight.shadow.camera.top = d;
-    this.dirLight.shadow.camera.bottom = -d;
+    // --- OMBRE ---
+    // La luce segue il player (vedi EntityManager.update), quindi la shadow map
+    // deve coprire solo l'area ATTORNO al giocatore, non tutta l'isola: SHADOW_AREA
+    // è il semilato del box ortogonale in unità di mondo.
+    //
+    // Nitidezza = (2 * SHADOW_AREA) / SHADOW_RES unità per texel.
+    // Con 30 e 2048 → ~0.029 u/texel. Vuoi ombre più nitide? Abbassa SHADOW_AREA.
+    // Vuoi ombre più lontane? Alzalo (e accetta bordi più morbidi).
+    const SHADOW_AREA = 30;
+    const SHADOW_RES = 2048;
 
-    // Aumentiamo anche il raggio d'azione in profondità
-    this.dirLight.shadow.camera.near = 0.1;
-    this.dirLight.shadow.camera.far = 1500; 
+    const shadowCam = this.dirLight.shadow.camera;
+    shadowCam.left = -SHADOW_AREA;
+    shadowCam.right = SHADOW_AREA;
+    shadowCam.top = SHADOW_AREA;
+    shadowCam.bottom = -SHADOW_AREA;
 
-    // Risoluzione ombre (mantieni 2048x2048 o 4096x4096 in base a quanto regge il tuo PC)
-    this.dirLight.shadow.mapSize.width = 2048*4;
-    this.dirLight.shadow.mapSize.height = 2048*4;
+    // La luce sta ~66 unità sopra il player: questo range copre tutto ciò che
+    // può proiettare ombra, e tenerlo stretto migliora la precisione in profondità.
+    shadowCam.near = 1;
+    shadowCam.far = 200;
+
+    // ⚠️ INDISPENSABILE: three.js NON chiama updateProjectionMatrix() per le luci
+    // direzionali (LightShadow.updateMatrices aggiorna solo position/lookAt).
+    // Senza questa riga left/right/top/bottom/near/far vengono ignorati e la
+    // shadow camera resta al default del costruttore, cioè un box di soli ±5.
+    shadowCam.updateProjectionMatrix();
+
+    this.dirLight.shadow.mapSize.width = SHADOW_RES;
+    this.dirLight.shadow.mapSize.height = SHADOW_RES;
   }
 
   // Resize when the window is resized, we need to update the camera aspect ratio and the renderer size

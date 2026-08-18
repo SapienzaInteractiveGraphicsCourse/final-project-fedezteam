@@ -1,1 +1,18 @@
-#
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Dipendenze (se in futuro passate a un bundler)
+node_modules/
+dist/

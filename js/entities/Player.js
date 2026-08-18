@@ -120,8 +120,14 @@ export default class Player {
     const targetMoveX = moveDirX * activeSpeed;
     const targetMoveZ = moveDirZ * activeSpeed;
 
-    this.body.velocity.x += (targetMoveX - this.body.velocity.x) * this.control;
-    this.body.velocity.z += (targetMoveZ - this.body.velocity.z) * this.control;
+    // Smorzamento indipendente dal framerate. `control` era applicato una volta
+    // per frame, quindi a 144Hz il player accelerava/frenava molto più in fretta
+    // che a 60Hz. Questa forma riproduce ESATTAMENTE il vecchio comportamento a
+    // 60 fps e lo mantiene identico a qualsiasi refresh rate.
+    const t = 1 - Math.pow(1 - this.control, delta * 60);
+
+    this.body.velocity.x += (targetMoveX - this.body.velocity.x) * t;
+    this.body.velocity.z += (targetMoveZ - this.body.velocity.z) * t;
 
     if (moveLen > 0.0001) {
       const targetRotation = Math.atan2(moveDirX, moveDirZ);
