@@ -64,8 +64,7 @@ export default class EntityManager {
     }
   }
 
-// 1. 🛡️ AGGIUNTO 'camera' COME 5° PARAMETRO QUI:
-update(delta, input, ui, audio, camera) { // 👈 AGGIUNTO 'camera' QUI
+update(delta, input, ui, audio, camera) { 
     if (ui && ui.gameState !== "PLAYING") return;
 
     // 1. Physics Engine Update
