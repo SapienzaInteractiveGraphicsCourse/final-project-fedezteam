@@ -211,10 +211,10 @@ export default class Collectibles {
         mesh = questionMarkGlb.scene.clone();
         mesh.scale.set(0.0012, 0.0012, 0.0012);
       } else {
-        const geo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+        const geo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
         const mat = new THREE.MeshStandardMaterial({
           color: 0xfbd000,
-          roughness: 0.4,
+          roughness: 0.05,
         });
         mesh = new THREE.Mesh(geo, mat);
       }
@@ -226,11 +226,11 @@ export default class Collectibles {
       const world = this.physicsWorld?.world || this.physicsWorld;
       let body = null;
       if (world) {
-        const shape = new CANNON.Box(new CANNON.Vec3(0.75, 0.75, 0.75));
+        const shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
         body = new CANNON.Body({
           mass: 0,
           shape,
-          position: new CANNON.Vec3(pos.x, pos.y, pos.z),
+          position: new CANNON.Vec3(pos.x, pos.y+0.6, pos.z),
           material: this.physicsWorld?.defaultMaterial,
         });
         world.addBody(body);
@@ -344,9 +344,7 @@ export default class Collectibles {
 
         // Replace the "?" block with a plain "used" block once hit.
         const smoothGeo = new THREE.BoxGeometry(
-          block.hitboxX || 1.5,
-          block.hitboxY || 1.5,
-          block.hitboxZ || 1.5,
+          1, 1, 1
         );
         const smoothMat = new THREE.MeshStandardMaterial({
           color: 0x8b5a2b,
@@ -354,7 +352,7 @@ export default class Collectibles {
         });
 
         const smoothMesh = new THREE.Mesh(smoothGeo, smoothMat);
-        smoothMesh.position.copy(block.position);
+        smoothMesh.position.set(block.position.x, block.position.y + 0.3, block.position.z);
         smoothMesh.castShadow = true;
         smoothMesh.receiveShadow = true;
 
