@@ -20,7 +20,6 @@ import BoneMap from "./entities/animation/BoneMap.js";
 import AnimationController from "./entities/animation/AnimationController.js";
 import { POSE, characterBasis } from "./entities/animation/clipFactory.js";
 
-import Stats from "three/addons/libs/stats.module.js";
 // 1. CORE MODULES
 
 const renderer = new RendererManager("#webgl-canvas");
