@@ -1,5 +1,5 @@
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
-import * as THREE from "three";
+import { enableShadows } from "../../utils/shadows.js";
 
 export default class MarioHouse {
   constructor(mesh, physicsEngine, data) {
@@ -14,12 +14,7 @@ export default class MarioHouse {
     this.mesh.position.set(x, y, z);
     this.mesh.rotation.y = rotationY;
 
-    this.mesh.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
+    enableShadows(this.mesh);
 
     // --- 2. PHYSICS SETUP (single compound body) ---
     const world = this.physicsEngine?.world || this.physicsEngine;
@@ -32,18 +27,18 @@ export default class MarioHouse {
     }
 
     this.body = new CANNON.Body({
-      mass: 0, // 0 = static/immovable
+      mass: 0, // 0 = static/immovable.
       material: this.physicsEngine.defaultMaterial,
     });
 
-    // 🛠️ MANUAL TUNING (local offsets)
+    // MANUAL TUNING (local offsets).
     // The 3D model's pivot isn't centered, so these offsets are used to push
     // all hitboxes toward the visual center of the house.
     const offX = -2.0; // depth
     const offY = -3.0; // negative pushes down toward the ground
     const offZ = -1.6; // shifts left/right
 
-    // A. OCTAGONAL PLATFORM (4 rectangles rotated by 45°)
+    // A. OCTAGONAL PLATFORM (4 rectangles rotated by 45 degrees).
     // "Radius" of the platform (previously a hardcoded 10).
     const baseRadius = 10 * scale;
 
@@ -57,7 +52,7 @@ export default class MarioHouse {
 
     // Create the 4 rotated hitboxes.
     for (let i = 0; i < 4; i++) {
-      const angle = i * (Math.PI / 4); // 0°, 45°, 90°, 135° in radians
+      const angle = i * (Math.PI / 4); // 0, 45, 90, 135 degrees, in radians.
 
       const rotQuat = new CANNON.Quaternion();
       rotQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle);
@@ -74,13 +69,13 @@ export default class MarioHouse {
       );
     }
 
-    // 🛠️ LENGTH TUNING
+    // LENGTH TUNING.
     // How much to stretch the house toward the back.
     const stretchX = 2.5;
     // Automatically shift the center back to compensate for the stretch.
     const shiftX = -stretchX;
 
-    // B. HOUSE WALLS (solid blocks)
+    // B. HOUSE WALLS (solid blocks).
 
     // 1. Lower wall base (wider and shorter).
     const lowerWallsShape = new CANNON.Box(
@@ -117,7 +112,7 @@ export default class MarioHouse {
       new CANNON.Vec3(1.0 * scale, 0.2 * scale, 1.2 * scale)
     );
     const rampQuat = new CANNON.Quaternion();
-    rampQuat.setFromEuler(-Math.PI / 6, 0, 0); // tilted downward
+    rampQuat.setFromEuler(-Math.PI / 6, 0, 0); // Tilted downward.
     this.body.addShape(
       rampShape,
       new CANNON.Vec3(offX * scale, (offY + 0.2) * scale, (offZ + 3.5) * scale),

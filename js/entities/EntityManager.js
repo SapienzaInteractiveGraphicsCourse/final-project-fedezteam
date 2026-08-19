@@ -98,24 +98,14 @@ export default class EntityManager {
           ui && ui.removeLife ? ui.removeLife(1, audio) : false;
         if (isGameOver) return;
 
-        // Rinasce dove il livello dice, non su una coordinata fissa: level1.json
-        // mette playerSpawn a (0, 2, 10), quindi (0,2,0) faceva ricomparire il
-        // giocatore in un punto che il livello non aveva mai scelto.
-        const spawn = this.map?.playerSpawn || { x: 0, y: 2, z: 0 };
-
-        // Player.spawn() alza il centro della sfera di `radius` per appoggiare
-        // i piedi del modello a terra: qui va rifatto lo stesso offset.
-        this.player.body.position.set(
-          spawn.x,
-          spawn.y + this.player.radius,
-          spawn.z,
-        );
+        this.player.body.position.set(0, 2, 0);
         this.player.body.velocity.set(0, 0, 0);
       });
     }
 
     if (this.map && this.map.update) {
       this.map.update(
+        delta,
         this.player,
         () => {
           if (audio && audio.playSFX) audio.playSFX("coin");

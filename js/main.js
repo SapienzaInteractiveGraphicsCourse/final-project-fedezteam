@@ -1,19 +1,19 @@
-import RendererManager from "./core/Renderer.js";
-import AssetLoader from "./core/AssetLoad/AssetLoader.js";
-import { initGameModels } from "./core/AssetLoad/assetConfig.js";
+import RendererManager from "./core/Render/Renderer.js";
+import CameraManager from "./core/Render/CameraManager.js";
+import AssetLoader from "./core/Assets/AssetLoader.js";
+import { initGameModels } from "./core/Assets/assetConfig.js";
 import GameLoop from "./core/GameLoop.js";
 import InputManager from "./core/InputManager.js";
 import UIManager from "./ui/UIManager.js";
 import PhysicsEngine from "./physics/PhysicsEngine.js";
 import AudioManager from "./core/Audio/AudioManager.js";
-import CameraManager from "./core/CameraManager.js";
 import { initGameAudio } from "./core/Audio/soundConfig.js";
+import { getStoredMuteState } from "./utils/storage.js";
 import Yoshi from "./entities/Yoshi.js";
 import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
 import * as THREE from "three";
 import CannonDebugger from "https://cdn.jsdelivr.net/npm/cannon-es-debugger@1.0.0/+esm";
-import Stats from "three/addons/libs/stats.module.js";
 
 // 1. CORE MODULES
 
@@ -27,64 +27,8 @@ const physics = new PhysicsEngine({
   fallThreshold: -50,
 });
 
-// Wireframe dei collider fisici. SPENTO di default: si accende con F3 oppure
-// da console con toggleColliders(). Utile quando si tarano le hitbox delle case,
-// ma è costoso (ricostruisce le mesh di ogni shape a ogni frame) e va tenuto
-// fuori dal gioco vero.
-const debugMeshes = [];
-let showColliders = false;
-
-const cannonDebugger = new CannonDebugger(renderer.scene, physics.world, {
-  // cannon-es-debugger non gestisce `visible`: ci teniamo i riferimenti alle
-  // mesh che crea, così possiamo nasconderle quando si spegne il toggle.
-  onInit: (body, mesh) => debugMeshes.push(mesh),
-});
-
-function toggleColliders(force) {
-  showColliders = force === undefined ? !showColliders : !!force;
-
-  if (showColliders) {
-    // Aggiorna subito, altrimenti i wireframe compaiono solo al frame dopo.
-    cannonDebugger.update();
-  }
-  for (const mesh of debugMeshes) mesh.visible = showColliders;
-
-  console.log(`[debug] collider ${showColliders ? "ON" : "OFF"}`);
-  return showColliders;
-}
-
-// Esposto in console per comodità durante il tuning delle hitbox.
-window.toggleColliders = toggleColliders;
-
-window.addEventListener("keydown", (e) => {
-  if (e.code === "F3") {
-    e.preventDefault(); // in alcuni browser F3 apre "trova successivo"
-    toggleColliders();
-  }
-});
-
-// Contatore prestazioni. Spento di default, si accende con F4.
-// Cliccando sul riquadro si cicla tra FPS / MS per frame / memoria.
-const stats = new Stats();
-stats.dom.style.left = "auto";
-stats.dom.style.right = "0"; // a destra, così non copre l'HUD in alto a sinistra
-stats.dom.style.display = "none";
-document.body.appendChild(stats.dom);
-
-let showStats = false;
-function toggleStats(force) {
-  showStats = force === undefined ? !showStats : !!force;
-  stats.dom.style.display = showStats ? "block" : "none";
-  return showStats;
-}
-window.toggleStats = toggleStats;
-
-window.addEventListener("keydown", (e) => {
-  if (e.code === "F4") {
-    e.preventDefault();
-    toggleStats();
-  }
-});
+// Draws the physics colliders as wireframes on top of the scene, for debugging.
+const cannonDebugger = new CannonDebugger(renderer.scene, physics.world);
 
 // Owns the Player, Yoshi, and the level, and drives their update() each frame.
 const entityManager = new EntityManager(
@@ -100,8 +44,7 @@ initGameAudio(audio);
 ui.setAudio(audio);
 
 // Restore the mute state saved from a previous session, if any.
-const initialMuteState = localStorage.getItem("game_is_muted") === "true";
-audio.setMute(initialMuteState);
+audio.setMute(getStoredMuteState());
 
 // 2. STATE VARIABLES
 
@@ -163,10 +106,6 @@ ui.onGameStart(({ character }) => {
 // 4. GAME LOOP
 
 function updateGame(delta) {
-  // Prima di ogni return anticipato: updateGame viene chiamata a ogni frame,
-  // quindi il contatore resta corretto anche nei menu e in pausa.
-  if (showStats) stats.update();
-
   // While on a menu screen, only orbit the camera around the scene; nothing
   // else updates (physics, player, entities all stay frozen).
   if (ui.gameState === "MENU_WELCOME" || ui.gameState === "MENU_NAME") {
@@ -185,8 +124,7 @@ function updateGame(delta) {
 
   entityManager.update(delta, input, ui, audio, renderer.camera);
   cameraManager.update(entityManager.player, input, delta);
-
-  if (showColliders) cannonDebugger.update();
+  cannonDebugger.update();
 }
 
 // Drives the loading bar shown on the initial screen while assets download.
