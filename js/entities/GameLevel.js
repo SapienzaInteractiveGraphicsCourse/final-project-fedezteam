@@ -12,7 +12,14 @@ import Decorations from "./Level/Decorations.js";
  * on its own:
  *  - LevelLoader: level JSON parsing, ground platforms, buildings/hills/NPCs.
  *  - Collectibles: coins, stars, mushrooms, "?" blocks, and pickup detection.
- *  - Decorations: trees, flowers, the instanced grass field, the sky planet.
+ *  - Decorations: trees, flowers, rocks, bushes, ponds, coin trails, house
+ *    surroundings, the instanced grass field, the sky planets (the main
+ *    walkable "red" planet + satellites, and a small purely-decorative
+ *    blue planet), and the warp stars. Also gives rocks/palm trees a
+ *    static collider, applies the pond "wading" effect, and gives the red
+ *    planet a static collider plus a GravityField so the player can walk
+ *    around it Mario Galaxy-style once warped there, so it needs
+ *    physicsWorld like LevelLoader/Collectibles.
  *
  * Renamed from "Map" to avoid shadowing the native JS Map class.
  */
@@ -32,7 +39,7 @@ export default class GameLevel {
 
     this.levelLoader = new LevelLoader(this.scene, this.physicsWorld, this.loader);
     this.collectibles = new Collectibles(this.scene, this.physicsWorld, this.loader);
-    this.decorations = new Decorations(this.scene, this.loader);
+    this.decorations = new Decorations(this.scene, this.physicsWorld, this.loader);
   }
 
   async loadLevel(levelJsonPath = "./assets/levels/level1.json") {
@@ -40,6 +47,10 @@ export default class GameLevel {
 
     this.playerSpawn = levelData?.playerSpawn || { x: 0, y: 1, z: 0 };
     this.yoshiSpawn = levelData?.yoshiSpawn || { x: 5, y: 1, z: -5 };
+
+    // So the "spawn" warp star (see spawnWarpStars below) has somewhere to
+    // send the player back to.
+    this.decorations.setSpawnPoint(this.playerSpawn);
 
     const platformsData = levelData?.platforms || [];
     this.levelLoader.buildPlatforms(platformsData);
@@ -52,6 +63,56 @@ export default class GameLevel {
     await this.decorations.spawnFieldProps(mainIslandSize, (coinMesh) =>
       this.collectibles.registerCoin(coinMesh),
     );
+
+    // Curated coin trail guiding the player up the hill staircase in
+    // level1.json ("Scalino 1/2/3", around x=30..50, z=20). Hand-placed to
+    // match that specific level layout, on top of the random field scatter.
+    await this.decorations.spawnCoinTrail(
+      [
+        { x: 25, y: 2.5, z: 20 },
+        { x: 30, y: 3.5, z: 20 },
+        { x: 40, y: 5.0, z: 20 },
+        { x: 50, y: 7.5, z: 20 },
+      ],
+      (coinMesh) => this.collectibles.registerCoin(coinMesh),
+      { spacing: 2, arcHeight: 0.4 },
+    );
+
+    // Same idea as above, one coin trail per new hill staircase added for
+    // the "big package" map pass (see level1.json: "Passerella Est/Ovest/
+    // Sud"). Heights are hand-tuned to roughly follow each staircase's
+    // step tops, ending near that staircase's star.
+    await this.decorations.spawnCoinTrail(
+      [
+        { x: 60, y: 2.3, z: 70 },
+        { x: 70, y: 3.5, z: 70 },
+        { x: 83, y: 4.9, z: 70 },
+        { x: 96, y: 7.5, z: 70 },
+      ],
+      (coinMesh) => this.collectibles.registerCoin(coinMesh),
+      { spacing: 2, arcHeight: 0.4 },
+    );
+    await this.decorations.spawnCoinTrail(
+      [
+        { x: -60, y: 2.3, z: 45 },
+        { x: -70, y: 3.5, z: 45 },
+        { x: -83, y: 4.9, z: 45 },
+        { x: -96, y: 7.5, z: 45 },
+      ],
+      (coinMesh) => this.collectibles.registerCoin(coinMesh),
+      { spacing: 2, arcHeight: 0.4 },
+    );
+    await this.decorations.spawnCoinTrail(
+      [
+        { x: -15, y: 2.3, z: 80 },
+        { x: -15, y: 3.5, z: 90 },
+        { x: -15, y: 4.9, z: 103 },
+        { x: -15, y: 7.5, z: 116 },
+      ],
+      (coinMesh) => this.collectibles.registerCoin(coinMesh),
+      { spacing: 2, arcHeight: 0.4 },
+    );
+
     await this.collectibles.spawnStars(levelData?.stars);
     await this.collectibles.spawnMushrooms(levelData?.mushrooms);
     await this.collectibles.spawnQuestionMarkBlocks(levelData?.questionMarkBlocks);
@@ -60,15 +121,61 @@ export default class GameLevel {
       levelData?.npcs,
       levelData?.hills,
     );
-    await this.decorations.spawnGrassField(mainIslandSize);
+    this.decorations.decorateStructures(levelData?.buildings);
 
+    await this.decorations.spawnGrassField(mainIslandSize);
+    this.decorations.spawnRocks(mainIslandSize);
+    this.decorations.spawnBushes(mainIslandSize);
+
+    // Small decorative ponds, hand-placed to stay clear of buildings, hills
+    // and staircases. Purely visual (flat water disc, no collider/depth).
+    this.decorations.spawnPonds([
+      { x: 60, z: -60, radius: 7 },
+      { x: -60, z: 75, radius: 6 },
+      { x: 20, z: 95, radius: 5 },
+      { x: -95, z: -70, radius: 6 },
+      { x: 95, z: 20, radius: 5 },
+    ]);
+
+    // Only the main "red" sky planet is walkable (see
+    // Decorations._addPlanetPhysics, called from spawnSkyPlanet) — the blue
+    // planet and satellites stay purely decorative background dressing.
     this.decorations.spawnSkyPlanet();
+    this.decorations.spawnSatellitePlanets();
+    this.decorations.spawnBluePlanet();
+
+    // A handful of coins scattered across the red planet's surface, plus
+    // one star, both findable while walking around it.
+    await this.decorations.spawnPlanetCoins(
+      this.decorations.skyPlanet,
+      this.decorations.skyPlanetRadius,
+      8,
+      (coinMesh) => this.collectibles.registerCoin(coinMesh),
+    );
+
+    // One collectible star on the red planet too, a short walk from where
+    // the "sky" warp star lands the player (see spawnWarpStars below).
+    await this.collectibles.spawnStars([{ x: -254, y: 214, z: 10 }]);
+
+    // Mario Galaxy-style warp stars. "sky" sends the player to the red
+    // planet; the white star waiting right where they land sends them back
+    // to spawn; the two fiery ones at the island's edges send them to the
+    // separate Kamek obstacle course instead (see
+    // Decorations.spawnWarpStars/_updateWarpStars and
+    // entities/Level/ObstacleZone.js, wired up from main.js).
+    await this.decorations.spawnWarpStars([
+      { x: 118, y: 4, z: -30, color: 0xffd54f, target: "sky" }, // -> the red planet
+      { x: -260, y: 220, z: 0, color: 0xffffff, target: "spawn" }, // next to the red planet's landing spot -> back to spawn
+      { x: -118, y: 4, z: -80, color: 0xff5722, target: "kamek_zone" }, // -> Kamek's obstacle course
+      { x: 60, y: 4, z: 115, color: 0xff5722, target: "kamek_zone" }, // -> Kamek's obstacle course
+    ]);
   }
 
   // Per-frame update: delegates collectible pickup checks and decoration
-  // animation (currently just the sky planet's slow spin).
+  // animation (the sky planet's spin, its satellites' orbits, and the
+  // pond "wading" effect, which needs the player to check against).
   update(delta, player, onCoinCollected, onStarCollected, onMushroomCollected) {
     this.collectibles.update(player, onCoinCollected, onStarCollected, onMushroomCollected);
-    this.decorations.update(delta);
+    this.decorations.update(delta, player);
   }
 }

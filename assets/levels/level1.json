@@ -34,6 +34,36 @@
       "x": -50,
       "y": 5,
       "z": 60
+    },
+    {
+      "x": 50,
+      "y": 8,
+      "z": 20
+    },
+    {
+      "x": -45,
+      "y": 7,
+      "z": -10
+    },
+    {
+      "x": 0,
+      "y": 8,
+      "z": -75
+    },
+    {
+      "x": 96,
+      "y": 7,
+      "z": 70
+    },
+    {
+      "x": -96,
+      "y": 7,
+      "z": 45
+    },
+    {
+      "x": -15,
+      "y": 7,
+      "z": 116
     }
   ],
   "buildings": [
@@ -156,6 +186,114 @@
       "hitboxX": 24,
       "hitboxY": 6,
       "hitboxZ": 20
+    },
+    {
+      "name": "Passerella Est 1 (Bassa e Larga)",
+      "x": 70,
+      "y": 0,
+      "z": 70,
+      "scaleX": 9,
+      "scaleY": 1.0,
+      "scaleZ": 9,
+      "hitboxX": 18,
+      "hitboxY": 2,
+      "hitboxZ": 18
+    },
+    {
+      "name": "Passerella Est 2",
+      "x": 83,
+      "y": 1.4,
+      "z": 70,
+      "scaleX": 8,
+      "scaleY": 1.8,
+      "scaleZ": 8,
+      "hitboxX": 16,
+      "hitboxY": 3.6,
+      "hitboxZ": 16
+    },
+    {
+      "name": "Passerella Est 3 (Alta)",
+      "x": 96,
+      "y": 3.0,
+      "z": 70,
+      "scaleX": 7,
+      "scaleY": 2.6,
+      "scaleZ": 7,
+      "hitboxX": 14,
+      "hitboxY": 5.2,
+      "hitboxZ": 14
+    },
+    {
+      "name": "Passerella Ovest 1 (Bassa e Larga)",
+      "x": -70,
+      "y": 0,
+      "z": 45,
+      "scaleX": 9,
+      "scaleY": 1.0,
+      "scaleZ": 9,
+      "hitboxX": 18,
+      "hitboxY": 2,
+      "hitboxZ": 18
+    },
+    {
+      "name": "Passerella Ovest 2",
+      "x": -83,
+      "y": 1.4,
+      "z": 45,
+      "scaleX": 8,
+      "scaleY": 1.8,
+      "scaleZ": 8,
+      "hitboxX": 16,
+      "hitboxY": 3.6,
+      "hitboxZ": 16
+    },
+    {
+      "name": "Passerella Ovest 3 (Alta)",
+      "x": -96,
+      "y": 3.0,
+      "z": 45,
+      "scaleX": 7,
+      "scaleY": 2.6,
+      "scaleZ": 7,
+      "hitboxX": 14,
+      "hitboxY": 5.2,
+      "hitboxZ": 14
+    },
+    {
+      "name": "Passerella Sud 1 (Bassa e Larga)",
+      "x": -15,
+      "y": 0,
+      "z": 90,
+      "scaleX": 10,
+      "scaleY": 1.0,
+      "scaleZ": 8,
+      "hitboxX": 20,
+      "hitboxY": 2,
+      "hitboxZ": 16
+    },
+    {
+      "name": "Passerella Sud 2",
+      "x": -15,
+      "y": 1.4,
+      "z": 103,
+      "scaleX": 9,
+      "scaleY": 1.8,
+      "scaleZ": 8,
+      "hitboxX": 18,
+      "hitboxY": 3.6,
+      "hitboxZ": 16
+    },
+    {
+      "name": "Passerella Sud 3 (Alta)",
+      "x": -15,
+      "y": 3.0,
+      "z": 116,
+      "scaleX": 8,
+      "scaleY": 2.6,
+      "scaleZ": 7,
+      "hitboxX": 16,
+      "hitboxY": 5.2,
+      "hitboxZ": 14
     }
   ],
   "brickBlocks": [

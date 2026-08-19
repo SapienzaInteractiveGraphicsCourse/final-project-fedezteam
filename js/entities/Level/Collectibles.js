@@ -2,6 +2,7 @@ import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { ITEM_MODELS } from "../../core/Assets/manifest.js";
 import { enableShadows } from "../../utils/shadows.js";
+import { normalizeMaterials } from "../../utils/materials.js";
 
 /**
  * Owns every collectible/interactive prop in the level: coins, stars,
@@ -38,6 +39,10 @@ export default class Collectibles {
   async preloadMushroomModel() {
     try {
       this.mushroomGlb = await this.loader.loadAsync(ITEM_MODELS.mushroom);
+      // Materials are shared by reference across every clone made from
+      // this.mushroomGlb.scene (none of the mushroom spawn methods clone
+      // materials individually), so normalizing once here is enough.
+      normalizeMaterials(this.mushroomGlb.scene);
     } catch (e) {
       console.warn("[Collectibles] mushroom.glb not found.");
     }
@@ -53,11 +58,17 @@ export default class Collectibles {
   }
 
   // Spawns collectible stars either at the positions given by the level
-  // JSON, or at a small default layout if none was provided.
+  // JSON, or at a small default layout if none was provided. Also usable at
+  // runtime for one-off stars (e.g. the one Kamek drops on defeat — see
+  // main.js), since it just appends to this.stars either way.
   async spawnStars(starPositions) {
     let starGlb = null;
     try {
       starGlb = await this.loader.loadAsync(ITEM_MODELS.star);
+      // Normalized once here — every star clone below shares this
+      // material by reference, so this covers all of them (see
+      // utils/materials.js for why this was needed at all).
+      normalizeMaterials(starGlb.scene);
     } catch (e) {
       console.warn("[Collectibles] star.glb not found.");
     }
@@ -70,10 +81,27 @@ export default class Collectibles {
       { x: 0, y: 2, z: -40 },
     ];
 
+    // Star size, normalized from the model's own bounding-box height
+    // instead of trusting star.glb's raw native scale (it was coming out
+    // wildly off — same class of bug as the earlier Goomba/palm-tree
+    // sizing issues), so every star reads at a consistent, readable size
+    // regardless of the source GLB's native scale.
+    const targetHeight = 1.6;
+
     positions.forEach((pos) => {
       let starMesh;
       if (starGlb) {
         starMesh = starGlb.scene.clone();
+        starMesh.scale.set(1, 1, 1);
+        starMesh.position.set(0, 0, 0);
+        starMesh.updateMatrixWorld(true);
+
+        const bbox = new THREE.Box3().setFromObject(starMesh);
+        const nativeHeight = bbox.isEmpty() ? 0 : bbox.max.y - bbox.min.y;
+        if (nativeHeight > 0.001) {
+          starMesh.scale.setScalar(targetHeight / nativeHeight);
+        }
+
         starMesh.position.set(pos.x, pos.y, pos.z);
       } else {
         // Fallback primitive shown if the model failed to load.
@@ -108,6 +136,7 @@ export default class Collectibles {
     if (!mushroomGlb) {
       try {
         mushroomGlb = await this.loader.loadAsync(ITEM_MODELS.mushroom);
+        normalizeMaterials(mushroomGlb.scene);
       } catch (e) {
         console.warn("[Collectibles] mushroom.glb not found.");
       }
@@ -192,6 +221,7 @@ export default class Collectibles {
     let questionMarkGlb = null;
     try {
       questionMarkGlb = await this.loader.loadAsync(ITEM_MODELS.questionMarkBlock);
+      normalizeMaterials(questionMarkGlb.scene);
     } catch (e) {
       console.warn("[Collectibles] question_mark_block.glb not found.");
     }
@@ -261,17 +291,18 @@ export default class Collectibles {
       const distanceSq = playerPos.distanceToSquared(coin.position);
       if (distanceSq <= coinRadiusSq) {
         coin.collected = true;
+        // Every coin is a clone of the same cached coin.glb (see
+        // Decorations._loadCoinModel) — .clone() shares the geometry AND
+        // material by reference rather than deep-copying them, so ALL
+        // coins point at the exact same GPU resources. Disposing them
+        // here (as this used to do) freed those buffers out from under
+        // every OTHER still-visible coin on the very first pickup, and
+        // kept re-disposing the same already-disposed objects on every
+        // pickup after that — exactly the kind of GPU churn that shows up
+        // as a stutter each time you grab a coin. Removing from the scene
+        // is all a single collected coin needs; the shared geometry/
+        // material stay alive for the rest.
         this.scene.remove(coin.mesh);
-        coin.mesh.traverse((child) => {
-          if (child.isMesh) {
-            child.geometry.dispose();
-            if (Array.isArray(child.material)) {
-              child.material.forEach((mat) => mat.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        });
         if (onCoinCollected) onCoinCollected();
       }
     }

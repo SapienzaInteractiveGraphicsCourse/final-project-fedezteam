@@ -25,7 +25,7 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Super Mushroom**: Created by [smarthug](https://sketchfab.com/smarthug) — [Model Link](https://sketchfab.com/3d-models/mario-super-mushroom-bfecb0aee2984ddca543ea90dcb270cc)
 - **Yoshi Egg**: Created by [Yanez-Designs](https://sketchfab.com/Yanez-Designs) — [Model Link](https://sketchfab.com/3d-models/yoshi-egg-2125c39434ed4b3696bdff0a0bdb6fb2)
 - **Warp Pipe**: Created by [vanc3d](https://sketchfab.com/vanc3d) — [Model Link](https://sketchfab.com/3d-models/super-mario-pipe-for-free-470f2e1ef78d4c4bb35969909adf90ce)
-
+- https://sketchfab.com/3d-models/yoshi-egg-2125c39434ed4b3696bdff0a0bdb6fb2#download
 ### Textures & Environments
 - **Skyboxes**: Provided by [Kenney](https://kenney.nl/assets/skyboxes)
 - **Palm Tree**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/3ds-mario-kart-7-palm-tree-4f27fab359e74e9b82c6a061bc782a18)
