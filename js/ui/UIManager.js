@@ -1,3 +1,5 @@
+import { getStoredMuteState, setStoredMuteState } from "../utils/storage.js";
+
 export default class UIManager {
   constructor() {
     this.welcomeScreen = document.getElementById("welcome-screen");
@@ -41,20 +43,19 @@ export default class UIManager {
 
     this.onStartCallback = null;
     this.onResetToMenuCallback = null;
-    // Aggiungi questo nel constructor() di UIManager.js
 
     this.btnMute = document.getElementById("btn-mute");
     this.btnReturnMenu = document.getElementById("btn-return-menu");
 
-    // --- LOGICA TASTO MUTO CON LOCALSTORAGE ---
-    // Leggiamo il salvataggio precedente (se non esiste, di default è false)
-    this.isMuted = localStorage.getItem("game_is_muted") === "true";
+    // --- MUTE BUTTON / LOCALSTORAGE LOGIC ---
+    // Restore the previously saved mute state (defaults to false if none exists).
+    this.isMuted = getStoredMuteState();
     this._updateMuteButtonUI();
 
     if (this.btnMute) {
       this.btnMute.addEventListener("click", () => {
         this.isMuted = !this.isMuted;
-        localStorage.setItem("game_is_muted", this.isMuted);
+        setStoredMuteState(this.isMuted);
         this._updateMuteButtonUI();
 
         if (this.audio && typeof this.audio.setMute === "function") {
@@ -65,7 +66,7 @@ export default class UIManager {
       });
     }
 
-    // --- LOGICA TASTO RITORNA AL MENU ---
+    // --- "RETURN TO MENU" BUTTON LOGIC ---
     if (this.btnReturnMenu) {
       this.btnReturnMenu.addEventListener("click", () => {
         if (this.onReturnToMenu) this.onReturnToMenu();
@@ -100,7 +101,8 @@ export default class UIManager {
       this.nameScreen.style.display = "flex";
       this.heroNameInput.focus();
 
-      // 🎵 Avvia l'audio al primo vero click utente
+      // Start audio playback on the first real user gesture, as required
+      // by browser autoplay policies.
       if (this.audio && typeof this.audio.playBGM === "function") {
         this.audio.playBGM();
       }
@@ -110,7 +112,7 @@ export default class UIManager {
 
     this.continueBtn.addEventListener("click", () => this._triggerStart());
 
-    // 🔄 Pressione Tasto RESTART GAME da Game Over
+    // "Restart game" button press, shown on the Game Over screen.
     if (this.restartBtn) {
       this.restartBtn.addEventListener("click", () => this.returnToMainMenu());
     }
@@ -140,22 +142,23 @@ export default class UIManager {
     });
   }
 
-  // 💀 Sottrazione vita e gestione dell'ultima possibilità (0 vite)
+  // Removes a life and handles the "last life lost" case (0 lives -> Game Over).
   removeLife(amount = 1, audio = null) {
-    // Se era già a 0 vite (ultima vita) ed è morto di nuovo -> GAME OVER
+    // If lives were already at 0 (last life) and the player died again,
+    // trigger Game Over.
     if (this.lives <= 0) {
       this.showGameOver(audio);
       return true;
     }
 
-    // Altrimenti scala la vita (es. da 1 passa a 0 ed è ancora in gioco)
+    // Otherwise, just decrease the life count (e.g. 1 -> 0, still playing).
     this.lives -= amount;
 
     if (this.livesCountEl) {
       this.livesCountEl.textContent = Math.max(0, this.lives);
     }
 
-    return false; // Restituisce false se è ancora vivo
+    return false; // Returns false while the player is still alive.
   }
 
   addLife(amount = 1) {
@@ -174,7 +177,8 @@ export default class UIManager {
       this.starsCountEl.textContent = `${this.stars}/${this.maxStars}`;
   }
 
-  // 💀 Mostra la schermata Game Over, stacca la BGM e suona gameover.mp3
+  // Shows the Game Over screen, stops the background music and plays the
+  // game-over sound effect.
   showGameOver(audio = null) {
     this.gameState = "GAME_OVER";
 
@@ -182,7 +186,7 @@ export default class UIManager {
     if (this.pauseBtn) this.pauseBtn.style.display = "none";
     if (this.gameOverScreen) this.gameOverScreen.classList.remove("hidden");
 
-    // 🎵 Stop BGM + Play gameover.mp3
+    // Stop the BGM and play the game-over sound effect.
     const soundManager = audio || this.audio;
     if (soundManager) {
       try {
@@ -198,9 +202,9 @@ export default class UIManager {
     }
   }
 
-  // 🔄 Ritorno al Menù Iniziale
+  // Returns to the main/welcome menu, resetting run state.
   returnToMainMenu() {
-    // Ripristino dati
+    // Reset run data.
     this.lives = 4;
     this.coins = 0;
     this.stars = 0;
@@ -210,7 +214,7 @@ export default class UIManager {
     if (this.starsCountEl)
       this.starsCountEl.textContent = `${this.stars}/${this.maxStars}`;
 
-    // Reset Interfaccia
+    // Reset the UI screens.
     if (this.gameOverScreen) this.gameOverScreen.classList.add("hidden");
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "block";
@@ -220,7 +224,8 @@ export default class UIManager {
 
     this.gameState = "MENU_WELCOME";
 
-    // Ricarica la pagina per resettare completamente il mondo di gioco o esegui il callback
+    // Reload the page to fully reset the game world, unless a custom
+    // reset callback was provided.
     if (this.onResetToMenuCallback) {
       this.onResetToMenuCallback();
     } else {
@@ -228,7 +233,7 @@ export default class UIManager {
     }
   }
 
-  // Metodo per collegare l'AudioManager a UIManager
+  // Links the AudioManager instance to this UIManager.
   setAudio(audio) {
     this.audio = audio;
     if (this.audio && typeof this.audio.setMute === "function") {
@@ -239,7 +244,7 @@ export default class UIManager {
   toggleSettings() {
     this.isPaused = !this.isPaused;
 
-    // 🔊 Riproduce menu_pause.wav sia all'apertura che alla chiusura
+    // Play the pause sound effect both when opening and closing the panel.
     if (this.audio && typeof this.audio.playSFX === "function") {
       this.audio.playSFX("pause");
     }
@@ -274,7 +279,7 @@ export default class UIManager {
     this.nameScreen.style.display = "none";
     this.hud.style.display = "block";
 
-    // 🎵 Garanzia di avvio se si salta il primo passaggio
+    // Make sure the BGM starts even if the welcome-screen step was skipped.
     if (this.audio && typeof this.audio.playBGM === "function") {
       this.audio.playBGM();
     }

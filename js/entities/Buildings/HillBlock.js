@@ -1,4 +1,5 @@
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
+import { enableShadows } from "../../utils/shadows.js";
 
 export default class HillBlock {
   constructor(mesh, physicsEngine, data) {
@@ -26,12 +27,7 @@ export default class HillBlock {
     this.mesh.position.set(x, y, z);
     this.mesh.rotation.y = rotationY;
 
-    this.mesh.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
+    enableShadows(this.mesh);
 
     // --- 2. PHYSICS (single box collider) ---
     const world = this.physicsEngine?.world || this.physicsEngine;

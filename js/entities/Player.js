@@ -1,16 +1,18 @@
 import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
+import { enableShadows } from "../utils/shadows.js";
 
 export default class Player {
-  // 1. Passiamo un oggetto 'stats' al posto dei valori fissi
+  // A 'stats' object is used instead of fixed constants so EntityManager can
+  // pass different values per character (see EntityManager.spawnPlayer).
   constructor(mesh, physicsEngine, stats = {}) {
     this.mesh = mesh;
     this.physicsEngine = physicsEngine;
 
-    // Assegniamo le statistiche (con i valori di Mario come default)
+    // Assign the movement stats, falling back to Mario's default values.
     this.moveSpeed = stats.moveSpeed || 11;
     this.jumpVelocity = stats.jumpVelocity || 18;
-    this.control = stats.control || 0.8; // 1.0 = stop istantaneo, valori bassi = scivoloso
+    this.control = stats.control || 0.8; // 1.0 = instant stop, lower values = slippery movement.
 
     this.sprintMultiplier = 1.5;
 
@@ -18,45 +20,42 @@ export default class Player {
     this.canJump = false;
     this.radius = 1;
 
-    if (this.mesh) {
-      this.mesh.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-    }
+    enableShadows(this.mesh);
   }
 
   spawn(x, y, z) {
     if (!this.mesh) return;
 
-    // 1. Setup Three.js (Grafica)
+    // 1. Three.js setup (visual mesh).
     this.mesh.position.set(x, y, z);
 
-    // 🔄 SALVIAMO L'OFFSET PER CORREGGERE IL MODELLO 3D
+    // Store the model's base rotation offset, needed because the source
+    // GLTF model isn't authored facing the same way as +Z.
     this.modelOffset = Math.PI / 2;
     this.mesh.rotation.y = this.modelOffset;
 
-    // 2. Setup Cannon-es (Fisica)
+    // 2. cannon-es setup (physics body).
     const shape = new CANNON.Sphere(this.radius);
 
-    // Alza il centro della sfera di 'radius' affinché l'origine ai piedi (Y=0) tocchi il suolo
+    // Raise the sphere's center by 'radius' so the model's origin, at the
+    // character's feet (y = 0), touches the ground.
     this.body = new CANNON.Body({
       mass: 5,
       position: new CANNON.Vec3(x, y + this.radius, z),
       shape: shape,
       material: this.physicsEngine?.defaultMaterial,
-      fixedRotation: true, // Impedisce al personaggio di rotolare
+      fixedRotation: true, // Prevents the character from tumbling/rolling.
     });
 
-    // 3. Listener per azzerare il salto all'atterraggio
+    // 3. Collision listener used to reset the jump flag on landing.
     const contactNormal = new CANNON.Vec3();
     const upAxis = new CANNON.Vec3(0, 1, 0);
 
     this.body.addEventListener("collide", (e) => {
       e.contact.ni.negate(contactNormal);
 
+      // Only count it as "landing" if the contact normal points roughly
+      // upward, i.e. the player is standing on top of something.
       if (contactNormal.dot(upAxis) > 0.5) {
         this.canJump = true;
       }
@@ -78,13 +77,14 @@ export default class Player {
       ? this.moveSpeed * this.sprintMultiplier
       : this.moveSpeed;
 
-    // Angolo stabile della telecamera
+    // Stable horizontal camera angle, used to compute movement directions
+    // relative to where the camera is currently looking.
     const camAngle =
       camera && camera.userData && camera.userData.cameraAngleX !== undefined
         ? camera.userData.cameraAngleX
         : 0;
 
-    // Vettori di direzione basati sull'angolo puro
+    // Forward/right direction vectors derived from the camera angle.
     const camForwardX = -Math.sin(camAngle);
     const camForwardZ = -Math.cos(camAngle);
 
@@ -111,6 +111,7 @@ export default class Player {
       moveDirZ += camRightZ;
     }
 
+    // Normalize so diagonal movement isn't faster than axis-aligned movement.
     const moveLen = Math.hypot(moveDirX, moveDirZ);
     if (moveLen > 0.0001) {
       moveDirX /= moveLen;
@@ -120,14 +121,10 @@ export default class Player {
     const targetMoveX = moveDirX * activeSpeed;
     const targetMoveZ = moveDirZ * activeSpeed;
 
-    // Smorzamento indipendente dal framerate. `control` era applicato una volta
-    // per frame, quindi a 144Hz il player accelerava/frenava molto più in fretta
-    // che a 60Hz. Questa forma riproduce ESATTAMENTE il vecchio comportamento a
-    // 60 fps e lo mantiene identico a qualsiasi refresh rate.
-    const t = 1 - Math.pow(1 - this.control, delta * 60);
-
-    this.body.velocity.x += (targetMoveX - this.body.velocity.x) * t;
-    this.body.velocity.z += (targetMoveZ - this.body.velocity.z) * t;
+    // Ease the current velocity towards the target velocity; 'control'
+    // determines how sharply the character accelerates/decelerates.
+    this.body.velocity.x += (targetMoveX - this.body.velocity.x) * this.control;
+    this.body.velocity.z += (targetMoveZ - this.body.velocity.z) * this.control;
 
     if (moveLen > 0.0001) {
       const targetRotation = Math.atan2(moveDirX, moveDirZ);
@@ -144,6 +141,8 @@ export default class Player {
       }
     }
 
+    // Sync the visual mesh to the physics body, compensating for the
+    // sphere-center offset applied in spawn().
     this.mesh.position.set(
       this.body.position.x,
       this.body.position.y - this.radius,

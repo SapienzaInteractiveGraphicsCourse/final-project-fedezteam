@@ -1,15 +1,15 @@
 export default class InputManager {
   constructor() {
-    // Mappa per tracciare lo stato dei tasti (premuti o meno)
+    // Map tracking the current pressed/released state of every key.
     this.keys = {};
 
-    // Inizializziamo subito gli ascoltatori degli eventi
+    // Start listening for keyboard events immediately.
     this._setupListeners();
   }
 
   _setupListeners() {
     window.addEventListener("keydown", (e) => {
-      // Previene lo scorrimento della pagina quando si preme Spazio o le frecce
+      // Prevent the page from scrolling when Space or the arrow keys are used.
       if (
         ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
           e.code,
@@ -18,7 +18,7 @@ export default class InputManager {
         e.preventDefault();
       }
       this.keys[e.key.toLowerCase()] = true;
-      this.keys[e.code.toLowerCase()] = true; // Supporta anche e.code per 'Space'
+      this.keys[e.code.toLowerCase()] = true; // Also track e.code, needed for 'Space'.
     });
 
     window.addEventListener("keyup", (e) => {
@@ -28,7 +28,7 @@ export default class InputManager {
   }
 
   /**
-   * @param {string} keyName - Es: 'w', 'a', 's', 'd', 'space', 'arrowup'
+   * @param {string} keyName - e.g. 'w', 'a', 's', 'd', 'space', 'arrowup'
    */
   isPressed(keyName) {
     return !!this.keys[keyName.toLowerCase()];
