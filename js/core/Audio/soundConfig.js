@@ -1,3 +1,5 @@
+// Manifest of every sound effect and music track used by the game, keyed by
+// the name AudioManager will use to reference it.
 export const SOUND_MANIFEST = [
   { key: 'bgm', path: 'assets/audio/overworld_bgm.mp3', loop: true },
   { key: 'pause', path: 'assets/audio/menu_pause.wav' },
@@ -15,6 +17,7 @@ export const SOUND_MANIFEST = [
   { key: 'luigi_fall', path: 'assets/audio/luigi_fall.wav' },
 ];
 
+// Preloads every entry of SOUND_MANIFEST into the given AudioManager.
 export function initGameAudio(audioManager) {
   SOUND_MANIFEST.forEach(({ key, path, loop }) => {
     audioManager.load(key, path, loop || false);

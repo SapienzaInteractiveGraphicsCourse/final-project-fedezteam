@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
+import { enableShadows } from "../utils/shadows.js";
 
 export default class Yoshi {
   constructor(mesh = null, physicsEngine = null) {
@@ -7,27 +8,16 @@ export default class Yoshi {
     this.physicsEngine = physicsEngine;
     this.isRidden = false;
     this.body = null;
-    this.radius = 1; // Raggio della sfera fisica di collisione[cite: 1]
+    this.radius = 1; // Radius of the spherical collision body.
 
     if (this.mesh) {
-      this._setupShadows();
+      enableShadows(this.mesh);
     }
-  }
-
-  // Attiva ombre su tutte le sotto-mesh del GLTF (YoshiGLTF/yoshi.gltf)
-  _setupShadows() {
-    if (!this.mesh) return;
-    this.mesh.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
   }
 
   setMesh(mesh) {
     this.mesh = mesh;
-    this._setupShadows();
+    enableShadows(this.mesh);
   }
 
   spawn(x, y, z) {
@@ -36,12 +26,12 @@ export default class Yoshi {
     this.mesh.position.set(x, y, z);
     this.mesh.rotation.y = 0;
 
-    // Creazione corpo fisico Cannon.js
+    // Create the cannon-es physics body.
     if (this.physicsEngine && this.physicsEngine.world) {
       const shape = new CANNON.Sphere(this.radius);
-      
-      // Il centro della sfera fisica viene alzato di 'radius'
-      // in modo che l'origine y=0 ai piedi del modello GLTF tocchi il terreno
+
+      // The physics sphere's center is raised by 'radius' so the origin at
+      // y = 0 in the GLTF model (the feet) touches the ground.
       this.body = new CANNON.Body({
         mass: 10,
         position: new CANNON.Vec3(x, y + this.radius, z),
@@ -60,20 +50,21 @@ export default class Yoshi {
     const player = playerRef || (inputOrPlayer && inputOrPlayer.mesh ? inputOrPlayer : null);
 
     if (this.isRidden && player) {
-      // Se cavalcato, attacca Yoshi al giocatore
+      // While being ridden, Yoshi is attached directly to the player.
       this.mesh.position.copy(player.position);
       if (this.body) {
         this.body.position.set(
           player.position.x,
-          player.position.y + this.radius, // Piccolo offset per evitare che il modello affondi nel terreno
+          player.position.y + this.radius, // Small offset to avoid sinking into the ground.
           player.position.z
         );
       }
     } else if (this.body) {
-      // Sincronizzazione: sottrae il raggio per mantenere i piedi del GLTF a contatto con il pavimento
+      // Sync the mesh to the physics body, subtracting the radius so the
+      // GLTF model's feet stay in contact with the floor.
       this.mesh.position.set(
         this.body.position.x,
-        this.body.position.y - this.radius, // Piccolo offset per evitare che il modello affondi nel terreno
+        this.body.position.y - this.radius,
         this.body.position.z
       );
     }

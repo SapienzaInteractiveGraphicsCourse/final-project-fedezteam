@@ -1,13 +1,14 @@
-import RendererManager from "./core/Renderer.js";
-import AssetLoader from "./core/AssetLoad/AssetLoader.js";
-import { initGameModels } from "./core/AssetLoad/assetConfig.js";
+import RendererManager from "./core/Render/Renderer.js";
+import CameraManager from "./core/Render/CameraManager.js";
+import AssetLoader from "./core/Assets/AssetLoader.js";
+import { initGameModels } from "./core/Assets/assetConfig.js";
 import GameLoop from "./core/GameLoop.js";
 import InputManager from "./core/InputManager.js";
 import UIManager from "./ui/UIManager.js";
 import PhysicsEngine from "./physics/PhysicsEngine.js";
 import AudioManager from "./core/Audio/AudioManager.js";
-import CameraManager from "./core/CameraManager.js";
 import { initGameAudio } from "./core/Audio/soundConfig.js";
+import { getStoredMuteState } from "./utils/storage.js";
 import Yoshi from "./entities/Yoshi.js";
 import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
@@ -19,6 +20,7 @@ import BoneMap from "./entities/animation/BoneMap.js";
 import AnimationController from "./entities/animation/AnimationController.js";
 import { POSE, characterBasis } from "./entities/animation/clipFactory.js";
 
+import Stats from "three/addons/libs/stats.module.js";
 // 1. CORE MODULES
 
 const renderer = new RendererManager("#webgl-canvas");
@@ -30,6 +32,8 @@ const physics = new PhysicsEngine({
   gravity: -35,
   fallThreshold: -50,
 });
+
+
 
 // Wireframe dei collider fisici. SPENTO di default: si accende con F3 oppure
 // da console con toggleColliders(). Utile quando si tarano le hitbox delle case,
@@ -399,8 +403,7 @@ initGameAudio(audio);
 ui.setAudio(audio);
 
 // Restore the mute state saved from a previous session, if any.
-const initialMuteState = localStorage.getItem("game_is_muted") === "true";
-audio.setMute(initialMuteState);
+audio.setMute(getStoredMuteState());
 
 // 2. STATE VARIABLES
 
@@ -502,7 +505,6 @@ function updateGame(delta) {
 
   entityManager.update(delta, input, ui, audio, renderer.camera);
   cameraManager.update(entityManager.player, input, delta);
-
   if (showColliders) cannonDebugger.update();
 }
 

@@ -3,18 +3,18 @@ export default class AudioManager {
     this.sounds = {};
     this.bgm = null;
     this.isMuted = false;
-    this.currentCharacter = "mario"; // Default
+    this.currentCharacter = "mario"; // Default character.
     this.jumpToggle = false;
 
-    this.hasStarted = false; 
+    this.hasStarted = false;
 
-    // Volumi predefiniti (da 0 a 1)
+    // Default volumes (0 to 1).
     this.bgmVolume = 0.35;
     this.sfxVolume = 0.6;
   }
 
   /**
-   * Regola il volume della Musica (0 - 1)
+   * Sets the background music volume (0 - 1).
    */
   setBGMVolume(volume) {
     this.bgmVolume = volume;
@@ -24,7 +24,7 @@ export default class AudioManager {
   }
 
   /**
-   * Regola il volume degli Effetti Sonori (0 - 1)
+   * Sets the sound effects volume (0 - 1).
    */
   setSFXVolume(volume) {
     this.sfxVolume = volume;
@@ -36,7 +36,8 @@ export default class AudioManager {
   }
 
   /**
-   * Imposta il personaggio attivo ('mario' o 'luigi')
+   * Sets the active character ('mario' or 'luigi'), used to resolve
+   * character-specific sound effects.
    */
   setCharacter(character) {
     if (character) {
@@ -45,7 +46,7 @@ export default class AudioManager {
   }
 
   /**
-   * Precarica un file audio
+   * Preloads an audio file under the given name.
    */
   load(name, src, isBGM = false) {
     const audio = new Audio(src);
@@ -64,14 +65,14 @@ export default class AudioManager {
   playBGM() {
     if (!this.bgm) return;
 
-    // 🟢 Il gioco è ufficialmente iniziato
+    // The game session has officially started.
     this.hasStarted = true;
-    
+
     this.bgm.muted = this.isMuted;
 
-    // Avvia la riproduzione solo se non è già attiva
+    // Only start playback if it isn't already playing.
     if (this.bgm.paused) {
-      this.bgm.play().catch((err) => console.warn("Errore avvio audio:", err));
+      this.bgm.play().catch((err) => console.warn("Error starting audio playback:", err));
     }
   }
 
@@ -79,13 +80,13 @@ export default class AudioManager {
     if (this.bgm) {
       this.bgm.pause();
       this.bgm.currentTime = 0;
-      // Resettiamo lo stato se torniamo al menu principale
+      // Reset the "started" flag when returning to the main menu.
       this.hasStarted = false;
     }
   }
 
   /**
-   * Riproduce l'effetto sonoro.
+   * Plays a sound effect by name.
    */
   playSFX(name) {
     if (this.isMuted || this.sfxVolume === 0) return;
@@ -94,10 +95,12 @@ export default class AudioManager {
     if (this.sounds[name]) {
       soundKey = name;
     } else if (name === "jump") {
+      // Alternate between two jump sound variants for a less repetitive feel.
       const suffix = this.jumpToggle ? "2" : "1";
       this.jumpToggle = !this.jumpToggle;
       soundKey = `${this.currentCharacter}_jump${suffix}`;
     } else {
+      // Fall back to a character-specific variant, e.g. "mario_fall".
       const charSpecificName = `${this.currentCharacter}_${name}`;
       if (this.sounds[charSpecificName]) {
         soundKey = charSpecificName;
@@ -106,6 +109,8 @@ export default class AudioManager {
 
     if (!this.sounds[soundKey]) return;
 
+    // Clone the audio element so overlapping plays of the same effect don't
+    // cut each other off.
     const soundClone = this.sounds[soundKey].cloneNode();
     soundClone.volume = this.sounds[soundKey].volume;
     soundClone.play().catch(() => {});
@@ -116,17 +121,19 @@ export default class AudioManager {
 
     if (this.bgm) {
       this.bgm.muted = isMuted;
-      
-      // 🟢 FIX: Falla partire in automatico SOLO SE non è mutata, era in pausa e,
-      // soprattutto, SOLO SE il giocatore ha già premuto "Start" (hasStarted)
+
+      // Resume playback automatically only if: the game is being unmuted,
+      // the track was paused, and the player has already pressed "Start"
+      // at least once (hasStarted) - otherwise this would break the
+      // "audio starts on the first user gesture" requirement.
       if (!isMuted && this.hasStarted && this.bgm.paused) {
         this.bgm
           .play()
-          .catch((err) => console.warn("Autoplay bloccato dal browser:", err));
+          .catch((err) => console.warn("Autoplay blocked by the browser:", err));
       }
     }
 
-    // Muta tutti gli effetti sonori
+    // Mute every sound effect as well.
     for (const key in this.sounds) {
       if (this.sounds[key]) {
         this.sounds[key].muted = isMuted;
