@@ -14,6 +14,11 @@ import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
 import * as THREE from "three";
 import CannonDebugger from "https://cdn.jsdelivr.net/npm/cannon-es-debugger@1.0.0/+esm";
+import Stats from "three/addons/libs/stats.module.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import BoneMap from "./entities/animation/BoneMap.js";
+import AnimationController from "./entities/animation/AnimationController.js";
+import { POSE, characterBasis } from "./entities/animation/clipFactory.js";
 
 import Stats from "three/addons/libs/stats.module.js";
 // 1. CORE MODULES
@@ -65,6 +70,301 @@ window.addEventListener("keydown", (e) => {
     toggleColliders();
   }
 });
+
+// --- BANCO DI PROVA DELLE ANIMAZIONI -------------------------------------
+// Carica un modello qualsiasi accanto al giocatore, ne analizza lo scheletro e
+// gli fa suonare una delle nostre clip. Serve a verificare un rig PRIMA di
+// collegarlo al personaggio vero. Da console:
+//
+//    testRig("assets/models/Super_Mario/Enemies/bowser_jr.glb")
+//    testRig("assets/models/Super_Mario/Main_Characters/mario_rigged.glb", "run")
+//
+// Poi si tara a occhio senza ricaricare la pagina:
+//    POSE.armRest = 60; rebuildRigs()
+const testRigs = [];
+
+window.POSE = POSE;
+
+window.testRig = async function (path, state = "walk", scaleTo = 2.2) {
+  try {
+    const gltf = await new GLTFLoader().loadAsync(path);
+    const model = gltf.scene;
+
+    const boneMap = new BoneMap(model);
+    const usable = boneMap.describe(path.split("/").pop());
+    if (!usable) return null;
+
+    // Normalizza l'altezza: i modelli hanno scale native molto diverse fra loro.
+    const box = new THREE.Box3().setFromObject(model);
+    const height = box.max.y - box.min.y || 1;
+    const s = scaleTo / height;
+    model.scale.setScalar(s);
+
+    // Posizionamento RELATIVO ALLA TELECAMERA, non in coordinate mondo: un
+    // offset fisso su X finiva dentro la casa di Mario a seconda di dove ti
+    // trovavi. Così il modello compare sempre di fianco a te nell'inquadratura.
+    const p = entityManager.player
+      ? entityManager.player.position
+      : new THREE.Vector3(0, 0, 0);
+
+    const camRight = new THREE.Vector3().setFromMatrixColumn(
+      renderer.camera.matrixWorld,
+      0,
+    );
+    camRight.y = 0;
+    if (camRight.lengthSq() < 1e-6) camRight.set(1, 0, 0);
+    camRight.normalize();
+
+    model.position.set(
+      p.x + camRight.x * 3.5,
+      p.y,
+      p.z + camRight.z * 3.5,
+    );
+
+    model.traverse((c) => {
+      if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+    });
+    renderer.scene.add(model);
+
+    const controller = new AnimationController(model);
+    controller.play(state, 0);
+
+    // --- DIAGNOSTICA VISIVA ---
+    // Scheletro: mostra dove sono davvero le ossa e come si muovono.
+    const skeleton = new THREE.SkeletonHelper(model);
+    skeleton.visible = false;
+    renderer.scene.add(skeleton);
+
+    // Terna del personaggio, disegnata all'altezza del bacino:
+    //   ROSSO = avanti   VERDE = su   BLU = sinistra
+    const axes = new THREE.Group();
+    axes.visible = false;
+    try {
+      const basis = characterBasis(controller.boneMap);
+      const origin = boneMap0(controller).getWorldPosition(new THREE.Vector3());
+      const L = 1.4;
+      const arrow = (dir, color) =>
+        new THREE.ArrowHelper(dir.clone().normalize(), origin, L, color, 0.3, 0.18);
+      axes.add(arrow(basis.forward, 0xff2222)); // avanti
+      axes.add(arrow(basis.up, 0x22ff22));      // su
+      axes.add(arrow(basis.left, 0x2222ff));    // sinistra
+      console.log(
+        "[testRig] terna — avanti(rosso)=%o  su(verde)=%o  sinistra(blu)=%o",
+        basis.forward.toArray().map((v) => +v.toFixed(3)),
+        basis.up.toArray().map((v) => +v.toFixed(3)),
+        basis.left.toArray().map((v) => +v.toFixed(3)),
+      );
+    } catch (e) {
+      console.warn("[testRig] impossibile disegnare la terna:", e);
+    }
+    renderer.scene.add(axes);
+
+    const handle = { model, controller, state, path, skeleton, axes };
+    testRigs.push(handle);
+
+    console.log(`[testRig] "${path}" caricato, stato "${state}". ` +
+      `Cambia con testRigs[0].controller.play("run").`);
+    return handle;
+  } catch (e) {
+    console.error(`[testRig] impossibile caricare ${path}:`, e);
+    return null;
+  }
+};
+
+window.testRigs = testRigs;
+
+function boneMap0(controller) {
+  return controller.boneMap.get("hips");
+}
+
+// Ispeziona le TRACCE della clip corrente: per ognuna dice se il nodo bersaglio
+// esiste davvero nel modello e di quanti gradi il primo fotogramma si discosta
+// dalla posa di riposo. Una traccia che sposta di ~0° non fa nulla.
+window.clipReport = function (stateName) {
+  const r = testRigs[0];
+  if (!r) return console.warn("[clipReport] nessun rig caricato.");
+
+  const name = stateName || r.controller.current || "walk";
+  const action = r.controller.actions[name];
+  if (!action) return console.warn(`[clipReport] stato "${name}" inesistente.`);
+
+  const clip = action.getClip();
+  const bind = new Map();
+  for (const st of r.controller._bindPose || []) bind.set(st.bone.name, st.quaternion);
+
+  console.group(`[clipReport] clip "${clip.name}" — ${clip.tracks.length} tracce, durata ${clip.duration}s`);
+
+  for (const tr of clip.tracks) {
+    const nodeName = tr.name.split(".")[0];
+    const prop = tr.name.split(".")[1];
+    const node = THREE.PropertyBinding.findNode(r.model, nodeName);
+
+    if (!node) {
+      console.log(`  ❌ %c${tr.name}%c → NODO NON TROVATO`, "color:#e52521;font-weight:bold", "");
+      continue;
+    }
+    if (prop !== "quaternion") {
+      console.log(`  •  ${tr.name} (${tr.times.length} chiavi)`);
+      continue;
+    }
+
+    const b = bind.get(nodeName);
+    let maxDeg = 0;
+    const q = new THREE.Quaternion();
+    for (let k = 0; k < tr.times.length; k++) {
+      q.fromArray(tr.values, k * 4);
+      if (b) maxDeg = Math.max(maxDeg, THREE.MathUtils.radToDeg(q.angleTo(b)));
+    }
+    const dead = maxDeg < 1;
+    console.log(
+      `  ${dead ? "⚠️" : "✅"} %c${nodeName}%c sposta al massimo di %c${maxDeg.toFixed(1)}°%c ` +
+        `(${tr.times.length} chiavi)${dead ? "  ← NON FA NULLA" : ""}`,
+      "color:#2196f3", "", dead ? "color:#e52521;font-weight:bold" : "color:#43b047;font-weight:bold", "",
+    );
+  }
+  console.groupEnd();
+};
+
+// Misura DOVE SONO davvero le braccia nel fotogramma corrente, invece di
+// giudicarle a occhio. Stampa tutto in "unità braccio" così i numeri sono
+// confrontabili con le misure fatte sul file del modello.
+window.armReport = function () {
+  const r = testRigs[0];
+  if (!r) return console.warn("[armReport] nessun rig di prova caricato.");
+
+  const bm = r.controller.boneMap;
+  const basis = characterBasis(bm);
+  const wp = (role) => bm.get(role).getWorldPosition(new THREE.Vector3());
+
+  r.model.updateMatrixWorld(true);
+
+  const hips = wp("hips");
+  const comp = (p) => ({
+    lat: p.clone().sub(hips).dot(basis.left),
+    alt: p.clone().sub(hips).dot(basis.up),
+    avz: p.clone().sub(hips).dot(basis.forward),
+  });
+
+  console.group(`[armReport] stato "${r.controller.current}"  armSpread=${POSE.armSpread}°`);
+
+  for (const side of ["L", "R"]) {
+    const sh = wp("upperArm" + side);
+    const hand = wp("hand" + side);
+    const armVec = hand.clone().sub(sh);
+    const armLen = armVec.length();
+
+    // angolo fra il braccio e la verticale verso il basso
+    const down = basis.up.clone().negate();
+    const fromDown = THREE.MathUtils.radToDeg(armVec.clone().normalize().angleTo(down));
+    // quanto il braccio è aperto lateralmente (positivo = verso il suo esterno)
+    const outward = armVec.clone().normalize().dot(basis.left) * (side === "L" ? 1 : -1);
+
+    const c = comp(hand);
+    console.log(
+      `  ${side}: angolo dalla verticale = ${fromDown.toFixed(1)}°  ` +
+        `apertura laterale = ${(outward * 100).toFixed(0)}%
+` +
+        `     mano → laterale ${(c.lat / armLen).toFixed(2)}  ` +
+        `altezza ${(c.alt / armLen).toFixed(2)}  avanti ${(c.avz / armLen).toFixed(2)}  ` +
+        `(in unità braccio, braccio=${armLen.toFixed(3)})`,
+    );
+  }
+
+  // Larghezza reale del corpo, misurata dalla mesh esclusi braccia e testa.
+  let halfWidth = 0;
+  r.model.traverse((n) => {
+    if (!n.isMesh || !n.geometry?.attributes?.position) return;
+    const pos = n.geometry.attributes.position;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i += 7) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(n.matrixWorld);
+      const rel = v.clone().sub(hips);
+      const alt = rel.dot(basis.up);
+      if (alt > -0.1 && alt < 0.45) {
+        halfWidth = Math.max(halfWidth, Math.abs(rel.dot(basis.left)));
+      }
+    }
+  });
+  console.log(`  semi-larghezza corpo (braccia incluse) = ${halfWidth.toFixed(3)}`);
+  console.groupEnd();
+};
+
+// Mostra/nasconde scheletro e assi del rig di prova.
+window.showBones = function (on = true) {
+  for (const r of testRigs) {
+    if (r.skeleton) r.skeleton.visible = on;
+    if (r.axes) r.axes.visible = on;
+  }
+  console.log(`[testRig] scheletro e assi ${on ? "VISIBILI" : "nascosti"}`);
+};
+
+// Sposta il rig di prova se è finito dentro a qualcosa.
+//   moveRig(0, 0, -5)  → spostamento relativo
+//   moveRig(-20, 2, 30, true) → posizione assoluta
+window.moveRig = function (x = 0, y = 0, z = 0, absolute = false) {
+  for (const r of testRigs) {
+    if (absolute) r.model.position.set(x, y, z);
+    else r.model.position.add(new THREE.Vector3(x, y, z));
+    console.log("[testRig] posizione:", r.model.position.toArray().map((v) => +v.toFixed(2)));
+  }
+};
+
+// Riporta il rig accanto al giocatore, di fianco rispetto alla telecamera.
+window.rigToPlayer = function () {
+  if (!entityManager.player) return;
+  const p = entityManager.player.position;
+  const camRight = new THREE.Vector3().setFromMatrixColumn(renderer.camera.matrixWorld, 0);
+  camRight.y = 0;
+  camRight.normalize();
+  for (const r of testRigs) {
+    r.model.position.set(p.x + camRight.x * 3.5, p.y, p.z + camRight.z * 3.5);
+  }
+};
+
+// Rigenera le clip dopo aver modificato POSE, senza ricaricare la pagina.
+window.rebuildRigs = function () {
+  for (const r of testRigs) {
+    r.controller.rebuild();
+    r.controller.play(r.state, 0);
+  }
+  console.log(`[testRig] ${testRigs.length} rig rigenerati con POSE`, { ...POSE });
+};
+
+// Se l'indirizzo contiene ?rig, il banco di prova parte da solo appena il
+// gioco è pronto. Serve solo durante lo sviluppo delle animazioni: senza il
+// parametro il gioco si comporta esattamente come prima.
+//   http://127.0.0.1:5500/?rig            → mario_rigged, stato "walk"
+//   http://127.0.0.1:5500/?rig=run        → stato "run"
+//   http://127.0.0.1:5500/?rig=walk&model=assets/.../bowser_jr.glb
+const rigParams = new URLSearchParams(window.location.search);
+const autoRig = rigParams.has("rig")
+  ? {
+      state: rigParams.get("rig") || "walk",
+      model:
+        rigParams.get("model") ||
+        "assets/models/Super_Mario/Main_Characters/mario_rigged.glb",
+    }
+  : null;
+
+// Elenco dei comandi di sviluppo, stampato all'avvio: se NON vedi questo
+// banner in console, il browser sta servendo una versione vecchia di main.js.
+console.log(
+  "%c🎮 COMANDI DI SVILUPPO",
+  "background:#e52521;color:#fff;font-weight:bold;padding:3px 8px;border-radius:3px",
+);
+console.log(
+  "  testRig(percorso)      carica un modello e lo fa animare accanto a te\n" +
+    '  testRig("assets/models/Super_Mario/Main_Characters/mario_rigged.glb")\n' +
+    "  testRigs[0].controller.play(\"run\")   cambia stato: idle|walk|run|jump|fall\n" +
+    "  POSE.walkLegSwing = 30; rebuildRigs()  ritara le ampiezze a caldo\n" +
+    "     (armSpread, walkArmSwing, walkKneeBend, runLean, ...)\n" +
+    "  clipReport()           quanto ogni traccia sposta l'osso rispetto al bind\n" +
+    "  armReport()            misura dove sono le braccia (numeri, non occhio)\n" +
+    "  showBones()            mostra scheletro + assi (rosso=avanti, verde=su, blu=sinistra)\n" +
+    "  moveRig(0,0,-5) / rigToPlayer()      sposta il modello di prova\n" +
+    "  toggleColliders()      wireframe delle collisioni (anche F3)\n" +
+    "  toggleStats()          contatore FPS (anche F4)",
+);
 
 // Contatore prestazioni. Spento di default, si accende con F4.
 // Cliccando sul riquadro si cicla tra FPS / MS per frame / memoria.
@@ -160,12 +460,33 @@ ui.onGameStart(({ character }) => {
     // Fallback spawn point if the level didn't define one.
     entityManager.spawnPlayer(rawModels[character], 0, 1, 0, character);
   }
+
+  // Il banco di prova parte SOLO ORA: prima il giocatore non esisteva e la
+  // telecamera era ancora quella che orbita nel menu, quindi il modello finiva
+  // all'origine — cioè dentro la casa di Mario. Il piccolo ritardo lascia a
+  // CameraManager qualche frame per portarsi dietro al giocatore, così
+  // l'offset "destra della camera" è quello giusto.
+  if (autoRig) {
+    setTimeout(() => {
+      console.log(
+        `%c[testRig] avvio automatico (?rig) — ${autoRig.model}`,
+        "color:#43b047;font-weight:bold",
+      );
+      window.testRig(autoRig.model, autoRig.state);
+    }, 250);
+  }
 });
 
 // 4. GAME LOOP
 
 function updateGame(delta) {
-   if (showStats) stats.update();
+  // Prima di ogni return anticipato: updateGame viene chiamata a ogni frame,
+  // quindi il contatore resta corretto anche nei menu e in pausa.
+  if (showStats) stats.update();
+
+  // I rig di prova si animano sempre, anche a gioco fermo.
+  for (const r of testRigs) r.controller.update(delta, null);
+
   // While on a menu screen, only orbit the camera around the scene; nothing
   // else updates (physics, player, entities all stay frozen).
   if (ui.gameState === "MENU_WELCOME" || ui.gameState === "MENU_NAME") {
@@ -235,6 +556,7 @@ initGameModels(assetLoader)
 
     const gameLoop = new GameLoop(renderer, updateGame);
     gameLoop.start();
+
   })
   .catch((error) => {
     console.error("Error while loading assets:", error);
