@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { enableShadows } from "../utils/shadows.js";
+import AnimationController from "./animation/AnimationController.js";
 
 export default class Player {
   // A 'stats' object is used instead of fixed constants so EntityManager can
@@ -21,6 +22,24 @@ export default class Player {
     this.radius = 1;
 
     enableShadows(this.mesh);
+
+    // Animazioni procedurali. Se il modello non ha uno scheletro riconoscibile
+    // (BoneMap.isUsable === false) il controller resta inerte: il personaggio
+    // si muove esattamente come prima, solo senza ciclo di passi.
+    this.animation = new AnimationController(this.mesh);
+  }
+
+  /**
+   * Da chiamare quando il giocatore viene sostituito: ferma il mixer e
+   * rimette lo scheletro in posa di riposo. Il modello è condiviso (viene da
+   * AssetLoader), quindi lasciarlo in una posa animata sporcherebbe lo
+   * spawn successivo.
+   */
+  disposeAnimation() {
+    if (!this.animation) return;
+    this.animation.restoreBindPose();
+    this.animation.dispose();
+    this.animation = null;
   }
 
   spawn(x, y, z) {
@@ -148,6 +167,25 @@ export default class Player {
       this.body.position.y - this.radius,
       this.body.position.z,
     );
+
+    // Lo stato dell'animazione si DEDUCE dal moto già calcolato sopra: il
+    // controller non tocca né la velocità né i comandi, quindi il modo in cui
+    // si guida il personaggio resta identico.
+    if (this.animation) {
+      const v = this.body.velocity;
+
+      // canJump da solo non basta come "a terra": resta vero anche quando si
+      // cammina oltre il bordo di una piattaforma, perché non arriva nessuna
+      // collisione nuova a smentirlo. La velocità verticale distingue il
+      // caso: chi sta cadendo scende.
+      const grounded = this.canJump && v.y > -2;
+
+      this.animation.update(delta, {
+        speed: Math.hypot(v.x, v.z),
+        verticalVelocity: v.y,
+        grounded,
+      });
+    }
   }
 
   get position() {

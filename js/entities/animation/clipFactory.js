@@ -31,6 +31,23 @@ export const POSE = {
   runKneeBend: 65,
   runLean: 12, // inclinazione del busto in avanti
   runHipsBob: 0.07,
+
+  // Salto "alla Super Mario": un braccio in alto, l'altro piegato in basso,
+  // ginocchio anteriore raccolto e gamba posteriore distesa all'indietro.
+  // I due lati sono OPPOSTI di proposito (braccio destro su, ginocchio
+  // sinistro su): è l'incrocio che dà alla posa il suo slancio.
+  jumpArmUp: 154, // braccio alzato; 180 sarebbe perfettamente verticale
+  jumpArmUpSpread: 34, // quanto lo si apre di lato: serve a scavalcare la testa
+  jumpArmDown: 8, // braccio basso, appena in avanti
+  jumpArmDownSpread: 10,
+  jumpElbowUp: 8, // il braccio alzato resta quasi dritto
+  jumpElbowDown: 85, // l'altro gomito invece è ben piegato
+  jumpFrontThigh: 72, // ginocchio che sale davanti
+  jumpFrontKnee: 100,
+  jumpBackThigh: -36, // gamba che resta indietro, quasi distesa
+  jumpBackKnee: 18,
+  jumpLean: -3, // busto appena indietro, petto in fuori
+  jumpTwist: 12 // il busto si torce dalla parte del braccio alzato
 };
 
 // Da quale osso "pende" ciascun arto: serve a sapere in che direzione punta.
@@ -366,20 +383,79 @@ function buildGait(bm, basis, name, duration, cfg) {
 }
 
 function buildJump(bm, basis) {
-  const t = [0, 0.18, 0.45];
+  // Tre istanti: stacco, posa piena, tenuta. L'azione è LoopOnce con
+  // clampWhenFinished (vedi AnimationController), quindi il TERZO fotogramma è
+  // quello che si vede per quasi tutto il volo: deve essere la posa buona, non
+  // un ritorno alla neutralità.
+  const t = [0, 0.16, 0.42];
   const S = POSE.armSpread;
+  const P = POSE;
+
+  // Angolo della caviglia: è una cerniera RELATIVA allo stinco, quindi per
+  // tenere la pianta in un'inclinazione sensata va scontato quanto hanno già
+  // ruotato coscia e ginocchio (stessa contabilità della camminata).
+  const ankle = (thigh, knee) => thigh - knee;
+
   const tracks = [
-    // Ginocchia raccolte.
-    limbTrack(bm, "thighL", t, [limbDir(basis, 0, 3, "L"), limbDir(basis, 42, 3, "L"), limbDir(basis, 24, 3, "L")]),
-    limbTrack(bm, "thighR", t, [limbDir(basis, 0, 3, "R"), limbDir(basis, 38, 3, "R"), limbDir(basis, 20, 3, "R")]),
-    hingeTrack(bm, "shinL", t, [0, 80, 55], basis.left),
-    hingeTrack(bm, "shinR", t, [0, 75, 50], basis.left),
-    // Braccia in alto: oltre i 90° in avanti superano l'orizzontale.
-    limbTrack(bm, "upperArmL", t, [limbDir(basis, 0, S, "L"), limbDir(basis, 150, S + 10, "L"), limbDir(basis, 130, S + 8, "L")]),
-    limbTrack(bm, "upperArmR", t, [limbDir(basis, 0, S, "R"), limbDir(basis, 150, S + 10, "R"), limbDir(basis, 130, S + 8, "R")]),
-    torsoTrack(bm, "spine", t, [0, 8, 4], [0, 0, 0], basis),
+    // ---- GAMBE: sinistra raccolta davanti, destra distesa indietro --------
+    limbTrack(bm, "thighL", t, [
+      limbDir(basis, 0, 3, "L"),
+      limbDir(basis, P.jumpFrontThigh, 6, "L"),
+      limbDir(basis, P.jumpFrontThigh - 5, 6, "L"),
+    ]),
+    limbTrack(bm, "thighR", t, [
+      limbDir(basis, 0, 3, "R"),
+      limbDir(basis, P.jumpBackThigh, 4, "R"),
+      limbDir(basis, P.jumpBackThigh + 3, 4, "R"),
+    ]),
+    hingeTrack(bm, "shinL", t, [0, P.jumpFrontKnee, P.jumpFrontKnee - 6], basis.left),
+    hingeTrack(bm, "shinR", t, [0, P.jumpBackKnee, P.jumpBackKnee - 4], basis.left),
+
+    // Punte in giù: è la rifinitura che fa leggere il salto come uno slancio
+    // invece che come una caduta.
+    hingeTrack(
+      bm, "footL", t,
+      [0, ankle(P.jumpFrontThigh, P.jumpFrontKnee), ankle(P.jumpFrontThigh - 5, P.jumpFrontKnee - 6)],
+      basis.left,
+    ),
+    hingeTrack(
+      bm, "footR", t,
+      [0, ankle(P.jumpBackThigh, P.jumpBackKnee), ankle(P.jumpBackThigh + 3, P.jumpBackKnee - 4)],
+      basis.left,
+    ),
+
+    // ---- BRACCIA: la destra al cielo, la sinistra piegata in basso --------
+    // ATTENZIONE AL SEGNO DELL'APERTURA. In limbDir "spread positivo = verso
+    // l'esterno" vale per un arto che punta in GIÙ; oltre l'orizzontale la
+    // convenzione si ribalta e lo stesso segno porterebbe il braccio DENTRO la
+    // testa (che su Mario è enorme: senza apertura la mano finisce sull'occhio).
+    // Per questo il braccio alzato usa l'apertura cambiata di segno.
+    limbTrack(bm, "upperArmR", t, [
+      limbDir(basis, 0, S, "R"),
+      limbDir(basis, P.jumpArmUp, -P.jumpArmUpSpread, "R"),
+      limbDir(basis, P.jumpArmUp - 4, -(P.jumpArmUpSpread + 2), "R"),
+    ]),
+    limbTrack(bm, "upperArmL", t, [
+      limbDir(basis, 0, S, "L"),
+      limbDir(basis, P.jumpArmDown, P.jumpArmDownSpread, "L"),
+      limbDir(basis, P.jumpArmDown + 3, P.jumpArmDownSpread, "L"),
+    ]),
+
+    // Gomiti: quello alzato quasi dritto, quello basso ripiegato in avanti
+    // (segno negativo = in avanti, come nella camminata).
+    hingeTrack(bm, "foreArmR", t, [-14, -P.jumpElbowUp, -P.jumpElbowUp], basis.left),
+    hingeTrack(bm, "foreArmL", t, [-14, -P.jumpElbowDown, -P.jumpElbowDown + 5], basis.left),
+
+    // ---- BUSTO: si allunga verso l'alto e si torce dalla parte del braccio -
+    torsoTrack(
+      bm, "spine", t,
+      [0, P.jumpLean, P.jumpLean - 2],
+      [0, P.jumpTwist, P.jumpTwist],
+      basis,
+    ),
   ];
-  return new THREE.AnimationClip("jump", 0.45, tracks.filter(Boolean));
+
+  return new THREE.AnimationClip("jump", 0.42, tracks.filter(Boolean));
 }
 
 function buildFall(bm, basis) {

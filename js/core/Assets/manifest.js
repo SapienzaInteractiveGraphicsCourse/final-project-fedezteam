@@ -15,7 +15,7 @@
 const MODELS_ROOT = "assets/models/Super_Mario";
 
 export const CHARACTER_MODELS = {
-  mario: `${MODELS_ROOT}/Main_Characters/MarioGLTF/mario.gltf`,
+  mario: `${MODELS_ROOT}/Main_Characters/mario_ok_fixed.glb`,
   luigi: `${MODELS_ROOT}/Main_Characters/LuigiGLTF/Luigi.gltf`,
   yoshi: `${MODELS_ROOT}/Main_Characters/YoshiGLTF/yoshi.gltf`,
 };
