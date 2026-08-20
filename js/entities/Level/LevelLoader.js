@@ -5,6 +5,7 @@ import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import BuildingFactory from "../Buildings/BuildingFactory.js";
 import { BUILDING_MODEL_DIR, NPC_MODEL_DIR, MAP_MODELS, TEXTURES } from "../../core/Assets/manifest.js";
 import { enableShadows } from "../../utils/shadows.js";
+import { normalizeMaterials } from "../../utils/materials.js";
 
 /**
  * Owns everything about the STATIC part of a level: parsing the level JSON,
@@ -56,6 +57,15 @@ export default class LevelLoader {
       const mat = new THREE.MeshStandardMaterial({
         map: grassTexture,
         roughness: 0.8,
+        // Slightly darken the base texture (it's the single biggest
+        // surface on screen, so full brightness here reads as the whole
+        // level being overexposed) and cap how strongly it reflects the
+        // scene's environment map, same cap used everywhere else via
+        // normalizeMaterials — this material is built directly rather
+        // than loaded from a GLTF, so it never went through that shared
+        // fix.
+        color: 0xcccccc,
+        envMapIntensity: 0.4,
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(plat.position.x, plat.position.y, plat.position.z);
@@ -121,6 +131,7 @@ export default class LevelLoader {
 
         const glb = await this.loader.loadAsync(glbPath);
         const mesh = glb.scene.clone();
+        normalizeMaterials(mesh);
 
         const structureInstance = BuildingFactory.create(
           b.type,
@@ -148,6 +159,7 @@ export default class LevelLoader {
         mesh.position.set(npc.x, npc.y, npc.z);
 
         enableShadows(mesh);
+        normalizeMaterials(mesh);
         this.scene.add(mesh);
       } catch (e) {
         console.warn(`[LevelLoader] Could not load NPC: ${npc.type}.glb`);

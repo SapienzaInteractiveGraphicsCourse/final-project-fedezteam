@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { TEXTURES } from "../Assets/manifest.js";
 
 export default class RendererManager {
@@ -41,14 +42,39 @@ export default class RendererManager {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.LinearToneMapping; // Preserves the original texture saturation.
-    this.renderer.toneMappingExposure = 1.5; // Increases overall scene brightness.
+    // Was 1.5, then 1.0 — still reading too bright, so now below the
+    // neutral three.js default. toneMappingExposure scales the ENTIRE
+    // rendered result, including the environment map below (every
+    // material in the scene receives IBL light from it), so this is the
+    // main global brightness lever.
+    this.renderer.toneMappingExposure = 0.85;
+
+    // Environment map (IBL) for PBR materials. Without this, any material
+    // with real metalness has nothing to reflect and renders almost black
+    // — only a tiny specular speck is visible instead of a shiny surface.
+    // This is exactly what was happening to the coin/star models: their
+    // glTF materials never set metallicFactor explicitly, and the glTF
+    // spec's default for that is 1.0 (fully metallic), so they came out
+    // fully metallic with zero environment to reflect. A model viewer
+    // always provides some kind of studio lighting/environment by default,
+    // which is why they looked fine there. RoomEnvironment is three.js'
+    // built-in generic "soft studio" environment made for exactly this
+    // case — no external HDRI file needed — and it improves every
+    // metallic/glossy material in the scene uniformly, not just the item
+    // models (see also the metalness/roughness clamp in
+    // utils/materials.js, a second, more direct safety net for this same
+    // issue).
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmremGenerator.dispose();
 
     // Directional light used for shadows and general illumination.
     this.dirLight = null;
 
-    // 4. Set up the scene: skybox, lights, and window resize handling.
+    // 4. Set up the scene: skybox, lights, fog, and window resize handling.
     this.setupSkybox();
     this.setupLights();
+    this.setupFog();
     this.setupResize();
   }
 
@@ -117,10 +143,17 @@ export default class RendererManager {
   }
 
   setupLights() {
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+    // Slightly warm tint instead of pure white, so the whole scene reads
+    // less flat/clinical without changing the exposure or shadow behavior.
+    // Was 0.9, then 0.65 — still too bright, lowered further.
+    const ambientLight = new THREE.AmbientLight(0xfff1de, 0.4);
     this.scene.add(ambientLight);
 
-    this.dirLight = new THREE.DirectionalLight(0xffffff, 1.3);
+    // Was 1.3 — this is the shadow-casting light, so it's kept higher than
+    // the ambient light to preserve shadow contrast/definition (lowering
+    // this doesn't reduce shadow MAP quality/resolution, just how strongly
+    // lit the sunlit side of things is).
+    this.dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
 
     this.dirLight.position.set(40, 60, 40);
     this.dirLight.target.position.set(0, 0, 0);
@@ -163,6 +196,18 @@ export default class RendererManager {
 
     this.dirLight.shadow.mapSize.width = SHADOW_RES;
     this.dirLight.shadow.mapSize.height = SHADOW_RES;
+  }
+
+  /**
+   * Adds soft distance fog so the island's edges fade into the sky instead
+   * of cutting off sharply, and the far background gains a sense of depth.
+   * Near/far are kept well outside normal gameplay range (the island itself
+   * is only ~60 units wide) so it never fogs anything the player is
+   * actually standing on or near.
+   */
+  setupFog() {
+    const fogColor = 0xcfe8ff;
+    this.scene.fog = new THREE.Fog(fogColor, 120, 550);
   }
 
   // Update the camera aspect ratio and renderer size whenever the window is resized.

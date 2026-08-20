@@ -6,10 +6,12 @@ export default class UIManager {
     this.nameScreen = document.getElementById("name-screen");
     this.hud = document.getElementById("hud");
     this.gameOverScreen = document.getElementById("game-over-screen");
+    this.winScreen = document.getElementById("win-screen");
 
     this.startBtn = document.getElementById("start-btn");
     this.continueBtn = document.getElementById("continue-btn");
     this.restartBtn = document.getElementById("restart-btn");
+    this.winRestartBtn = document.getElementById("win-restart-btn");
 
     this.heroNameInput = document.getElementById("hero-name-input");
     this.hudHeroName = document.getElementById("hud-hero-name");
@@ -117,6 +119,11 @@ export default class UIManager {
       this.restartBtn.addEventListener("click", () => this.returnToMainMenu());
     }
 
+    // Same button, shown on the Win screen instead.
+    if (this.winRestartBtn) {
+      this.winRestartBtn.addEventListener("click", () => this.returnToMainMenu());
+    }
+
     this.pauseBtn.addEventListener("click", () => this.toggleSettings());
     this.closeSettingsBtn.addEventListener("click", () => this.toggleSettings());
 
@@ -171,10 +178,37 @@ export default class UIManager {
     if (this.coinsCountEl) this.coinsCountEl.textContent = this.coins;
   }
 
-  addStar(amount = 1) {
+  addStar(amount = 1, audio = null) {
     this.stars += amount;
     if (this.starsCountEl)
       this.starsCountEl.textContent = `${this.stars}/${this.maxStars}`;
+
+    // Win condition: collecting maxStars ends the game — same
+    // stop-everything-and-show-an-overlay flow as showGameOver(), just for
+    // a win instead of a loss. Guarded on gameState so picking up further
+    // stars afterward (there are more than maxStars scattered around the
+    // level) can't re-trigger it.
+    if (this.stars >= this.maxStars && this.gameState === "PLAYING") {
+      this.showWin(audio);
+    }
+  }
+
+  // Shows the victory screen once the player reaches maxStars, stopping
+  // the background music — mirrors showGameOver()'s flow, just for a win.
+  showWin(audio = null) {
+    this.gameState = "WIN";
+
+    if (this.hud) this.hud.style.display = "none";
+    if (this.pauseBtn) this.pauseBtn.style.display = "none";
+    if (this.winScreen) this.winScreen.classList.remove("hidden");
+
+    const soundManager = audio || this.audio;
+    if (soundManager) {
+      try {
+        if (typeof soundManager.stopBGM === "function") soundManager.stopBGM();
+        else if (typeof soundManager.stop === "function") soundManager.stop("bgm");
+      } catch (e) {}
+    }
   }
 
   // Shows the Game Over screen, stops the background music and plays the
@@ -216,6 +250,7 @@ export default class UIManager {
 
     // Reset the UI screens.
     if (this.gameOverScreen) this.gameOverScreen.classList.add("hidden");
+    if (this.winScreen) this.winScreen.classList.add("hidden");
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "block";
 

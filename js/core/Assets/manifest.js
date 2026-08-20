@@ -7,6 +7,7 @@
  *  - CHARACTER_MODELS: playable characters and Yoshi.
  *  - ITEM_MODELS: collectible/interactive props (coins, stars, blocks, ...).
  *  - MAP_MODELS: static scenery props placed by GameLevel (trees, grass, ...).
+ *  - ENEMY_MODELS: enemies spawned via entities/enemies/ (Goomba, Kamek, ...).
  *  - BUILDING_MODEL_DIR / NPC_MODEL_DIR: base directories for models that
  *    are resolved dynamically from the level JSON's "type" field.
  *  - TEXTURES: standalone image textures (skybox, ground, decorative props).
@@ -35,6 +36,20 @@ export const MAP_MODELS = {
   // Every Toad House variant currently shares this same red model file
   // (see BuildingFactory / ToadHouse for the collision-side handling).
   toadHouseRed: `${MODELS_ROOT}/Map/toad_house_red.glb`,
+  // Used purely as a decorative "planet" floating in the sky (see
+  // Decorations.spawnYoshiEggPlanet), not as a gameplay prop.
+  yoshiEgg: `${MODELS_ROOT}/Map/yoshi_egg.glb`,
+  // Mario Galaxy-style "launch star", placed at the island's edges (see
+  // Decorations.spawnWarpStars). Currently a visual landmark only — no
+  // teleport/interaction logic is wired up yet.
+  starLaunch: `${MODELS_ROOT}/Map/star_launch.glb`,
+};
+
+export const ENEMY_MODELS = {
+  goomba: `${MODELS_ROOT}/Enemies/goomba.glb`,
+  // Boss scaffold (see entities/enemies/Kamek.js) — not spawned in any
+  // level yet, but preloaded here so it's ready when it is.
+  kamek: `${MODELS_ROOT}/Enemies/kamek.glb`,
 };
 
 // Buildings/hills resolve their .glb dynamically from the level JSON's
