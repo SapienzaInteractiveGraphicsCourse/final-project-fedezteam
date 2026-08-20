@@ -4,14 +4,16 @@ import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 /**
  * A small, self-contained bonus zone far from the main island: a short
  * chain of platforms with gaps between them, a couple of lava hazard
- * patches, and (spawned separately in main.js, see kamekSpawn) Kamek
- * waiting at the end. Loaded from its own JSON file
- * (assets/levels/kamek_zone.json), same "pure data" spirit as level1.json.
+ * patches, and (spawned separately in main.js, see bossSpawn) a boss
+ * waiting at the end. Generic — this same class loads both the Kamek zone
+ * (assets/levels/kamek_zone.json) and the Bowser zone
+ * (assets/levels/level3.json, wider platforms with bigger height gaps
+ * between them, see that file), same "pure data" spirit as level1.json.
  *
  * Reached via warp star teleport (see Decorations._updateWarpStars /
- * setKamekZoneEntry) rather than a real scene/level switch — it's just more
- * of the same physics world, placed somewhere far from the main island so
- * nobody wanders into it by accident.
+ * setKamekZoneEntry / setBowserZoneEntry) rather than a real scene/level
+ * switch — it's just more of the same physics world, placed somewhere far
+ * from the main island so nobody wanders into it by accident.
  *
  * Falling off a platform here is handled entirely by the existing
  * void-fall mechanic (EntityManager.update -> checkVoidFall): same
@@ -32,7 +34,7 @@ export default class ObstacleZone {
     this.physicsEngine = physicsEngine;
 
     this.entryPoint = null;
-    this.kamekSpawn = null;
+    this.bossSpawn = null;
     this.lavaBlocks = []; // { mesh, halfX, halfZ }
     this._lavaCooldown = 0;
   }
@@ -48,7 +50,10 @@ export default class ObstacleZone {
     }
 
     this.entryPoint = data.entryPoint || { x: 260, y: 9, z: 260 };
-    this.kamekSpawn = data.kamekSpawn || null;
+    // "bossSpawn" is the generic field name (used by level3.json); older
+    // zone files may still use "kamekSpawn" (kamek_zone.json) — accept
+    // either so that file doesn't need to be touched.
+    this.bossSpawn = data.bossSpawn || data.kamekSpawn || null;
 
     const world = this.physicsEngine?.world || this.physicsEngine;
 

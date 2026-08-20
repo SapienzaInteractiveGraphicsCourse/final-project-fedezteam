@@ -33,10 +33,10 @@ import GravityField from "../../physics/GravityField.js";
  *
  * Warp stars (see spawnWarpStars/_updateWarpStars) teleport the player on
  * contact to one of: the red planet, back to the level's spawn point, or
- * the entrance of the separate Kamek obstacle course (see
- * entities/Level/ObstacleZone.js, wired up from main.js) — see
- * setSpawnPoint/setKamekZoneEntry for how those last two destinations get
- * filled in.
+ * the entrance of one of the separate obstacle courses — Kamek's or
+ * Bowser's (see entities/Level/ObstacleZone.js, wired up from main.js) —
+ * see setSpawnPoint/setKamekZoneEntry/setBowserZoneEntry for how those
+ * destinations get filled in.
  */
 export default class Decorations {
   constructor(scene, physicsWorld, gltfLoader) {
@@ -47,11 +47,13 @@ export default class Decorations {
     this.satellites = [];
     this.ponds = [];
     this.warpStars = [];
-    // Filled in from outside (see setSpawnPoint/setKamekZoneEntry, called
-    // from GameLevel.js/main.js once those points are known) so warp stars
-    // targeting "spawn" or "kamek_zone" have somewhere to send the player.
+    // Filled in from outside (see setSpawnPoint/setKamekZoneEntry/
+    // setBowserZoneEntry, called from GameLevel.js/main.js once those
+    // points are known) so warp stars targeting "spawn", "kamek_zone" or
+    // "bowser_zone" have somewhere to send the player.
     this.spawnPoint = null;
     this.kamekZoneEntry = null;
+    this.bowserZoneEntry = null;
     // Smoothed 0..1-ish sink depth applied to the player's mesh while
     // standing inside a pond's footprint (see _updateWaterWading).
     this._waterSinkDepth = 0;
@@ -555,23 +557,44 @@ export default class Decorations {
    * house's actual collision hitbox.
    */
   static FOOTPRINT_RADIUS = {
-    mario_house: 13,
+    mario_house: 20, // was 13 — enlarged for a more spacious yard.
     toad_house: 8,
     toad_house_red: 8,
     toad_house_blue: 8,
   };
 
   /**
-   * Per-type vertical correction applied on top of the building's own JSON
-   * "y". Some house models don't have their origin exactly at their visible
-   * base, so a fence ring placed at y=0 (local) can end up floating just
-   * above the ground. Estimated from an in-game screenshot for mario_house;
-   * nudge this value (or add entries for other types) if a ring still looks
-   * off the ground.
+   * Per-type extra rotation for the fence ring (and its entrance gap +
+   * lamp posts), applied ON TOP of the building's own JSON "rotationY" —
+   * kept separate so adjusting where the ring's opening sits never rotates
+   * the house model itself.
    */
-  static GROUND_OFFSET = {
-    mario_house: -0.6,
+  static FENCE_ROTATION_OFFSET = {
+    mario_house: Math.PI / 2,
   };
+
+  /**
+   * World Y of the main island's flat ground surface — see
+   * LevelLoader.buildPlatforms: the platform box sits at position.y=-1
+   * with size.y=2, so its top face is at y = -1 + 2/2 = 0. The fence ring
+   * always belongs right on this surface.
+   */
+  static GROUND_LEVEL = 0;
+
+  /**
+   * Per-type vertical nudge on top of GROUND_LEVEL, for any building whose
+   * visual base still doesn't line up perfectly with it. Deliberately NOT
+   * based on the building's own JSON "y": that value exists to compensate
+   * for each house MODEL's own pivot point (mario_house needs y=4 just to
+   * render sitting on the ground — its origin isn't at its base), which
+   * has nothing to do with where the ground actually is. The previous
+   * version of this fix added a small correction on top of "y" instead of
+   * replacing it, which happened to look right for toad_house (y=0, i.e.
+   * already at ground level) but sent mario_house's ring floating ~3-4
+   * units in the air, since its y=4 pivot compensation was never meant to
+   * apply to this procedural, pivot-less fence group.
+   */
+  static GROUND_OFFSET = {};
 
   // Adds a small decorated area (fence ring + a couple of lamp posts) around
   // every house-type building in the level, using the same building JSON
@@ -587,10 +610,11 @@ export default class Decorations {
 
   _decorateHouse(b) {
     const groundOffset = Decorations.GROUND_OFFSET[b.type] || 0;
+    const fenceRotationOffset = Decorations.FENCE_ROTATION_OFFSET[b.type] || 0;
 
     const group = new THREE.Group();
-    group.position.set(b.x, b.y + groundOffset, b.z);
-    group.rotation.y = b.rotationY || 0;
+    group.position.set(b.x, Decorations.GROUND_LEVEL + groundOffset, b.z);
+    group.rotation.y = (b.rotationY || 0) + fenceRotationOffset;
 
     const ringRadius = (Decorations.FOOTPRINT_RADIUS[b.type] || 10) + 2;
     const postCount = 10;
@@ -855,12 +879,12 @@ export default class Decorations {
    * Touching one teleports the player there — see `target` below and
    * _updateWarpStars/_getWarpDestination.
    *
-   * @param {{x:number,y:number,z:number,color:number,scale?:number,target?:("sky"|"spawn"|"kamek_zone")}[]} spots
+   * @param {{x:number,y:number,z:number,color:number,scale?:number,target?:("sky"|"spawn"|"kamek_zone"|"bowser_zone")}[]} spots
    *   `target` picks the destination: "sky" is the walkable red planet
    *   (see spawnSkyPlanet), "spawn" is the level's player spawn point (see
-   *   setSpawnPoint), "kamek_zone" is the entrance to the separate Kamek
-   *   obstacle course (see setKamekZoneEntry). Omit `target` to keep a
-   *   star purely decorative.
+   *   setSpawnPoint), "kamek_zone"/"bowser_zone" are the entrances to the
+   *   two separate obstacle courses (see setKamekZoneEntry/
+   *   setBowserZoneEntry). Omit `target` to keep a star purely decorative.
    */
   async spawnWarpStars(spots = []) {
     if (spots.length === 0) return;
@@ -917,6 +941,141 @@ export default class Decorations {
     this.kamekZoneEntry = point;
   }
 
+  // Same as setKamekZoneEntry, for the separate Bowser obstacle course
+  // (level3.json, loaded via its own ObstacleZone instance in main.js), so
+  // a warp star with target "bowser_zone" has somewhere to send the player.
+  setBowserZoneEntry(point) {
+    this.bowserZoneEntry = point;
+  }
+
+  /**
+   * Places a small Minecraft "Oak Sign" prop (minecraft_sign.glb, a
+   * Mineways export) bearing a logo texture near a warp star that leads to
+   * a separate zone, so the destination is marked before the player steps
+   * on the star. Used for both the Kamek zone (kamekLogo) and the Bowser
+   * zone (gameoverLogo) — see GameLevel.js for the call sites. The sign's
+   * own baked material samples a shared Minecraft block-texture atlas with
+   * no blank area to draw on (confirmed by inspecting the GLB directly),
+   * so the logo can't be applied by editing that texture — instead it's a
+   * small separate plane overlaid just in front of the sign's face, the
+   * same "decal" technique used for posters on top of baked models.
+   *
+   * @param {{x:number,y:number,z:number,rotationY?:number,logo?:string}[]} spots
+   *   `rotationY` orients the sign so its face reads clearly to an
+   *   approaching player; omit for the model's default facing. `logo` is a
+   *   texture path (see TEXTURES in manifest.js), defaulting to kamekLogo.
+   */
+  async spawnZoneSigns(spots = []) {
+    if (spots.length === 0) return;
+
+    let signGlb;
+    try {
+      signGlb = await this.loader.loadAsync(MAP_MODELS.minecraftSign);
+      normalizeMaterials(signGlb.scene);
+    } catch (e) {
+      console.warn("[Decorations] minecraft_sign.glb not found — skipping zone signs.");
+      return;
+    }
+
+    // Cache loaded logo textures by path so signs sharing the same logo
+    // (e.g. two Kamek-zone stars) only fetch it once.
+    const textureLoader = new THREE.TextureLoader();
+    const logoTextureCache = new Map();
+    const loadLogo = async (path) => {
+      if (logoTextureCache.has(path)) return logoTextureCache.get(path);
+      let tex = null;
+      try {
+        tex = await textureLoader.loadAsync(path);
+        tex.colorSpace = THREE.SRGBColorSpace;
+      } catch (e) {
+        console.warn(`[Decorations] sign logo not found (${path}) — that sign will be blank.`);
+      }
+      logoTextureCache.set(path, tex);
+      return tex;
+    };
+
+    // Normalized from the model's own bounding-box height rather than its
+    // raw native scale (same pattern as spawnStars in Collectibles.js) —
+    // the sign is a tiny, thin Minecraft plank model of unknown native
+    // scale, so trusting scale:1 would render it either invisible-small or
+    // enormous. Was 2.2 (read as small/hard to notice from a distance);
+    // 3.6 reads as a proper landmark-sized sign next to the player.
+    const targetHeight = 3.6;
+
+    for (const spot of spots) {
+      const logoTexture = await loadLogo(spot.logo || TEXTURES.kamekLogo);
+      const sign = signGlb.scene.clone();
+      sign.scale.set(1, 1, 1);
+      sign.position.set(0, 0, 0);
+      sign.updateMatrixWorld(true);
+
+      const rawBbox = new THREE.Box3().setFromObject(sign);
+      const nativeHeight = rawBbox.isEmpty() ? 0 : rawBbox.max.y - rawBbox.min.y;
+      if (nativeHeight > 0.0001) {
+        sign.scale.setScalar(targetHeight / nativeHeight);
+      }
+      sign.updateMatrixWorld(true);
+
+      // Recenter the (now correctly scaled) sign on its own local origin —
+      // horizontally centered, depth centered, base sitting at y=0 — so
+      // the group's position below places its base on the ground and the
+      // logo plane can be positioned purely from its bounding box.
+      const scaledBbox = new THREE.Box3().setFromObject(sign);
+      const centerX = (scaledBbox.min.x + scaledBbox.max.x) / 2;
+      const centerZ = (scaledBbox.min.z + scaledBbox.max.z) / 2;
+      sign.position.set(-centerX, -scaledBbox.min.y, -centerZ);
+      sign.updateMatrixWorld(true);
+
+      const finalBbox = new THREE.Box3().setFromObject(sign);
+      const faceWidth = finalBbox.max.x - finalBbox.min.x;
+      const faceHeight = finalBbox.max.y - finalBbox.min.y;
+      const faceZ = finalBbox.max.z;
+
+      enableShadows(sign, { castShadow: true, receiveShadow: false });
+
+      const group = new THREE.Group();
+      group.position.set(spot.x, Decorations.GROUND_LEVEL, spot.z);
+      group.rotation.y = spot.rotationY || 0;
+      group.add(sign);
+
+      if (logoTexture) {
+        // Both kamekLogo and gameoverLogo (see manifest.js) are
+        // pre-cropped, pre-centered, alpha-masked PNGs — the badge itself
+        // already fills its square canvas edge-to-edge with a transparent
+        // background. 0.92 of the sign's own face made the badge bigger
+        // than the board itself (it stuck out past the wooden edges) —
+        // 0.45 keeps it clearly inset within the board while still
+        // reading as a big, centered badge.
+        const logoSize = Math.min(faceWidth, faceHeight) * 0.45;
+        const logoPlane = new THREE.Mesh(
+          new THREE.PlaneGeometry(logoSize, logoSize),
+          new THREE.MeshStandardMaterial({
+            map: logoTexture,
+            transparent: true,
+            alphaTest: 0.4,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            roughness: 0.6,
+            metalness: 0,
+            envMapIntensity: 0.4,
+          }),
+        );
+        // A hair off the sign's face (0.01) to avoid z-fighting, centered
+        // horizontally (local x=0, matching the sign's own recentered
+        // origin). Vertically nudged above the board's exact center
+        // (faceHeight * 0.5 would be dead-center) toward the top — 0.62
+        // reads better than dead-center once the small post sticking out
+        // below the board is taken into account.
+        logoPlane.position.set(0, faceHeight * 0.775, faceZ + 0.01);
+        logoPlane.castShadow = false;
+        logoPlane.receiveShadow = false;
+        group.add(logoPlane);
+      }
+
+      this.scene.add(group);
+    }
+  }
+
   // Resolves a warp star's `target` into an actual world-space landing
   // spot, or null if that destination isn't available yet (e.g.
   // setKamekZoneEntry hasn't been called, or the target planet failed to
@@ -934,6 +1093,10 @@ export default class Decorations {
 
     if (target === "kamek_zone") {
       return this.kamekZoneEntry ? { ...this.kamekZoneEntry } : null;
+    }
+
+    if (target === "bowser_zone") {
+      return this.bowserZoneEntry ? { ...this.bowserZoneEntry } : null;
     }
 
     if (target === "sky") {

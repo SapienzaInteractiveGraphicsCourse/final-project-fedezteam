@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
-import { DRACO_DECODER_PATH } from "../core/Assets/manifest.js";
+import { DRACO_DECODER_PATH, TEXTURES } from "../core/Assets/manifest.js";
 import LevelLoader from "./Level/LevelLoader.js";
 import Collectibles from "./Level/Collectibles.js";
 import Decorations from "./Level/Decorations.js";
@@ -159,16 +159,46 @@ export default class GameLevel {
 
     // Mario Galaxy-style warp stars. "sky" sends the player to the red
     // planet; the white star waiting right where they land sends them back
-    // to spawn; the two fiery ones at the island's edges send them to the
-    // separate Kamek obstacle course instead (see
+    // to spawn; the two fiery orange ones at the island's edges send them
+    // to the separate Kamek obstacle course; the single dark-red one sends
+    // them to the separate Bowser obstacle course instead (see
     // Decorations.spawnWarpStars/_updateWarpStars and
     // entities/Level/ObstacleZone.js, wired up from main.js).
     await this.decorations.spawnWarpStars([
       { x: 118, y: 4, z: -30, color: 0xffd54f, target: "sky" }, // -> the red planet
       { x: -260, y: 220, z: 0, color: 0xffffff, target: "spawn" }, // next to the red planet's landing spot -> back to spawn
-      { x: -118, y: 4, z: -80, color: 0xff5722, target: "kamek_zone" }, // -> Kamek's obstacle course
+      // { x: -118, y: 4, z: -80, color: 0xff5722, target: "kamek_zone" }, // -> Kamek's obstacle course
       { x: 60, y: 4, z: 115, color: 0xff5722, target: "kamek_zone" }, // -> Kamek's obstacle course
+      { x: -60, y: 4, z: 115, color: 0xb71c1c, target: "bowser_zone" }, // -> Bowser's obstacle course
     ]);
+
+    // A sign next to each warp star above bearing the matching zone's
+    // logo, so the destination is clear before stepping on the star. Each
+    // sign sits a few units further from the map center than its star (so
+    // the player reads it on approach, before reaching the star itself)
+    // and faces back toward the center so its face is visible from that
+    // approach direction — see Decorations.spawnZoneSigns.
+    const zoneStars = [
+      // { x: -118, z: -80, logo: TEXTURES.kamekLogo },
+      { x: 60, z: 115, logo: TEXTURES.kamekLogo },
+      { x: -60, z: 115, logo: TEXTURES.gameoverLogo },
+    ];
+    await this.decorations.spawnZoneSigns(
+      zoneStars.map(({ x, z, logo }) => {
+        const dist = Math.hypot(x, z) || 1;
+        const dirX = x / dist;
+        const dirZ = z / dist;
+        return {
+          x: x + dirX * 3,
+          y: 4,
+          z: z + dirZ * 3,
+          // Face back toward the map center (the direction a player
+          // walking out to the star would be approaching from).
+          rotationY: Math.atan2(dirX, dirZ) + Math.PI,
+          logo,
+        };
+      }),
+    );
   }
 
   // Per-frame update: delegates collectible pickup checks and decoration
