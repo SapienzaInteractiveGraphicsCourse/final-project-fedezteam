@@ -7,7 +7,7 @@ import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
  * patches, and (spawned separately in main.js, see bossSpawn) a boss
  * waiting at the end. Generic — this same class loads both the Kamek zone
  * (assets/levels/kamek_zone.json) and the Bowser zone
- * (assets/levels/level3.json, wider platforms with bigger height gaps
+ * (assets/levels/bowser_zone.json, wider platforms with bigger height gaps
  * between them, see that file), same "pure data" spirit as level1.json.
  *
  * Reached via warp star teleport (see Decorations._updateWarpStars /
@@ -50,7 +50,7 @@ export default class ObstacleZone {
     }
 
     this.entryPoint = data.entryPoint || { x: 260, y: 9, z: 260 };
-    // "bossSpawn" is the generic field name (used by level3.json); older
+    // "bossSpawn" is the generic field name (used by bowser_zone.json); older
     // zone files may still use "kamekSpawn" (kamek_zone.json) — accept
     // either so that file doesn't need to be touched.
     this.bossSpawn = data.bossSpawn || data.kamekSpawn || null;

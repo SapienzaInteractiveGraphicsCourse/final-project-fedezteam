@@ -59,6 +59,33 @@ export default class Decorations {
     this._waterSinkDepth = 0;
     // undefined = not attempted yet, null = attempted and failed to load.
     this._coinGlbCache = undefined;
+    // Same convention, for star_launch.glb. spawnWarpStars() is called not
+    // just once at level load but also at RUNTIME every time a boss
+    // (Kamek/Bowser) is defeated, dropping a single warp star back to spawn
+    // (see main.js); without this cache each defeat re-fetched and
+    // re-parsed star_launch.glb from scratch, which was the actual cause of
+    // the brief stutter on boss defeat.
+    this._starLaunchGlbCache = undefined;
+  }
+
+  // Loads (and caches) the warp star model — see the comment on
+  // _starLaunchGlbCache.
+  async _loadStarLaunchModel() {
+    if (this._starLaunchGlbCache !== undefined) return this._starLaunchGlbCache;
+
+    try {
+      this._starLaunchGlbCache = await this.loader.loadAsync(MAP_MODELS.starLaunch);
+      // Normalized once here, before _tintModel below clones a material
+      // per instance to tint it — the clone keeps the same (now
+      // colorSpace-fixed) texture reference, so this one call covers every
+      // warp star regardless of which spawnWarpStars() call they came from.
+      normalizeMaterials(this._starLaunchGlbCache.scene);
+    } catch (e) {
+      console.warn("[Decorations] star_launch.glb not found — skipping warp stars.");
+      this._starLaunchGlbCache = null;
+    }
+
+    return this._starLaunchGlbCache;
   }
 
   // Loads (and caches) the coin model, shared by every method that scatters
@@ -889,23 +916,14 @@ export default class Decorations {
   async spawnWarpStars(spots = []) {
     if (spots.length === 0) return;
 
-    let baseGlb;
-    try {
-      baseGlb = await this.loader.loadAsync(MAP_MODELS.starLaunch);
-      // Normalized once, before _tintModel below clones a material per
-      // instance to tint it — the clone keeps the same (now colorSpace-
-      // fixed) texture reference, so this one call covers every warp star.
-      normalizeMaterials(baseGlb.scene);
-    } catch (e) {
-      console.warn("[Decorations] star_launch.glb not found — skipping warp stars.");
-      return;
-    }
+    const baseGlb = await this._loadStarLaunchModel();
+    if (!baseGlb) return;
 
     for (const spot of spots) {
       const star = baseGlb.scene.clone(true);
       const scale = spot.scale || 1.4;
       star.scale.set(scale, scale, scale);
-      star.position.set(spot.x, spot.y, spot.z);
+      star.position.set(spot.x -5, spot.y, spot.z );
       this._tintModel(star, spot.color);
 
       enableShadows(star, { castShadow: true, receiveShadow: false });
@@ -942,7 +960,7 @@ export default class Decorations {
   }
 
   // Same as setKamekZoneEntry, for the separate Bowser obstacle course
-  // (level3.json, loaded via its own ObstacleZone instance in main.js), so
+  // (bowser_zone.json, loaded via its own ObstacleZone instance in main.js), so
   // a warp star with target "bowser_zone" has somewhere to send the player.
   setBowserZoneEntry(point) {
     this.bowserZoneEntry = point;

@@ -80,7 +80,7 @@ window.addEventListener("keydown", (e) => {
 // collegarlo al personaggio vero. Da console:
 //
 //    testRig("assets/models/Super_Mario/Enemies/bowser_jr.glb")
-//    testRig("assets/models/Super_Mario/Main_Characters/mario_rigged.glb", "run")
+//    testRig("assets/models/Super_Mario/Main_Characters/mario_ok_fixed.glb", "run")
 //
 // Poi si tara a occhio senza ricaricare la pagina:
 //    POSE.armRest = 60; rebuildRigs()
@@ -98,6 +98,12 @@ window.testRig = async function (path, state = "walk", scaleTo = 2.2) {
     if (!usable) return null;
 
     // Normalizza l'altezza: i modelli hanno scale native molto diverse fra loro.
+    // Le matrici mondo vanno aggiornate PRIMA di misurare: su un modello con
+    // scheletro Box3 chiede a SkinnedMesh.computeBoundingBox(), che legge le
+    // matrici delle ossa. Appena uscito dal loader quelle matrici non sono
+    // ancora calcolate e la misura viene fuori sbagliata (per mario_ok_fixed
+    // 0.65 invece di 1.64, cioè un modello di prova alto il triplo del dovuto).
+    model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);
     const height = box.max.y - box.min.y || 1;
     const s = scaleTo / height;
@@ -325,18 +331,47 @@ window.rigToPlayer = function () {
 };
 
 // Rigenera le clip dopo aver modificato POSE, senza ricaricare la pagina.
+// Che animazione sta suonando ADDOSSO AL GIOCATORE, e con quali numeri è
+// stata scelta. Serve quando il personaggio "sembra fermo" ma in realtà è in
+// un altro stato: stampa il moto da cui la macchina a stati decide.
+window.animState = function () {
+  const p = entityManager.player;
+  if (!p || !p.animation) return console.log("[anim] nessun giocatore");
+
+  const v = p.body ? p.body.velocity : { x: 0, y: 0, z: 0 };
+  console.log("[anim]", {
+    stato: p.animation.current,
+    attivo: p.animation.enabled,
+    velOrizzontale: +Math.hypot(v.x, v.z).toFixed(2),
+    velVerticale: +v.y.toFixed(2),
+    canJump: p.canJump,
+  });
+  return p.animation.current;
+};
+
 window.rebuildRigs = function () {
   for (const r of testRigs) {
     r.controller.rebuild();
     r.controller.play(r.state, 0);
   }
-  console.log(`[testRig] ${testRigs.length} rig rigenerati con POSE`, { ...POSE });
+
+  // Anche il giocatore vero, così le pose si tarano guardando il personaggio
+  // che si guida invece del modello di prova. Non serve rimettere lo stato a
+  // mano: Player.update lo richiede a ogni frame, e dopo rebuild() il
+  // controller non ha più uno stato corrente, quindi riparte da solo.
+  const playerAnim = entityManager.player && entityManager.player.animation;
+  if (playerAnim) playerAnim.rebuild();
+
+  console.log(
+    `[testRig] ${testRigs.length} rig + ${playerAnim ? 1 : 0} giocatore rigenerati con POSE`,
+    { ...POSE },
+  );
 };
 
 // Se l'indirizzo contiene ?rig, il banco di prova parte da solo appena il
 // gioco è pronto. Serve solo durante lo sviluppo delle animazioni: senza il
 // parametro il gioco si comporta esattamente come prima.
-//   http://127.0.0.1:5500/?rig            → mario_rigged, stato "walk"
+//   http://127.0.0.1:5500/?rig            → mario_ok_fixed, stato "walk"
 //   http://127.0.0.1:5500/?rig=run        → stato "run"
 //   http://127.0.0.1:5500/?rig=walk&model=assets/.../bowser_jr.glb
 const rigParams = new URLSearchParams(window.location.search);
@@ -345,7 +380,7 @@ const autoRig = rigParams.has("rig")
       state: rigParams.get("rig") || "walk",
       model:
         rigParams.get("model") ||
-        "assets/models/Super_Mario/Main_Characters/mario_rigged.glb",
+        "assets/models/Super_Mario/Main_Characters/mario_ok_fixed.glb",
     }
   : null;
 
@@ -357,7 +392,7 @@ console.log(
 );
 console.log(
   "  testRig(percorso)      carica un modello e lo fa animare accanto a te\n" +
-    '  testRig("assets/models/Super_Mario/Main_Characters/mario_rigged.glb")\n' +
+    '  testRig("assets/models/Super_Mario/Main_Characters/mario_ok_fixed.glb")\n' +
     "  testRigs[0].controller.play(\"run\")   cambia stato: idle|walk|run|jump|fall\n" +
     "  POSE.walkLegSwing = 30; rebuildRigs()  ritara le ampiezze a caldo\n" +
     "     (armSpread, walkArmSwing, walkKneeBend, runLean, ...)\n" +
@@ -366,6 +401,7 @@ console.log(
     "  showBones()            mostra scheletro + assi (rosso=avanti, verde=su, blu=sinistra)\n" +
     "  moveRig(0,0,-5) / rigToPlayer()      sposta il modello di prova\n" +
     "  toggleColliders()      wireframe delle collisioni (anche F3)\n" +
+    "  animState()            stato dell'animazione del giocatore\n" +
     "  toggleStats()          contatore FPS (anche F4)",
 );
 
@@ -399,7 +435,7 @@ const entityManager = new EntityManager(
   renderer.dirLight,
 );
 let mapEntity = null;
-let obstacleZone = null;
+let kamekZone = null;
 let bowserZone = null;
 
 const ui = new UIManager();
@@ -514,8 +550,8 @@ function updateGame(delta) {
   // Bowser's, see ObstacleZone.js) — a no-op everywhere else in the level,
   // since it only does anything when the player is standing inside a lava
   // patch's footprint.
-  if (obstacleZone) {
-    obstacleZone.update(delta, entityManager.player, () => {
+  if (kamekZone) {
+    kamekZone.update(delta, entityManager.player, () => {
       if (ui.removeLife) ui.removeLife(1, audio);
     });
   }
@@ -597,16 +633,16 @@ initGameModels(assetLoader)
     // Kamek. Reached via the "kamek_zone" warp stars placed in
     // GameLevel.js — see entities/Level/ObstacleZone.js for why this is a
     // teleport within the same world rather than a real level switch.
-    obstacleZone = new ObstacleZone(renderer.scene, physics);
-    await obstacleZone.load("./assets/levels/kamek_zone.json");
+    kamekZone = new ObstacleZone(renderer.scene, physics);
+    await kamekZone.load("./assets/levels/kamek_zone.json");
 
-    if (mapEntity?.decorations && obstacleZone.entryPoint) {
-      mapEntity.decorations.setKamekZoneEntry(obstacleZone.entryPoint);
+    if (mapEntity?.decorations && kamekZone.entryPoint) {
+      mapEntity.decorations.setKamekZoneEntry(kamekZone.entryPoint);
     }
 
-    if (obstacleZone.bossSpawn) {
+    if (kamekZone.bossSpawn) {
       const kamek = new Kamek(enemyAssets.kamek.clone(), physics);
-      kamek.spawn(obstacleZone.bossSpawn.x, obstacleZone.bossSpawn.y, obstacleZone.bossSpawn.z);
+      kamek.spawn(kamekZone.bossSpawn.x, kamekZone.bossSpawn.y, kamekZone.bossSpawn.z);
 
       kamek.onStomped = () => {
         if (audio && audio.playSFX) audio.playSFX("jump");
@@ -623,16 +659,16 @@ initGameModels(assetLoader)
         // kamek.mesh stays valid after _defeat() (only removed from the
         // scene graph, never nulled out), so its last position is still
         // readable here.
-        const dropX = kamek.mesh ? kamek.mesh.position.x : (obstacleZone.bossSpawn?.x ?? 320);
-        const dropY = (kamek.mesh ? kamek.mesh.position.y : (obstacleZone.bossSpawn?.y ?? 12)) + 1;
-        const dropZ = kamek.mesh ? kamek.mesh.position.z : (obstacleZone.bossSpawn?.z ?? 260);
+        const dropX = kamek.mesh ? kamek.mesh.position.x : (kamekZone.bossSpawn?.x ?? 320);
+        const dropY = (kamek.mesh ? kamek.mesh.position.y : (kamekZone.bossSpawn?.y ?? 10)) + 1;
+        const dropZ = kamek.mesh ? kamek.mesh.position.z : (kamekZone.bossSpawn?.z ?? 260);
 
         if (mapEntity?.collectibles) {
-          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY, z: dropZ }]);
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY +2, z: dropZ }]);
         }
         if (mapEntity?.decorations) {
           mapEntity.decorations.spawnWarpStars([
-            { x: dropX + 3, y: dropY, z: dropZ, color: 0xffffff, target: "spawn" },
+            { x: dropX + +5, y: dropY + 4, z: dropZ+5, color: 0xffffff, target: "spawn" },
           ]);
         }
       };
@@ -641,11 +677,11 @@ initGameModels(assetLoader)
     }
 
     // Same idea, second obstacle course: wider platforms with bigger
-    // height gaps between them (see level3.json), ending with Bowser
+    // height gaps between them (see bowser_zone.json), ending with Bowser
     // instead of Kamek. Reached via the single "bowser_zone" warp star
     // placed in GameLevel.js.
     bowserZone = new ObstacleZone(renderer.scene, physics);
-    await bowserZone.load("./assets/levels/level3.json");
+    await bowserZone.load("./assets/levels/bowser_zone.json");
 
     if (mapEntity?.decorations && bowserZone.entryPoint) {
       mapEntity.decorations.setBowserZoneEntry(bowserZone.entryPoint);
@@ -665,15 +701,15 @@ initGameModels(assetLoader)
         // Same "drop a real collectible star + a warp star back to spawn"
         // pattern as Kamek's onDefeated above.
         const dropX = bowser.mesh ? bowser.mesh.position.x : (bowserZone.bossSpawn?.x ?? -230);
-        const dropY = (bowser.mesh ? bowser.mesh.position.y : (bowserZone.bossSpawn?.y ?? 15)) + 1;
+        const dropY = (bowser.mesh ? bowser.mesh.position.y : (bowserZone.bossSpawn?.y ?? 10)) + 1;
         const dropZ = bowser.mesh ? bowser.mesh.position.z : (bowserZone.bossSpawn?.z ?? 300);
 
         if (mapEntity?.collectibles) {
-          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY, z: dropZ }]);
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY + 2, z: dropZ }]);
         }
         if (mapEntity?.decorations) {
           mapEntity.decorations.spawnWarpStars([
-            { x: dropX + 3, y: dropY, z: dropZ, color: 0xffffff, target: "spawn" },
+            { x: dropX + 5, y: dropY + 4, z: dropZ + 5, color: 0xffffff, target: "spawn" },
           ]);
         }
       };

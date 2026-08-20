@@ -14,8 +14,8 @@ export default class Kamek extends Enemy {
   constructor(mesh, physicsEngine, options = {}) {
     super(mesh, physicsEngine, {
       detectionRange: 14,
-      chaseSpeed: 4,
-      radius: 1.1,
+      chaseSpeed: 7,
+      radius: 0.3,
       targetHeight: 2.2,
       hitsToDefeat: 3,
       invulnerabilityDuration: 5,

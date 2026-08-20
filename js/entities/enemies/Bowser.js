@@ -16,7 +16,7 @@ export default class Bowser extends Enemy {
     super(mesh, physicsEngine, {
       detectionRange: 16,
       chaseSpeed: 3,
-      radius: 1.8,
+      radius: 1,
       targetHeight: 3.4,
       hitsToDefeat: 5,
       invulnerabilityDuration: 4,
