@@ -600,6 +600,20 @@ position: absolute;
   animation: pulse-gold 1.2s infinite alternate ease-in-out;
 }
 
+/* Stesso trattamento dell'immagine del game over, con l'alone dorato della
+   scheda di vittoria al posto di quello rosso. */
+.win-card img,
+#win-img {
+  max-width: 320px !important;
+  max-height: 220px !important;
+  width: 100%;
+  height: auto;
+  margin: 20px auto !important;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 0 15px rgba(251, 208, 0, 0.6));
+}
+
 @keyframes pulse-gold {
   0% {
     transform: scale(1);
@@ -616,6 +630,17 @@ position: absolute;
   color: #3a2a00 !important;
   box-shadow: 0 4px 0 #a68600 !important;
   margin-top: 15px;
+}
+
+/* "REACH PRINCESS PEACH" è quasi il doppio di "RESTART GAME" e con il
+   padding standard di btn-retro andava a capo dentro il pulsante. Si
+   toccano solo margini interni e corpo del testo: colori, bordo e ombra
+   restano quelli di tutti gli altri tasti. */
+#win-peach-btn {
+  padding-left: 28px;
+  padding-right: 28px;
+  font-size: 1.05rem;
+  white-space: nowrap;
 }
 
 .btn-gold:hover {

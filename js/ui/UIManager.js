@@ -11,7 +11,7 @@ export default class UIManager {
     this.startBtn = document.getElementById("start-btn");
     this.continueBtn = document.getElementById("continue-btn");
     this.restartBtn = document.getElementById("restart-btn");
-    this.winRestartBtn = document.getElementById("win-restart-btn");
+    this.winPeachBtn = document.getElementById("win-peach-btn");
 
     this.heroNameInput = document.getElementById("hero-name-input");
     this.hudHeroName = document.getElementById("hud-hero-name");
@@ -120,8 +120,8 @@ export default class UIManager {
     }
 
     // Same button, shown on the Win screen instead.
-    if (this.winRestartBtn) {
-      this.winRestartBtn.addEventListener("click", () => this.returnToMainMenu());
+    if (this.winPeachBtn) {
+      this.winPeachBtn.addEventListener("click", () => this.reachPeach());
     }
 
     this.pauseBtn.addEventListener("click", () => this.toggleSettings());
@@ -130,7 +130,7 @@ export default class UIManager {
     window.addEventListener("keydown", (e) => {
       if (
         (e.key === "Escape" || e.key.toLowerCase() === "p") &&
-        this.gameState === "PLAYING"
+        (this.gameState === "PLAYING" || this.gameState === "ENDING")
       ) {
         this.toggleSettings();
       }
@@ -193,8 +193,9 @@ export default class UIManager {
     }
   }
 
-  // Shows the victory screen once the player reaches maxStars, stopping
-  // the background music — mirrors showGameOver()'s flow, just for a win.
+  // Shows the victory screen once the player reaches maxStars, swapping the
+  // background music for the ending theme — mirrors showGameOver()'s flow,
+  // just for a win.
   showWin(audio = null) {
     this.gameState = "WIN";
 
@@ -208,7 +209,47 @@ export default class UIManager {
         if (typeof soundManager.stopBGM === "function") soundManager.stopBGM();
         else if (typeof soundManager.stop === "function") soundManager.stop("bgm");
       } catch (e) {}
+
+      // The ending theme takes the BGM's place, the way the game-over jingle
+      // does on a loss. playTrack() rather than playSFX(): it's a long
+      // music file, and playSFX's clone-then-play would leave it silent
+      // until a second download of it finished — see AudioManager.playTrack.
+      try {
+        if (typeof soundManager.playTrack === "function") {
+          soundManager.playTrack("ending");
+        } else if (typeof soundManager.playSFX === "function") {
+          soundManager.playSFX("ending");
+        }
+      } catch (e) {}
     }
+  }
+
+  /**
+   * "REACH PRINCESS PEACH": closes the win screen and hands control back to
+   * the player, now standing in front of Peach's castle — the teleport
+   * itself is done by the onReachPeach callback wired up in main.js (see
+   * entities/Level/EndingZone.js).
+   *
+   * The ending theme started by showWin() is left alone on purpose: it has
+   * to carry over into the final scene, so nothing here touches the audio.
+   */
+  reachPeach() {
+    // If the ending zone didn't load, teleporting would drop the player
+    // into empty space — better to leave the win screen up than to strand
+    // them somewhere they can't get out of.
+    if (!this.onReachPeach || this.onReachPeach() !== true) return;
+
+    if (this.winScreen) this.winScreen.classList.add("hidden");
+    if (this.hud) this.hud.style.display = "block";
+    if (this.pauseBtn) this.pauseBtn.style.display = "block";
+
+    // Not "PLAYING": addStar() would then be free to fire showWin() all
+    // over again if the player walks over another star (there are more of
+    // them scattered around than maxStars). The pause menu is still
+    // reachable in this state — see the keydown handler in _setupListeners
+    // — so "RETURN TO MENU" remains available once the credits have
+    // played out.
+    this.gameState = "ENDING";
   }
 
   // Shows the Game Over screen, stops the background music and plays the

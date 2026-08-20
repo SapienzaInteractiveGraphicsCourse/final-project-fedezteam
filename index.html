@@ -272,10 +272,18 @@
     <!-- 5b. WIN STATE -->
     <div id="win-screen" class="win-overlay hidden">
       <div class="menu-card win-card">
-        <h1 class="win-title">HAI VINTO!</h1>
-        <p>HAI RACCOLTO 5 STELLE!</p>
+        <h1 class="win-title">YOU WIN!</h1>
+        <p>YOU COLLECTED ALL 5 STARS!</p>
+        <img
+          id="win-img"
+          src="assets/images/peach_logo.png"
+          alt="Princess Peach"
+          onerror="this.style.display = 'none'"
+        />
 
-        <button id="win-restart-btn" class="btn-retro btn-gold">RESTART GAME</button>
+        <button id="win-peach-btn" class="btn-retro btn-gold">
+          REACH PRINCESS PEACH
+        </button>
       </div>
     </div>
 

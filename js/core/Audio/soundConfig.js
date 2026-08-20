@@ -7,14 +7,19 @@ export const SOUND_MANIFEST = [
   { key: 'star', path: 'assets/audio/star_collect.wav' },
   { key: 'mushroom', path: 'assets/audio/1up.wav' },
   { key: 'gameover', path: 'assets/audio/gameover.mp3' },
+  { key: 'ending', path: 'assets/audio/peach_ending.mp3' },
   { key: 'mario_selected', path: 'assets/audio/mario_selected.wav' },
   { key: 'luigi_selected', path: 'assets/audio/luigi_selected.wav' },
   { key: 'mario_jump1', path: 'assets/audio/mario_jump1.wav' },
   { key: 'mario_jump2', path: 'assets/audio/mario_jump2.wav' },
   { key: 'mario_fall', path: 'assets/audio/mario_fall.wav' },
+  { key: 'mario_damage1', path: 'assets/audio/mario_damage1.wav' },
+  { key: 'mario_damage2', path: 'assets/audio/mario_damage2.wav' },
   { key: 'luigi_jump1', path: 'assets/audio/luigi_jump1.wav' },
   { key: 'luigi_jump2', path: 'assets/audio/luigi_jump2.wav' },
   { key: 'luigi_fall', path: 'assets/audio/luigi_fall.wav' },
+  { key: 'luigi_damage1', path: 'assets/audio/luigi_damage1.wav' },
+  { key: 'luigi_damage2', path: 'assets/audio/luigi_damage2.wav' },
 ];
 
 // Preloads every entry of SOUND_MANIFEST into the given AudioManager.

@@ -4,7 +4,11 @@ export default class AudioManager {
     this.bgm = null;
     this.isMuted = false;
     this.currentCharacter = "mario"; // Default character.
-    this.jumpToggle = false;
+
+    // Effects that ship as two per-character variants (mario_jump1/mario_jump2,
+    // luigi_damage1/luigi_damage2, ...). Each entry holds which variant plays
+    // next, so repeating the same action doesn't replay the identical clip.
+    this.variantToggles = { jump: false, damage: false };
 
     this.hasStarted = false;
 
@@ -94,11 +98,11 @@ export default class AudioManager {
 
     if (this.sounds[name]) {
       soundKey = name;
-    } else if (name === "jump") {
-      // Alternate between two jump sound variants for a less repetitive feel.
-      const suffix = this.jumpToggle ? "2" : "1";
-      this.jumpToggle = !this.jumpToggle;
-      soundKey = `${this.currentCharacter}_jump${suffix}`;
+    } else if (name in this.variantToggles) {
+      // Alternate between the two variants for a less repetitive feel.
+      const suffix = this.variantToggles[name] ? "2" : "1";
+      this.variantToggles[name] = !this.variantToggles[name];
+      soundKey = `${this.currentCharacter}_${name}${suffix}`;
     } else {
       // Fall back to a character-specific variant, e.g. "mario_fall".
       const charSpecificName = `${this.currentCharacter}_${name}`;
@@ -114,6 +118,31 @@ export default class AudioManager {
     const soundClone = this.sounds[soundKey].cloneNode();
     soundClone.volume = this.sounds[soundKey].volume;
     soundClone.play().catch(() => {});
+  }
+
+  /**
+   * Plays a one-shot music cue — currently the ending theme — from the
+   * element that was preloaded at startup instead of from a throwaway copy.
+   *
+   * playSFX() clones its element before playing so two overlapping hits of
+   * the same effect can't cut each other off. That's the right trade for a
+   * 15 KB jump grunt, but a clone starts its own fresh load of the file,
+   * and ending.mp3 is 8.8 MB: the music would sit silent until that second
+   * download caught up (measured: still at readyState 0, nothing decoded,
+   * seconds after play() was called). A music cue never overlaps itself, so
+   * it has no reason to be cloned and can start instantly from the copy
+   * that has been in memory since the loading screen.
+   */
+  playTrack(name) {
+    if (this.isMuted || this.sfxVolume === 0) return;
+
+    const track = this.sounds[name];
+    if (!track) return;
+
+    // Rewound rather than resumed, so a second playthrough of the game
+    // starts the theme from the top.
+    track.currentTime = 0;
+    track.play().catch(() => {});
   }
 
   setMute(isMuted) {

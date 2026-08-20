@@ -7,6 +7,7 @@
  *  - CHARACTER_MODELS: playable characters and Yoshi.
  *  - ITEM_MODELS: collectible/interactive props (coins, stars, blocks, ...).
  *  - MAP_MODELS: static scenery props placed by GameLevel (trees, grass, ...).
+ *  - ENDING_MODELS: Peach and her castle, used by the ending sequence.
  *  - ENEMY_MODELS: enemies spawned via entities/enemies/ (Goomba, Kamek, ...).
  *  - BUILDING_MODEL_DIR / NPC_MODEL_DIR: base directories for models that
  *    are resolved dynamically from the level JSON's "type" field.
@@ -49,6 +50,18 @@ export const MAP_MODELS = {
   // (it was dropped there alongside the other small props) even though
   // it's used purely decoratively like the rest of MAP_MODELS.
   minecraftSign: `${MODELS_ROOT}/Items/minecraft_sign.glb`,
+};
+
+// Props of the ending sequence: the place the player is teleported to after
+// collecting every star (see entities/Level/EndingZone.js, peach_castle.json).
+// peach.glb is a derived file, not the download: the original — kept next to
+// it as peach_ok.glb — writes its materials with the retired
+// KHR_materials_pbrSpecularGlossiness extension, which three.js r160's
+// GLTFLoader has no support for at all, so it imported as a white untextured
+// statue. See tools/fix_specular_glossiness.py for the conversion.
+export const ENDING_MODELS = {
+  peachCastle: `${MODELS_ROOT}/Ending/peach_castle.glb`,
+  peach: `${MODELS_ROOT}/Ending/peach.glb`,
 };
 
 export const ENEMY_MODELS = {

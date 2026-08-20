@@ -75,7 +75,13 @@ export default class EntityManager {
   }
 
   update(delta, input, ui, audio, camera) {
-    if (ui && ui.gameState !== "PLAYING") return;
+    // "ENDING" is the epilogue that follows the win screen: the player is
+    // walking around Peach's castle (see UIManager.reachPeach and
+    // entities/Level/EndingZone.js). The run is over, but the character is
+    // still under the player's control, so it has to keep updating exactly
+    // like PLAYING — everything else (menus, pause, the win/game-over
+    // screens themselves) stays frozen as before.
+    if (ui && ui.gameState !== "PLAYING" && ui.gameState !== "ENDING") return;
 
     if (this.physicsEngine) {
       this.physicsEngine.update(delta);

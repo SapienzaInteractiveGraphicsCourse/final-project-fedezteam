@@ -14,6 +14,7 @@ import Goomba from "./entities/enemies/Goomba.js";
 import Kamek from "./entities/enemies/Kamek.js";
 import Bowser from "./entities/enemies/Bowser.js";
 import ObstacleZone from "./entities/Level/ObstacleZone.js";
+import EndingZone from "./entities/Level/EndingZone.js";
 import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
 import * as THREE from "three";
@@ -434,6 +435,7 @@ const entityManager = new EntityManager(
 let mapEntity = null;
 let kamekZone = null;
 let bowserZone = null;
+let endingZone = null;
 
 const ui = new UIManager();
 const audio = new AudioManager();
@@ -457,6 +459,46 @@ ui.onCharacterSelect((character) => {
   audio.setCharacter(character);
   audio.playSFX("selected");
 });
+
+// "REACH PRINCESS PEACH" on the win screen: teleports the player in front
+// of Peach's castle instead of restarting the game. Returns false when the
+// ending zone failed to load, which tells UIManager to leave the win screen
+// up rather than drop the player into empty space — same guard the warp
+// stars use (see Decorations._getWarpDestination).
+//
+// Deliberately does not touch the audio: the ending theme started by
+// showWin() has to keep playing across the teleport.
+ui.onReachPeach = () => {
+  const dest = endingZone?.entryPoint;
+  if (!dest || !entityManager.player) return false;
+
+  const player = entityManager.player;
+  player.body.position.set(dest.x, dest.y, dest.z);
+  player.body.velocity.set(0, 0, 0);
+
+  // Turn both the character and the camera toward the castle, so the warp
+  // lands on the view it exists for. Without this the player keeps whatever
+  // facing they happened to have when the last star dropped, and the
+  // camera stays behind them — pointing at empty grass just as often as at
+  // the castle. Only the current orbit angle is set here; every camera
+  // tuning value (distance, follow speed, limits) is left alone, and the
+  // player's own movement takes the angle straight back over.
+  const castle = endingZone.castle?.position;
+  if (castle) {
+    const facing = Math.atan2(castle.x - dest.x, castle.z - dest.z);
+    player.currentFacingAngle = facing;
+    player.mesh.rotation.y = facing + (player.modelOffset || 0);
+    // Same "behind the player" angle CameraManager's auto-follow aims for.
+    cameraManager.cameraAngleX = facing + Math.PI;
+    // Flatter than the usual look-down angle: the castle is 26 units tall
+    // and the default pitch crops its towers right off the top of the
+    // screen. Still just the current angle, well inside the limits
+    // CameraManager clamps to, and i/k take it back over immediately.
+    cameraManager.cameraAngleY = 0.22;
+  }
+
+  return true;
+};
 
 ui.onMuteToggle = (isMuted) => {
   audio.setMute(isMuted);
@@ -515,6 +557,22 @@ ui.onGameStart(({ character }) => {
   }
 });
 
+// Life lost to a hazard that actually hits the character: enemy contact
+// (Goomba/Kamek/Bowser) or lava. Every one of those goes through here so the
+// hurt sound stays in one place instead of being repeated at each call site.
+// The void fall is deliberately NOT one of them: it already plays the falling
+// scream (see EntityManager.update) and stacking a second voice clip on top
+// of it sounds wrong.
+function damagePlayer() {
+  if (!ui.removeLife) return;
+
+  // removeLife() returns true when this hit was the fatal one, and in that
+  // case it has already started the game-over jingle — so the hurt sound is
+  // skipped rather than played over it.
+  const isGameOver = ui.removeLife(1, audio);
+  if (!isGameOver && audio && audio.playSFX) audio.playSFX("damage");
+}
+
 // 4. GAME LOOP
 
 function updateGame(delta) {
@@ -549,12 +607,12 @@ function updateGame(delta) {
   // patch's footprint.
   if (kamekZone) {
     kamekZone.update(delta, entityManager.player, () => {
-      if (ui.removeLife) ui.removeLife(1, audio);
+      damagePlayer();
     });
   }
   if (bowserZone) {
     bowserZone.update(delta, entityManager.player, () => {
-      if (ui.removeLife) ui.removeLife(1, audio);
+      damagePlayer();
     });
   }
 
@@ -618,7 +676,7 @@ initGameModels(assetLoader)
         if (audio && audio.playSFX) audio.playSFX("jump"); // bounce sound
       };
       goomba.onDamagePlayer = () => {
-        if (ui.removeLife) ui.removeLife(1, audio);
+        damagePlayer();
       };
 
       entityManager.addEntity(goomba);
@@ -645,7 +703,7 @@ initGameModels(assetLoader)
         if (audio && audio.playSFX) audio.playSFX("jump");
       };
       kamek.onDamagePlayer = () => {
-        if (ui.removeLife) ui.removeLife(1, audio);
+        damagePlayer();
       };
       kamek.onDefeated = () => {
         // A real star to walk over and collect (not an instant grant),
@@ -692,7 +750,7 @@ initGameModels(assetLoader)
         if (audio && audio.playSFX) audio.playSFX("jump");
       };
       bowser.onDamagePlayer = () => {
-        if (ui.removeLife) ui.removeLife(1, audio);
+        damagePlayer();
       };
       bowser.onDefeated = () => {
         // Same "drop a real collectible star + a warp star back to spawn"
@@ -713,6 +771,15 @@ initGameModels(assetLoader)
 
       entityManager.addEntity(bowser);
     }
+
+    // The place the player is sent to after collecting every star: Peach's
+    // castle with Peach waiting outside it. Built up front like the two
+    // boss courses (it's the same physics world, just far away) so that
+    // pressing the win screen's button is a plain teleport with nothing
+    // left to load — see entities/Level/EndingZone.js and the
+    // ui.onReachPeach handler below.
+    endingZone = new EndingZone(renderer.scene, physics);
+    await endingZone.load("./assets/levels/peach_castle.json");
 
     rawModels.mario = assets.mario;
     rawModels.luigi = assets.luigi;
