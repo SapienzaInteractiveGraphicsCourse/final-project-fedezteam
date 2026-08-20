@@ -31,6 +31,7 @@ export default class EntityManager {
 
   spawnPlayer(model, startX, startY, startZ, characterName = "mario") {
     if (this.player && this.player.mesh) {
+      this.player.disposeAnimation();
       this.scene.remove(this.player.mesh);
       if (this.player.body) {
         this.physicsEngine.world.removeBody(this.player.body);
