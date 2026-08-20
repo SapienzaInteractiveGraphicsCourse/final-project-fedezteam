@@ -3,18 +3,20 @@ import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { enableShadows } from "../../utils/shadows.js";
 
 /**
- * Base class for every enemy in the game. Follows the same spawn()/update()
- * shape as Player.js/Yoshi.js: a dynamic spherical cannon-es body (so
- * gravity and terrain collision work exactly like the player), synced to a
- * visual mesh each frame.
+ * Enemy.js — shared base class for every enemy in the game (Goomba, Kamek,
+ * Bowser, and any future addition).
+ *
+ * Follows the same spawn()/update() shape as Player.js/Yoshi.js: a dynamic
+ * spherical cannon-es body (so gravity and terrain collision work exactly
+ * like the player), synced to a visual mesh each frame.
  *
  * On top of that, it owns:
  *  - A simple "idle until the player is within detectionRange, then chase"
  *    AI (straight-line seek, no pathfinding).
  *  - A generic multi-hit defeat system: hitsToDefeat + invulnerabilityDuration.
- *    A one-hit enemy (Goomba) just uses the defaults; a boss (Kamek) sets
- *    hitsToDefeat=3 and a cooldown between hits, without needing any extra
- *    code — see Goomba.js / Kamek.js.
+ *    A one-hit enemy (Goomba) just uses the defaults; a boss (Kamek, Bowser)
+ *    sets a higher hitsToDefeat and a cooldown between hits, without needing
+ *    any extra code — see Goomba.js / Kamek.js / Bowser.js.
  *  - Classic Mario stomp rule for player contact: landing on top of the
  *    enemy while falling defeats/damages it and bounces the player; any
  *    other contact damages the player instead (via the onDamagePlayer
@@ -26,6 +28,10 @@ import { enableShadows } from "../../utils/shadows.js";
  * void-fall respawn.
  */
 export default class Enemy {
+  // Reads every tunable stat from `options` (falling back to plain-enemy
+  // defaults), and sets up the bookkeeping state (chase/defeat/cooldown
+  // flags) shared by every subclass. Does not create the physics body or
+  // add anything to the scene yet — see spawn() for that.
   constructor(mesh, physicsEngine, options = {}) {
     this.mesh = mesh;
     this.physicsEngine = physicsEngine;
@@ -72,6 +78,9 @@ export default class Enemy {
     this.onDefeated = null;
   }
 
+  // Places the enemy in the world: normalizes its visual scale (if
+  // targetHeight is set), positions the mesh, and creates+registers its
+  // dynamic physics body.
   spawn(x, y, z) {
     if (!this.mesh) return;
 
@@ -112,6 +121,9 @@ export default class Enemy {
     }
   }
 
+  // Per-frame tick: ticks timers, runs the chase AI, syncs the mesh to the
+  // physics body, plays the idle waddle, and checks for player contact.
+  // No-ops once the enemy is defeated or before spawn() has run.
   update(delta, player) {
     if (this.isDefeated || !this.body || !this.mesh) return;
 
@@ -176,6 +188,9 @@ export default class Enemy {
     this.mesh.rotation.z = Math.sin(this._waddlePhase) * 0.15;
   }
 
+  // Distinguishes a stomp (player falling, above the enemy) from a
+  // side/other contact (damages the player instead), and dispatches to
+  // the matching handler. No-ops if the player is out of contact range.
   _checkPlayerContact(player) {
     const dx = player.mesh.position.x - this.mesh.position.x;
     const dz = player.mesh.position.z - this.mesh.position.z;
@@ -195,6 +210,9 @@ export default class Enemy {
     }
   }
 
+  // Handles a successful stomp: bounces the player, counts the hit, and
+  // either defeats the enemy (hitsTaken reached hitsToDefeat) or grants a
+  // brief invulnerability window before it can be stomped again.
   _onStomped(player) {
     // Bounce the player upward, same "poke the body directly" pattern used
     // elsewhere in the codebase (e.g. the void-fall respawn in
@@ -213,11 +231,15 @@ export default class Enemy {
     }
   }
 
+  // Handles a non-stomp contact: starts the hit cooldown and forwards to
+  // the onDamagePlayer callback, if one was wired up by the spawner.
   _onPlayerContact(player) {
     this.playerHitCooldown = 1.0;
     if (this.onDamagePlayer) this.onDamagePlayer(player);
   }
 
+  // Removes the enemy from the scene and physics world, marks it defeated
+  // (so update() becomes a no-op from here on), and fires onDefeated().
   _defeat() {
     this.isDefeated = true;
 
@@ -231,6 +253,7 @@ export default class Enemy {
     if (this.onDefeated) this.onDefeated();
   }
 
+  // Current world position, or the origin if the enemy hasn't spawned yet.
   get position() {
     return this.mesh ? this.mesh.position : new THREE.Vector3();
   }

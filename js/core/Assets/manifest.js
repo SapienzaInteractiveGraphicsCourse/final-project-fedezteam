@@ -53,11 +53,11 @@ export const MAP_MODELS = {
 
 export const ENEMY_MODELS = {
   goomba: `${MODELS_ROOT}/Enemies/goomba.glb`,
-  // Boss scaffold (see entities/enemies/Kamek.js) — not spawned in any
-  // level yet, but preloaded here so it's ready when it is.
+  // Boss waiting at the end of the Kamek obstacle course (see
+  // entities/enemies/Kamek.js, kamek_zone.json, main.js).
   kamek: `${MODELS_ROOT}/Enemies/kamek.glb`,
   // Final boss, waiting at the end of the Bowser obstacle course (see
-  // entities/enemies/Bowser.js, level3.json, main.js).
+  // entities/enemies/Bowser.js, bowser_zone.json, main.js).
   bowser: `${MODELS_ROOT}/Enemies/bowser.glb`,
 };
 

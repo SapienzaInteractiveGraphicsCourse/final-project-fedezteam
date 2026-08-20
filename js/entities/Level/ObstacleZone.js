@@ -2,10 +2,12 @@ import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 
 /**
- * A small, self-contained bonus zone far from the main island: a short
- * chain of platforms with gaps between them, a couple of lava hazard
- * patches, and (spawned separately in main.js, see bossSpawn) a boss
- * waiting at the end. Generic — this same class loads both the Kamek zone
+ * ObstacleZone.js — a small, self-contained bonus zone far from the main
+ * island: a short chain of platforms with gaps between them, a couple of
+ * lava hazard patches, and (spawned separately in main.js, see bossSpawn) a
+ * boss waiting at the end.
+ *
+ * Generic — this same class loads both the Kamek zone
  * (assets/levels/kamek_zone.json) and the Bowser zone
  * (assets/levels/bowser_zone.json, wider platforms with bigger height gaps
  * between them, see that file), same "pure data" spirit as level1.json.
@@ -18,17 +20,19 @@ import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
  * Falling off a platform here is handled entirely by the existing
  * void-fall mechanic (EntityManager.update -> checkVoidFall): same
  * lose-a-life-and-respawn-at-spawn behavior as falling off the main island,
- * no separate logic needed. Lava is a different, additional hazard: it
- * doesn't have a collider (the player can walk straight into it, unlike a
- * wall), so it's checked as a simple overlap trigger every frame instead —
- * see update().
+ * no separate logic needed. Lava is a different, additional hazard: it has
+ * no collider (the player can walk straight into it, unlike a wall), so
+ * it's checked as a simple overlap trigger every frame instead — see
+ * update().
  *
  * Deliberately simple geometry (plain boxes, no models to load) per the
- * "don't make the Kamek level too complex yet" request — platforms and
+ * "don't make the boss levels too complex yet" request — platforms and
  * lava can be swapped for real assets later without changing this class'
  * shape.
  */
 export default class ObstacleZone {
+  // Stores the scene/physics references and resets zone state. Nothing is
+  // built yet — call load() to actually populate the zone from a JSON file.
   constructor(scene, physicsEngine) {
     this.scene = scene;
     this.physicsEngine = physicsEngine;
@@ -39,6 +43,9 @@ export default class ObstacleZone {
     this._lavaCooldown = 0;
   }
 
+  // Fetches a zone JSON file and builds its platforms/lava/entry point into
+  // the scene and physics world. Returns the parsed data (or null on
+  // fetch/parse failure, logged via console.warn).
   async load(jsonPath = "./assets/levels/kamek_zone.json") {
     let data;
     try {

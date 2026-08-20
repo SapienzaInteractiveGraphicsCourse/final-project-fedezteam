@@ -3,6 +3,18 @@ import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { enableShadows } from "../utils/shadows.js";
 import AnimationController from "./animation/AnimationController.js";
 
+/**
+ * Player.js — the player character's movement, physics body and animation
+ * state, shared by every playable character (Mario, Luigi, ...) via the
+ * per-character `stats` object passed in by EntityManager.
+ *
+ * Movement has two code paths: _updateFlat (plain ground movement, used
+ * everywhere in the level) and _updateOnPlanet (Mario Galaxy-style
+ * spherical gravity, used only inside a planet's gravity field — see
+ * PhysicsEngine.getActiveGravityField). update() picks between them each
+ * frame; outside of a gravity field, behavior is byte-for-byte identical
+ * to before that feature existed.
+ */
 export default class Player {
   // A 'stats' object is used instead of fixed constants so EntityManager can
   // pass different values per character (see EntityManager.spawnPlayer).
@@ -23,25 +35,23 @@ export default class Player {
 
     enableShadows(this.mesh);
 
-    // Animazioni procedurali. Se il modello non ha uno scheletro riconoscibile
-    // (BoneMap.isUsable === false) il controller resta inerte: il personaggio
-    // si muove esattamente come prima, solo senza ciclo di passi.
+    // Procedural skeletal animation. If the model has no recognizable
+    // skeleton (BoneMap.isUsable === false) the controller stays inert: the
+    // character still moves exactly as before, just without a walk cycle.
     this.animation = new AnimationController(this.mesh, {
-      // La soglia oltre la quale si passa alla corsa SEGUE la velocità del
-      // personaggio, non è un numero fisso: Luigi cammina a 20, cioè più
-      // veloce di quanto Mario corra. Con una soglia unica Luigi sarebbe
-      // sempre in corsa e non camminerebbe mai. Il margine sopra moveSpeed
-      // lascia la camminata all'andatura normale e la corsa allo sprint.
+      // The run threshold FOLLOWS the character's speed rather than being a
+      // fixed number: Luigi walks at 20, which is faster than Mario runs.
+      // A single fixed threshold would leave Luigi always running and never
+      // walking — this margin above moveSpeed keeps normal pace as a walk
+      // and only sprinting as a run.
       runSpeed: this.moveSpeed * 1.1,
     });
   }
 
-  /**
-   * Da chiamare quando il giocatore viene sostituito: ferma il mixer e
-   * rimette lo scheletro in posa di riposo. Il modello è condiviso (viene da
-   * AssetLoader), quindi lasciarlo in una posa animata sporcherebbe lo
-   * spawn successivo.
-   */
+  // Called when the active player character is being swapped out: stops the
+  // mixer and resets the skeleton to its rest pose. The model is shared
+  // (it comes from AssetLoader), so leaving it in an animated pose would
+  // taint the next spawn.
   disposeAnimation() {
     if (!this.animation) return;
     this.animation.restoreBindPose();
@@ -49,6 +59,9 @@ export default class Player {
     this.animation = null;
   }
 
+  // Places the character in the world: positions the mesh, applies the
+  // model's base rotation offset, and creates+registers its dynamic
+  // physics body along with the landing-detection collision listener.
   spawn(x, y, z) {
     if (!this.mesh) return;
 
@@ -95,6 +108,9 @@ export default class Player {
     }
   }
 
+  // Per-frame entry point: routes to the flat-ground or planet-gravity
+  // movement code depending on whether the player is currently inside a
+  // planet's gravity field.
   update(delta, input, ui, audio, camera) {
     if (!this.mesh || !this.body) return;
 
@@ -116,6 +132,16 @@ export default class Player {
   // gravity was added. This is the code path used everywhere in the level
   // except while inside a planet's gravity field (see _updateOnPlanet).
   _updateFlat(delta, input, ui, audio, camera) {
+    // BUG FIX (leftover planet tilt): _updateOnPlanet sets a full 3D
+    // quaternion so the model can stand upright on a curved surface facing
+    // any direction — that leaves pitch/roll (rotation.x/z) non-zero. Flat
+    // ground only ever wants yaw (rotation.y), so force pitch/roll back to
+    // 0 every frame here; otherwise, coming back from a planet, Mario would
+    // stay leaning at whatever angle the planet's surface last had him at
+    // instead of snapping back upright.
+    this.mesh.rotation.x = 0;
+    this.mesh.rotation.z = 0;
+
     const isSprinting =
       input.isPressed("shift") ||
       input.isPressed("shiftleft") ||
@@ -196,16 +222,16 @@ export default class Player {
       this.body.position.z,
     );
 
-    // Lo stato dell'animazione si DEDUCE dal moto già calcolato sopra: il
-    // controller non tocca né la velocità né i comandi, quindi il modo in cui
-    // si guida il personaggio resta identico.
+    // The animation state is DERIVED from the motion already computed
+    // above: the controller never touches velocity or input, so how the
+    // character is driven stays exactly the same either way.
     if (this.animation) {
       const v = this.body.velocity;
 
-      // canJump da solo non basta come "a terra": resta vero anche quando si
-      // cammina oltre il bordo di una piattaforma, perché non arriva nessuna
-      // collisione nuova a smentirlo. La velocità verticale distingue il
-      // caso: chi sta cadendo scende.
+      // canJump alone isn't enough to mean "grounded": it stays true even
+      // while walking off the edge of a platform, since no new collision
+      // arrives to clear it. Vertical velocity resolves that case — a
+      // falling body has negative y velocity.
       const grounded = this.canJump && v.y > -2;
 
       this.animation.update(delta, {
@@ -263,16 +289,28 @@ export default class Player {
 
     // Flatten the camera-relative axes onto the planet's tangent plane so
     // walking stays flush with its curved surface instead of world-flat.
-    // Falls back to the raw direction in the rare case the camera is
-    // looking almost straight along `up`, where the projection would
-    // otherwise collapse to ~zero length.
+    // Returns null if the camera is looking almost straight along `up`,
+    // where the projection collapses to ~zero length and can't give a
+    // reliable direction.
     const projectOnPlane = (v) => {
       const d = v.dot(up);
       const proj = v.clone().sub(up.clone().multiplyScalar(d));
-      return proj.lengthSq() > 0.0001 ? proj.normalize() : v.clone();
+      return proj.lengthSq() > 0.0001 ? proj.normalize() : null;
     };
-    const tangentForward = projectOnPlane(camForward);
-    const tangentRight = projectOnPlane(camRight);
+    let tangentForward = projectOnPlane(camForward);
+    let tangentRight = projectOnPlane(camRight);
+
+    // BUG FIX (equator launch): camForward and camRight are always exactly
+    // 90° apart, so if one is ~parallel to `up` (projection degenerates),
+    // the other is automatically ~orthogonal to it — derive the missing one
+    // by rotating the valid one 90° around `up` instead of falling back to
+    // the raw, non-tangent camera vector. The old fallback could be up to
+    // 100% radial at certain camera angles near the equator (verified
+    // numerically), injecting a huge outward-velocity component into what
+    // was supposed to be pure surface movement and launching the player
+    // off the planet — this is what "salta all'improvviso" was.
+    if (!tangentForward) tangentForward = up.clone().cross(tangentRight).normalize();
+    if (!tangentRight) tangentRight = tangentForward.clone().cross(up).normalize();
 
     const moveVec = new THREE.Vector3();
     if (input.isPressed("w") || input.isPressed("arrowup")) moveVec.add(tangentForward);
@@ -340,8 +378,28 @@ export default class Player {
     // curved surface no matter where on it the player is standing.
     const feet = bodyPos.clone().sub(up.clone().multiplyScalar(this.radius));
     this.mesh.position.copy(feet);
+
+    // BUG FIX (missing animation on planets): _updateFlat already does this,
+    // but this method never called it, so the walk/run/jump/fall cycle never
+    // played while on a planet's surface. Speed/verticalVelocity are measured
+    // along the LOCAL tangent/up axes instead of world X/Z/Y, since "up" can
+    // point in any direction here.
+    if (this.animation) {
+      const finalVel = this.body.velocity;
+      const radialSpeed = finalVel.x * up.x + finalVel.y * up.y + finalVel.z * up.z;
+      const tangentSpeedSq =
+        finalVel.x * finalVel.x + finalVel.y * finalVel.y + finalVel.z * finalVel.z -
+        radialSpeed * radialSpeed;
+
+      this.animation.update(delta, {
+        speed: Math.sqrt(Math.max(tangentSpeedSq, 0)),
+        verticalVelocity: radialSpeed,
+        grounded,
+      });
+    }
   }
 
+  // Current world position, or the origin if the character hasn't spawned yet.
   get position() {
     return this.mesh ? this.mesh.position : new THREE.Vector3();
   }

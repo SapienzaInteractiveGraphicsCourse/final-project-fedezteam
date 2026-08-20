@@ -3,19 +3,24 @@ import BoneMap from "./BoneMap.js";
 import { buildCharacterClips } from "./clipFactory.js";
 
 /**
- * Macchina a stati delle animazioni di un personaggio.
+ * AnimationController.js — per-character animation state machine.
  *
- * Possiede l'AnimationMixer, tiene un'azione per ogni stato e gestisce le
- * dissolvenze incrociate fra uno stato e l'altro. Lo stato viene dedotto dal
- * moto del personaggio: non tocca né la fisica né i comandi, quindi accenderlo
- * o spegnerlo non cambia di una virgola come si guida il giocatore.
+ * Owns the AnimationMixer, keeps one action per state, and cross-fades
+ * between states. The state is inferred from the character's motion: it
+ * never touches physics or input, so enabling/disabling it doesn't change
+ * how the player is driven in the slightest.
+ *
+ * If the model's skeleton isn't usable (see BoneMap.isUsable), the whole
+ * controller stays inert — the game keeps working exactly as before, just
+ * without a walk cycle. That's a deliberately silent failure mode: no
+ * console error, no blocked loading screen.
  */
 export default class AnimationController {
-  /**
-   * @param {THREE.Object3D} root - la scena del modello (deve contenere le ossa)
-   * @param {object} [opts]
-   * @param {number} [opts.runSpeed] - velocità oltre la quale si passa a "run"
-   */
+  // Builds the mixer and BoneMap for `root`, and — if the skeleton is
+  // usable — snapshots the bind pose and builds every clip immediately.
+  // @param {THREE.Object3D} root - the model's scene graph (must contain the bones)
+  // @param {object} [opts]
+  // @param {number} [opts.runSpeed] - speed above which the state becomes "run"
   constructor(root, opts = {}) {
     this.root = root;
     this.mixer = new THREE.AnimationMixer(root);
@@ -24,22 +29,22 @@ export default class AnimationController {
     this.actions = {};
     this.current = null;
 
-    // Se il modello non ha uno scheletro utilizzabile il controller resta
-    // inerte: il gioco continua a funzionare, semplicemente senza animazioni.
+    // See the file header: an unusable skeleton leaves the controller
+    // inert rather than throwing.
     this.enabled = this.boneMap.isUsable;
 
     this.walkSpeed = opts.walkSpeed ?? 2.0;
     this.runSpeed = opts.runSpeed ?? 12.0;
 
     if (this.enabled) {
-      // Le clip si costruiscono leggendo posizioni e orientamenti MONDO delle
-      // ossa in posa di bind: le matrici devono essere aggiornate prima.
+      // Clips are built by reading the bones' WORLD positions/orientations
+      // in bind pose, so world matrices must be current first.
       root.updateMatrixWorld(true);
 
-      // Fotografia della posa di riposo, scattata ORA che nessuna animazione
-      // ha ancora toccato le ossa. Senza di essa un rebuild() rileggerebbe la
-      // posa ANIMATA scambiandola per quella di bind, e ogni ritaratura
-      // accumulerebbe deformazione sulla precedente.
+      // Snapshot of the resting pose, taken NOW before any animation has
+      // touched the bones. Without it, a later rebuild() would read the
+      // ANIMATED pose as if it were the bind pose, and each re-tuning pass
+      // would compound deformation on top of the last.
       this._bindPose = [];
       root.traverse((n) => {
         if (n.isBone) {
@@ -55,6 +60,8 @@ export default class AnimationController {
     }
   }
 
+  // Builds one AnimationMixer action per clip from clipFactory, marking
+  // "jump" as a one-shot that holds its last frame instead of looping.
   _buildActions() {
     const clips = buildCharacterClips(this.boneMap);
 
@@ -62,8 +69,8 @@ export default class AnimationController {
       const action = this.mixer.clipAction(clip);
 
       if (name === "jump") {
-        // Lo stacco si suona una volta e resta sull'ultimo fotogramma,
-        // altrimenti il personaggio "rimbalza" mentre è ancora per aria.
+        // The takeoff plays once and holds its last frame, otherwise the
+        // character would "bounce" while still airborne.
         action.setLoop(THREE.LoopOnce, 1);
         action.clampWhenFinished = true;
       }
@@ -71,11 +78,9 @@ export default class AnimationController {
     }
   }
 
-  /**
-   * Passa a uno stato con dissolvenza incrociata.
-   * @param {string} name
-   * @param {number} [fade] - durata della transizione in secondi
-   */
+  // Cross-fades into a named state's action, fading the previous one out.
+  // @param {string} name
+  // @param {number} [fade] - crossfade duration, in seconds
   play(name, fade = 0.18) {
     if (!this.enabled) return;
 
@@ -94,15 +99,13 @@ export default class AnimationController {
     this.current = name;
   }
 
-  /**
-   * Sceglie lo stato in base al moto e lo applica.
-   *
-   * @param {number} delta
-   * @param {object} motion
-   * @param {number} motion.speed - velocità orizzontale
-   * @param {number} motion.verticalVelocity
-   * @param {boolean} motion.grounded
-   */
+  // Picks the right state from the character's current motion and plays
+  // it, then advances the mixer by `delta`.
+  // @param {number} delta
+  // @param {object} motion
+  // @param {number} motion.speed - horizontal speed
+  // @param {number} motion.verticalVelocity
+  // @param {boolean} motion.grounded
   update(delta, motion) {
     if (!this.enabled) return;
 
@@ -118,8 +121,8 @@ export default class AnimationController {
 
       this.play(state);
 
-      // Il passo segue la velocità reale, così il personaggio non "pattina":
-      // se rallenta, rallenta anche il ciclo di camminata.
+      // The step rate follows the real speed, so the character never
+      // "skates": slowing down also slows the walk cycle.
       if (state === "walk" || state === "run") {
         const reference = state === "run" ? this.runSpeed : this.walkSpeed * 2.2;
         const ratio = THREE.MathUtils.clamp(speed / reference, 0.55, 1.8);
@@ -130,8 +133,7 @@ export default class AnimationController {
     this.mixer.update(delta);
   }
 
-  /** Ricostruisce le clip dopo aver modificato POSE (per la taratura a occhio). */
-  /** Riporta lo scheletro esattamente alla posa di riposo. */
+  // Resets every bone back to exactly its recorded bind pose.
   restoreBindPose() {
     if (!this._bindPose) return;
     for (const s of this._bindPose) {
@@ -141,12 +143,13 @@ export default class AnimationController {
     this.root.updateMatrixWorld(true);
   }
 
+  // Rebuilds every clip after POSE values changed (used for live/by-eye
+  // tuning). Restores the bind pose first so the new clips aren't computed
+  // starting from an already-animated skeleton.
   rebuild() {
     if (!this.enabled) return;
 
     this.mixer.stopAllAction();
-    // Prima di ricostruire le clip lo scheletro va rimesso in posa di riposo,
-    // altrimenti le nuove clip verrebbero calcolate a partire da quella animata.
     this.restoreBindPose();
 
     this.actions = {};
@@ -154,6 +157,7 @@ export default class AnimationController {
     this._buildActions();
   }
 
+  // Stops every action and releases the mixer's cache for this root.
   dispose() {
     this.mixer.stopAllAction();
     this.mixer.uncacheRoot(this.root);

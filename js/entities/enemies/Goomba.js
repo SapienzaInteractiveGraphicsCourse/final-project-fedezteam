@@ -1,19 +1,23 @@
 import Enemy from "./Enemy.js";
 
 /**
- * Standard one-hit enemy: a single stomp defeats it, no invulnerability
- * window needed since there's no second hit to space out. Everything else
- * (chase AI, physics body, contact detection) comes from Enemy.
+ * Goomba.js — the basic one-hit enemy.
+ *
+ * Goomba is a thin config wrapper around the shared Enemy base class: it
+ * contributes only its own tuning numbers (detection range, chase speed,
+ * collision radius, visual scale) and leaves every behavior — chase AI,
+ * physics body, stomp/contact detection, defeat — to Enemy. A Goomba dies in
+ * a single stomp, so no invulnerability window is needed.
  */
 export default class Goomba extends Enemy {
+  // Builds a Goomba with its default stats, overridable via `options`.
+  // targetHeight normalizes goomba.glb's scale, which otherwise renders
+  // far too tall relative to the player.
   constructor(mesh, physicsEngine, options = {}) {
     super(mesh, physicsEngine, {
       detectionRange: 9,
       chaseSpeed: 2.5,
       radius: 0.55,
-      // The raw goomba.glb came out towering over the player at scale 1 —
-      // this normalizes it to a believable, slightly-shorter-than-Mario
-      // height regardless of the model's native scale.
       targetHeight: 1.3,
       hitsToDefeat: 1,
       invulnerabilityDuration: 0,

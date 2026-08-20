@@ -1,6 +1,14 @@
 import * as THREE from "three";
 
+/**
+ * GameLoop.js — drives the game's main render/update loop via three.js'
+ * built-in animation loop (renderer.setAnimationLoop), clamping delta time
+ * so a stalled tab or debugger pause can't produce a huge simulation step
+ * when it resumes.
+ */
 export default class GameLoop {
+  // Wires up the clock and stores the renderer/update callback; nothing
+  // runs until start() is called.
   constructor(rendererManager, updateCallback) {
     this.clock = new THREE.Clock();
     this.rendererManager = rendererManager;
@@ -8,31 +16,31 @@ export default class GameLoop {
     this.isRunning = false;
   }
 
+  // Starts the loop: each frame computes a clamped delta, runs the game's
+  // update callback, then renders via RendererManager.render() (not the
+  // raw renderer — that's where the skybox gets re-centered on the camera
+  // every frame; calling the renderer directly would skip that and leave
+  // the sky sphere pinned to the origin).
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
     this.clock.start();
 
-    // Three.js animation loop, driven by the WebGL renderer itself.
+    // three.js animation loop
     this.rendererManager.renderer.setAnimationLoop(() => {
       if (!this.isRunning) return;
 
-      // Clamp delta to avoid huge physics/animation steps after a tab
-      // switch or a long GC pause.
       const delta = Math.min(this.clock.getDelta(), 0.1);
 
       if (this.updateCallback) {
         this.updateCallback(delta);
       }
 
-      // Render through RendererManager.render() rather than calling the raw
-      // WebGLRenderer directly: that method is what re-centers the skybox on
-      // the camera every frame. Calling the renderer directly skips it,
-      // leaving the sky sphere pinned to the world origin.
       this.rendererManager.render();
     });
   }
 
+  // Stops the loop and the clock. Safe to call even if never started.
   stop() {
     if (!this.isRunning) return;
     this.isRunning = false;

@@ -1,6 +1,23 @@
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 
+/**
+ * PhysicsEngine.js — owns the cannon-es World and steps it every frame.
+ *
+ * On top of the plain flat-gravity simulation, it layers an optional,
+ * additive Mario Galaxy-style per-planet gravity system (see
+ * GravityField.js): bodies that opt in via registerGravityBody() get pulled
+ * toward the nearest registered gravity field instead of falling straight
+ * down, once they're within its influence radius. Nothing here changes for
+ * bodies that never opt in, or while no field is in range — they fall under
+ * the plain world.gravity exactly as before this feature existed.
+ *
+ * Also provides checkVoidFall(), the shared "fell off the level" trigger
+ * used by both the main island and the separate boss obstacle zones.
+ */
 export default class PhysicsEngine {
+  // Creates the cannon-es world, its shared contact material (near-zero
+  // friction — the character controllers handle movement themselves — and
+  // no bounce), and the empty gravity-field registry.
   constructor(options = {}) {
     this.world = new CANNON.World();
     this.world.gravity.set(0, options.gravity || -30, 0);
@@ -42,6 +59,8 @@ export default class PhysicsEngine {
     if (body) this._gravityBodies.add(body);
   }
 
+  // Undoes registerGravityBody — called when a body is being discarded
+  // (e.g. the player switching characters).
   unregisterGravityBody(body) {
     this._gravityBodies.delete(body);
   }
@@ -67,6 +86,9 @@ export default class PhysicsEngine {
     return best;
   }
 
+  // Steps the physics world by one frame: first applies the additive
+  // per-planet gravity override to every registered body currently inside
+  // a field's range, then advances the simulation.
   update(delta) {
     // Additive per-body planet gravity. For every body that opted in via
     // registerGravityBody(), if it's currently inside a field's influence

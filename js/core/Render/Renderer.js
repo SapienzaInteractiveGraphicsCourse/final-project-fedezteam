@@ -2,7 +2,20 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { TEXTURES } from "../Assets/manifest.js";
 
+/**
+ * Renderer.js — owns the three.js Scene, PerspectiveCamera and WebGLRenderer,
+ * plus the one-time environment setup wrapped around them: skybox, lights,
+ * shadow camera tuning, distance fog, and window-resize handling.
+ *
+ * All numeric "tuning" comments below (exposure, light intensities, shadow
+ * area) record earlier values tried during manual brightness calibration —
+ * kept as a note for whoever adjusts them next, not because a different
+ * approach was rejected.
+ */
 export default class RendererManager {
+  // Builds the canvas/scene/camera/renderer trio, sets up PBR environment
+  // lighting (see the environment map note below), and calls the four
+  // setup*() methods that populate the scene (skybox, lights, fog, resize).
   constructor(canvasId = "#webgl-canvas") {
     this.canvas = document.querySelector(canvasId);
 
@@ -42,28 +55,17 @@ export default class RendererManager {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.LinearToneMapping; // Preserves the original texture saturation.
-    // Was 1.5, then 1.0 — still reading too bright, so now below the
-    // neutral three.js default. toneMappingExposure scales the ENTIRE
-    // rendered result, including the environment map below (every
-    // material in the scene receives IBL light from it), so this is the
-    // main global brightness lever.
+    // Was 1.5, then 1.0 — still too bright; now below the neutral default.
+    // Scales the WHOLE rendered result (including the environment map
+    // below), so this is the main global brightness lever.
     this.renderer.toneMappingExposure = 0.85;
 
-    // Environment map (IBL) for PBR materials. Without this, any material
-    // with real metalness has nothing to reflect and renders almost black
-    // — only a tiny specular speck is visible instead of a shiny surface.
-    // This is exactly what was happening to the coin/star models: their
-    // glTF materials never set metallicFactor explicitly, and the glTF
-    // spec's default for that is 1.0 (fully metallic), so they came out
-    // fully metallic with zero environment to reflect. A model viewer
-    // always provides some kind of studio lighting/environment by default,
-    // which is why they looked fine there. RoomEnvironment is three.js'
-    // built-in generic "soft studio" environment made for exactly this
-    // case — no external HDRI file needed — and it improves every
-    // metallic/glossy material in the scene uniformly, not just the item
-    // models (see also the metalness/roughness clamp in
-    // utils/materials.js, a second, more direct safety net for this same
-    // issue).
+    // PBR materials with real metalness need something to reflect, or they
+    // render almost black (this broke the coin/star models, whose glTF
+    // materials default metallicFactor to 1.0 with no env map set).
+    // RoomEnvironment is three.js' built-in "soft studio" fallback — see
+    // also the metalness/roughness clamp in utils/materials.js, a second
+    // safety net for the same issue.
     const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     pmremGenerator.dispose();
@@ -78,6 +80,9 @@ export default class RendererManager {
     this.setupResize();
   }
 
+  // Loads the sky texture and wraps it in a custom shader (darkens the sky,
+  // boosts cloud contrast) applied to a huge inward-facing sphere that
+  // always renders first, so it never z-fights with real geometry.
   setupSkybox() {
     const textureLoader = new THREE.TextureLoader();
     const skyTexture = textureLoader.load(TEXTURES.skyBox);
@@ -142,6 +147,9 @@ export default class RendererManager {
     this.scene.add(this.skyBox);
   }
 
+  // Sets up the ambient + shadow-casting directional light, and tunes the
+  // directional light's orthographic shadow camera to stay tight around
+  // the player instead of covering the whole island (see SHADOW_AREA below).
   setupLights() {
     // Slightly warm tint instead of pure white, so the whole scene reads
     // less flat/clinical without changing the exposure or shadow behavior.
@@ -163,15 +171,10 @@ export default class RendererManager {
     this.scene.add(this.dirLight.target);
 
     // --- SHADOWS ---
-    // The light follows the player (see EntityManager.update), so the shadow
-    // map only needs to cover the area AROUND the player, not the entire
-    // island: SHADOW_AREA is the half-width of the orthographic shadow box,
-    // in world units.
-    //
-    // Sharpness = (2 * SHADOW_AREA) / SHADOW_RES world units per texel.
-    // With 30 and 2048 -> ~0.029 units/texel. Want sharper shadows? Lower
-    // SHADOW_AREA. Want shadows to reach further? Raise it (and accept
-    // softer edges).
+    // The light follows the player (see EntityManager.update), so the
+    // shadow map only needs to cover the area around the player, not the
+    // whole island. SHADOW_AREA is the ortho box half-width; SHADOW_RES the
+    // map resolution — sharpness is roughly (2*SHADOW_AREA)/SHADOW_RES units/texel.
     const SHADOW_AREA = 30;
     const SHADOW_RES = 2048;
 
@@ -188,10 +191,9 @@ export default class RendererManager {
     shadowCam.far = 200;
 
     // IMPORTANT: three.js does NOT call updateProjectionMatrix() for
-    // directional lights automatically (LightShadow.updateMatrices only
-    // updates position/lookAt). Without this call, left/right/top/bottom/
-    // near/far are silently ignored and the shadow camera stays at its
-    // constructor default, a box of only +/-5.
+    // directional lights automatically — without this, left/right/top/
+    // bottom/near/far above are silently ignored and the shadow camera
+    // stays at its default +/-5 box.
     shadowCam.updateProjectionMatrix();
 
     this.dirLight.shadow.mapSize.width = SHADOW_RES;
@@ -199,18 +201,17 @@ export default class RendererManager {
   }
 
   /**
-   * Adds soft distance fog so the island's edges fade into the sky instead
-   * of cutting off sharply, and the far background gains a sense of depth.
-   * Near/far are kept well outside normal gameplay range (the island itself
-   * is only ~60 units wide) so it never fogs anything the player is
-   * actually standing on or near.
+   * Soft distance fog so the island's edges fade into the sky instead of
+   * cutting off sharply. Range is kept well outside normal gameplay (the
+   * island is only ~60 units wide) so it never fogs anything nearby.
    */
   setupFog() {
     const fogColor = 0xcfe8ff;
     this.scene.fog = new THREE.Fog(fogColor, 120, 550);
   }
 
-  // Update the camera aspect ratio and renderer size whenever the window is resized.
+  // Keeps the camera aspect ratio and renderer size/pixel-ratio in sync
+  // with the browser window on every resize.
   setupResize() {
     window.addEventListener("resize", () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -220,6 +221,8 @@ export default class RendererManager {
     });
   }
 
+  // Renders one frame. The skybox is re-centered on the camera first so it
+  // always reads as an infinite backdrop rather than a fixed-size sphere.
   render() {
     // The sky is always re-centered on the camera to give the illusion of an infinite sky.
     if (this.skyBox) {
