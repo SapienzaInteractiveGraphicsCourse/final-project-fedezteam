@@ -12,6 +12,7 @@ import { getStoredMuteState } from "./utils/storage.js";
 import Yoshi from "./entities/Yoshi.js";
 import Goomba from "./entities/enemies/Goomba.js";
 import Kamek from "./entities/enemies/Kamek.js";
+import Bowser from "./entities/enemies/Bowser.js";
 import ObstacleZone from "./entities/Level/ObstacleZone.js";
 import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
@@ -431,7 +432,8 @@ const entityManager = new EntityManager(
   renderer.dirLight,
 );
 let mapEntity = null;
-let obstacleZone = null;
+let kamekZone = null;
+let bowserZone = null;
 
 const ui = new UIManager();
 const audio = new AudioManager();
@@ -541,12 +543,17 @@ function updateGame(delta) {
 
   entityManager.update(delta, input, ui, audio, renderer.camera);
 
-  // Lava hazard check for the separate Kamek obstacle zone (see
-  // ObstacleZone.js) — a no-op everywhere else in the level, since it only
-  // does anything when the player is standing inside a lava patch's
-  // footprint.
-  if (obstacleZone) {
-    obstacleZone.update(delta, entityManager.player, () => {
+  // Lava hazard check for the two separate obstacle zones (Kamek's and
+  // Bowser's, see ObstacleZone.js) — a no-op everywhere else in the level,
+  // since it only does anything when the player is standing inside a lava
+  // patch's footprint.
+  if (kamekZone) {
+    kamekZone.update(delta, entityManager.player, () => {
+      if (ui.removeLife) ui.removeLife(1, audio);
+    });
+  }
+  if (bowserZone) {
+    bowserZone.update(delta, entityManager.player, () => {
       if (ui.removeLife) ui.removeLife(1, audio);
     });
   }
@@ -623,16 +630,16 @@ initGameModels(assetLoader)
     // Kamek. Reached via the "kamek_zone" warp stars placed in
     // GameLevel.js — see entities/Level/ObstacleZone.js for why this is a
     // teleport within the same world rather than a real level switch.
-    obstacleZone = new ObstacleZone(renderer.scene, physics);
-    await obstacleZone.load("./assets/levels/kamek_zone.json");
+    kamekZone = new ObstacleZone(renderer.scene, physics);
+    await kamekZone.load("./assets/levels/kamek_zone.json");
 
-    if (mapEntity?.decorations && obstacleZone.entryPoint) {
-      mapEntity.decorations.setKamekZoneEntry(obstacleZone.entryPoint);
+    if (mapEntity?.decorations && kamekZone.entryPoint) {
+      mapEntity.decorations.setKamekZoneEntry(kamekZone.entryPoint);
     }
 
-    if (obstacleZone.kamekSpawn) {
+    if (kamekZone.bossSpawn) {
       const kamek = new Kamek(enemyAssets.kamek.clone(), physics);
-      kamek.spawn(obstacleZone.kamekSpawn.x, obstacleZone.kamekSpawn.y, obstacleZone.kamekSpawn.z);
+      kamek.spawn(kamekZone.bossSpawn.x, kamekZone.bossSpawn.y, kamekZone.bossSpawn.z);
 
       kamek.onStomped = () => {
         if (audio && audio.playSFX) audio.playSFX("jump");
@@ -649,21 +656,62 @@ initGameModels(assetLoader)
         // kamek.mesh stays valid after _defeat() (only removed from the
         // scene graph, never nulled out), so its last position is still
         // readable here.
-        const dropX = kamek.mesh ? kamek.mesh.position.x : (obstacleZone.kamekSpawn?.x ?? 320);
-        const dropY = (kamek.mesh ? kamek.mesh.position.y : (obstacleZone.kamekSpawn?.y ?? 12)) + 1;
-        const dropZ = kamek.mesh ? kamek.mesh.position.z : (obstacleZone.kamekSpawn?.z ?? 260);
+        const dropX = kamek.mesh ? kamek.mesh.position.x : (kamekZone.bossSpawn?.x ?? 320);
+        const dropY = (kamek.mesh ? kamek.mesh.position.y : (kamekZone.bossSpawn?.y ?? 10)) + 1;
+        const dropZ = kamek.mesh ? kamek.mesh.position.z : (kamekZone.bossSpawn?.z ?? 260);
 
         if (mapEntity?.collectibles) {
-          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY, z: dropZ }]);
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY +2, z: dropZ }]);
         }
         if (mapEntity?.decorations) {
           mapEntity.decorations.spawnWarpStars([
-            { x: dropX + 3, y: dropY, z: dropZ, color: 0xffffff, target: "spawn" },
+            { x: dropX + +5, y: dropY + 4, z: dropZ+5, color: 0xffffff, target: "spawn" },
           ]);
         }
       };
 
       entityManager.addEntity(kamek);
+    }
+
+    // Same idea, second obstacle course: wider platforms with bigger
+    // height gaps between them (see bowser_zone.json), ending with Bowser
+    // instead of Kamek. Reached via the single "bowser_zone" warp star
+    // placed in GameLevel.js.
+    bowserZone = new ObstacleZone(renderer.scene, physics);
+    await bowserZone.load("./assets/levels/bowser_zone.json");
+
+    if (mapEntity?.decorations && bowserZone.entryPoint) {
+      mapEntity.decorations.setBowserZoneEntry(bowserZone.entryPoint);
+    }
+
+    if (bowserZone.bossSpawn) {
+      const bowser = new Bowser(enemyAssets.bowser.clone(), physics);
+      bowser.spawn(bowserZone.bossSpawn.x, bowserZone.bossSpawn.y, bowserZone.bossSpawn.z);
+
+      bowser.onStomped = () => {
+        if (audio && audio.playSFX) audio.playSFX("jump");
+      };
+      bowser.onDamagePlayer = () => {
+        if (ui.removeLife) ui.removeLife(1, audio);
+      };
+      bowser.onDefeated = () => {
+        // Same "drop a real collectible star + a warp star back to spawn"
+        // pattern as Kamek's onDefeated above.
+        const dropX = bowser.mesh ? bowser.mesh.position.x : (bowserZone.bossSpawn?.x ?? -230);
+        const dropY = (bowser.mesh ? bowser.mesh.position.y : (bowserZone.bossSpawn?.y ?? 10)) + 1;
+        const dropZ = bowser.mesh ? bowser.mesh.position.z : (bowserZone.bossSpawn?.z ?? 300);
+
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY + 2, z: dropZ }]);
+        }
+        if (mapEntity?.decorations) {
+          mapEntity.decorations.spawnWarpStars([
+            { x: dropX + 5, y: dropY + 4, z: dropZ + 5, color: 0xffffff, target: "spawn" },
+          ]);
+        }
+      };
+
+      entityManager.addEntity(bowser);
     }
 
     rawModels.mario = assets.mario;
