@@ -562,6 +562,65 @@ position: absolute;
 .btn-red:hover {
   background-color: #ff3b30 !important;
 }
+
+/* --- OVERLAY VITTORIA --- */
+.win-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(6px);
+  z-index: 300;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.win-overlay.hidden {
+  display: none !important;
+}
+
+.win-card {
+  width: 580px !important;
+  max-width: 90vw;
+  padding: 35px 40px !important;
+  text-align: center;
+  border: 4px solid #fbd000 !important;
+  box-shadow: 0 0 35px rgba(251, 208, 0, 0.7) !important;
+}
+
+.win-title {
+  font-size: 2.2rem;
+  color: #fbd000;
+  text-shadow: 3px 3px 0px #000;
+  margin-bottom: 15px;
+  animation: pulse-gold 1.2s infinite alternate ease-in-out;
+}
+
+@keyframes pulse-gold {
+  0% {
+    transform: scale(1);
+    text-shadow: 3px 3px 0px #000, 0 0 10px #fbd000;
+  }
+  100% {
+    transform: scale(1.06);
+    text-shadow: 3px 3px 0px #000, 0 0 25px #fbd000;
+  }
+}
+
+.btn-gold {
+  background-color: #fbd000 !important;
+  color: #3a2a00 !important;
+  box-shadow: 0 4px 0 #a68600 !important;
+  margin-top: 15px;
+}
+
+.btn-gold:hover {
+  background-color: #ffe14d !important;
+}
 /* --- TASTO MUTE IN ALTO A DESTRA --- */
 .mute-button {
   position: absolute;

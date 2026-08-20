@@ -1,7 +1,7 @@
 import RendererManager from "./core/Render/Renderer.js";
 import CameraManager from "./core/Render/CameraManager.js";
 import AssetLoader from "./core/Assets/AssetLoader.js";
-import { initGameModels } from "./core/Assets/assetConfig.js";
+import { initGameModels, initEnemyModels } from "./core/Assets/assetConfig.js";
 import GameLoop from "./core/GameLoop.js";
 import InputManager from "./core/InputManager.js";
 import UIManager from "./ui/UIManager.js";
@@ -10,6 +10,9 @@ import AudioManager from "./core/Audio/AudioManager.js";
 import { initGameAudio } from "./core/Audio/soundConfig.js";
 import { getStoredMuteState } from "./utils/storage.js";
 import Yoshi from "./entities/Yoshi.js";
+import Goomba from "./entities/enemies/Goomba.js";
+import Kamek from "./entities/enemies/Kamek.js";
+import ObstacleZone from "./entities/Level/ObstacleZone.js";
 import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
 import * as THREE from "three";
@@ -430,6 +433,7 @@ const entityManager = new EntityManager(
   renderer.dirLight,
 );
 let mapEntity = null;
+let obstacleZone = null;
 
 const ui = new UIManager();
 const audio = new AudioManager();
@@ -538,6 +542,17 @@ function updateGame(delta) {
   if (ui.isPaused || !entityManager.player) return;
 
   entityManager.update(delta, input, ui, audio, renderer.camera);
+
+  // Lava hazard check for the separate Kamek obstacle zone (see
+  // ObstacleZone.js) — a no-op everywhere else in the level, since it only
+  // does anything when the player is standing inside a lava patch's
+  // footprint.
+  if (obstacleZone) {
+    obstacleZone.update(delta, entityManager.player, () => {
+      if (ui.removeLife) ui.removeLife(1, audio);
+    });
+  }
+
   cameraManager.update(entityManager.player, input, delta);
   if (showColliders) cannonDebugger.update();
 }
@@ -576,8 +591,103 @@ initGameModels(assetLoader)
       entityManager.setYoshi(yoshiEntity);
     }
 
+    // Enemies. Loaded separately from the character models (see
+    // assetConfig.initEnemyModels) since they aren't part of CHARACTER_MODELS;
+    // the underlying AssetLoader cache is shared, so this just adds to it.
+    // 3 Goombas, hand-placed a good distance apart around the island so they
+    // don't cluster in one spot. EntityManager already has a generic
+    // entities[] update loop (see addEntity), so no changes to
+    // EntityManager.js or Player.js were needed to wire this up.
+    const enemyAssets = await initEnemyModels(assetLoader);
+    const GOOMBA_SPAWNS = [
+      { x: 70, y: 2, z: -20 },
+      { x: -50, y: 2, z: 80 },
+      { x: 20, y: 2, z: -95 },
+    ];
+
+    for (const spawn of GOOMBA_SPAWNS) {
+      const goomba = new Goomba(enemyAssets.goomba.clone(), physics);
+      goomba.spawn(spawn.x, spawn.y, spawn.z);
+
+      goomba.onStomped = () => {
+        if (audio && audio.playSFX) audio.playSFX("jump"); // bounce sound
+      };
+      goomba.onDamagePlayer = () => {
+        if (ui.removeLife) ui.removeLife(1, audio);
+      };
+
+      entityManager.addEntity(goomba);
+    }
+
+    // Separate bonus zone far from the main island: a short platform path
+    // with fall risk (handled entirely by the existing void-fall respawn,
+    // see EntityManager.update) plus a couple of lava hazards, ending with
+    // Kamek. Reached via the "kamek_zone" warp stars placed in
+    // GameLevel.js — see entities/Level/ObstacleZone.js for why this is a
+    // teleport within the same world rather than a real level switch.
+    obstacleZone = new ObstacleZone(renderer.scene, physics);
+    await obstacleZone.load("./assets/levels/kamek_zone.json");
+
+    if (mapEntity?.decorations && obstacleZone.entryPoint) {
+      mapEntity.decorations.setKamekZoneEntry(obstacleZone.entryPoint);
+    }
+
+    if (obstacleZone.kamekSpawn) {
+      const kamek = new Kamek(enemyAssets.kamek.clone(), physics);
+      kamek.spawn(obstacleZone.kamekSpawn.x, obstacleZone.kamekSpawn.y, obstacleZone.kamekSpawn.z);
+
+      kamek.onStomped = () => {
+        if (audio && audio.playSFX) audio.playSFX("jump");
+      };
+      kamek.onDamagePlayer = () => {
+        if (ui.removeLife) ui.removeLife(1, audio);
+      };
+      kamek.onDefeated = () => {
+        // A real star to walk over and collect (not an instant grant),
+        // plus a warp star right next to it to head back to spawn — same
+        // "poke the level's existing systems from outside, after the
+        // event" pattern used everywhere else for this kind of thing
+        // (EntityManager's void-fall respawn, Enemy's stomp bounce).
+        // kamek.mesh stays valid after _defeat() (only removed from the
+        // scene graph, never nulled out), so its last position is still
+        // readable here.
+        const dropX = kamek.mesh ? kamek.mesh.position.x : (obstacleZone.kamekSpawn?.x ?? 320);
+        const dropY = (kamek.mesh ? kamek.mesh.position.y : (obstacleZone.kamekSpawn?.y ?? 12)) + 1;
+        const dropZ = kamek.mesh ? kamek.mesh.position.z : (obstacleZone.kamekSpawn?.z ?? 260);
+
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY, z: dropZ }]);
+        }
+        if (mapEntity?.decorations) {
+          mapEntity.decorations.spawnWarpStars([
+            { x: dropX + 3, y: dropY, z: dropZ, color: 0xffffff, target: "spawn" },
+          ]);
+        }
+      };
+
+      entityManager.addEntity(kamek);
+    }
+
     rawModels.mario = assets.mario;
     rawModels.luigi = assets.luigi;
+
+    // Compile every shader the scene currently needs (level geometry,
+    // planets, enemies, Kamek's zone, ...) right now, while the loading
+    // screen is still up, instead of letting the GPU compile them one at a
+    // time the first moment each material actually appears on screen
+    // during gameplay (a classic cause of random mid-game stutters the
+    // first time you look at something new). This trades a slightly
+    // longer load for a smoother run afterward. The character models
+    // aren't in the scene yet at this point (they're only added once the
+    // player picks Mario/Luigi on the next screen), so there's still a
+    // small one-time compile the first time the player actually spawns —
+    // unavoidable without restructuring the character-select flow, but
+    // this covers the vast majority of what's on screen during play.
+    if (renderer.renderer.compileAsync) {
+      await renderer.renderer.compileAsync(renderer.scene, renderer.camera);
+    } else {
+      renderer.renderer.compile(renderer.scene, renderer.camera);
+    }
 
     // Everything is ready: fade out and hide the loading screen.
     const loadingScreen = document.getElementById("loading-screen");

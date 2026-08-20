@@ -33,8 +33,16 @@ export default class EntityManager {
     if (this.player && this.player.mesh) {
       this.player.disposeAnimation();
       this.scene.remove(this.player.mesh);
-      if (this.player.body)
+      if (this.player.body) {
         this.physicsEngine.world.removeBody(this.player.body);
+        // Also drop the old body from the planet-gravity registry (see
+        // PhysicsEngine.registerGravityBody) — it's about to be replaced,
+        // and a stale removed body sitting in that set would be harmless
+        // but pointless to keep iterating every frame.
+        if (this.physicsEngine.unregisterGravityBody) {
+          this.physicsEngine.unregisterGravityBody(this.player.body);
+        }
+      }
     }
 
     // Per-character stats: Luigi is faster/higher-jumping but slippery,
@@ -49,6 +57,14 @@ export default class EntityManager {
     this.player = new Player(model, this.physicsEngine, stats);
     this.player.spawn(startX, startY, startZ);
     this.scene.add(this.player.mesh);
+
+    // Opt the player into Mario Galaxy-style planet gravity (see
+    // PhysicsEngine.registerGravityBody / GravityField.js). Harmless
+    // everywhere in the normal level — this only changes anything once the
+    // body gets close enough to a planet's registered gravity field.
+    if (this.physicsEngine.registerGravityBody) {
+      this.physicsEngine.registerGravityBody(this.player.body);
+    }
   }
 
   addEntity(entity) {
@@ -114,7 +130,10 @@ export default class EntityManager {
         },
         () => {
           if (audio && audio.playSFX) audio.playSFX("star");
-          if (ui && ui.addStar) ui.addStar(1);
+          // Passing audio through lets addStar() stop the BGM itself if
+          // this pickup happens to be the one that reaches maxStars and
+          // triggers the win screen (see UIManager.addStar/showWin).
+          if (ui && ui.addStar) ui.addStar(1, audio);
         },
         () => {
           if (audio && audio.playSFX) audio.playSFX("mushroom");
