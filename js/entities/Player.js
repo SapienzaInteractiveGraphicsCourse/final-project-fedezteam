@@ -26,7 +26,14 @@ export default class Player {
     // Animazioni procedurali. Se il modello non ha uno scheletro riconoscibile
     // (BoneMap.isUsable === false) il controller resta inerte: il personaggio
     // si muove esattamente come prima, solo senza ciclo di passi.
-    this.animation = new AnimationController(this.mesh);
+    this.animation = new AnimationController(this.mesh, {
+      // La soglia oltre la quale si passa alla corsa SEGUE la velocità del
+      // personaggio, non è un numero fisso: Luigi cammina a 20, cioè più
+      // veloce di quanto Mario corra. Con una soglia unica Luigi sarebbe
+      // sempre in corsa e non camminerebbe mai. Il margine sopra moveSpeed
+      // lascia la camminata all'andatura normale e la corsa allo sprint.
+      runSpeed: this.moveSpeed * 1.1,
+    });
   }
 
   /**

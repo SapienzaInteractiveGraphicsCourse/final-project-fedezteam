@@ -25,7 +25,6 @@ import AnimationController from "./entities/animation/AnimationController.js";
 import { POSE, characterBasis } from "./entities/animation/clipFactory.js";
 
 // 1. CORE MODULES
-
 const renderer = new RendererManager("#webgl-canvas");
 const cameraManager = new CameraManager(renderer.camera);
 const assetLoader = new AssetLoader();
@@ -35,8 +34,6 @@ const physics = new PhysicsEngine({
   gravity: -35,
   fallThreshold: -50,
 });
-
-
 
 // Wireframe dei collider fisici. SPENTO di default: si accende con F3 oppure
 // da console con toggleColliders(). Utile quando si tarano le hitbox delle case,
@@ -80,7 +77,7 @@ window.addEventListener("keydown", (e) => {
 // collegarlo al personaggio vero. Da console:
 //
 //    testRig("assets/models/Super_Mario/Enemies/bowser_jr.glb")
-//    testRig("assets/models/Super_Mario/Main_Characters/mario_ok_fixed.glb", "run")
+//    testRig("assets/models/Super_Mario/Main_Characters/Mario/mario.glb", "run")
 //
 // Poi si tara a occhio senza ricaricare la pagina:
 //    POSE.armRest = 60; rebuildRigs()
@@ -101,7 +98,7 @@ window.testRig = async function (path, state = "walk", scaleTo = 2.2) {
     // Le matrici mondo vanno aggiornate PRIMA di misurare: su un modello con
     // scheletro Box3 chiede a SkinnedMesh.computeBoundingBox(), che legge le
     // matrici delle ossa. Appena uscito dal loader quelle matrici non sono
-    // ancora calcolate e la misura viene fuori sbagliata (per mario_ok_fixed
+    // ancora calcolate e la misura viene fuori sbagliata (per Mario/mario.glb
     // 0.65 invece di 1.64, cioè un modello di prova alto il triplo del dovuto).
     model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);
@@ -371,7 +368,7 @@ window.rebuildRigs = function () {
 // Se l'indirizzo contiene ?rig, il banco di prova parte da solo appena il
 // gioco è pronto. Serve solo durante lo sviluppo delle animazioni: senza il
 // parametro il gioco si comporta esattamente come prima.
-//   http://127.0.0.1:5500/?rig            → mario_ok_fixed, stato "walk"
+//   http://127.0.0.1:5500/?rig            → Mario/mario.glb, stato "walk"
 //   http://127.0.0.1:5500/?rig=run        → stato "run"
 //   http://127.0.0.1:5500/?rig=walk&model=assets/.../bowser_jr.glb
 const rigParams = new URLSearchParams(window.location.search);
@@ -380,7 +377,7 @@ const autoRig = rigParams.has("rig")
       state: rigParams.get("rig") || "walk",
       model:
         rigParams.get("model") ||
-        "assets/models/Super_Mario/Main_Characters/mario_ok_fixed.glb",
+        "assets/models/Super_Mario/Main_Characters/Mario/mario.glb",
     }
   : null;
 
@@ -392,7 +389,7 @@ console.log(
 );
 console.log(
   "  testRig(percorso)      carica un modello e lo fa animare accanto a te\n" +
-    '  testRig("assets/models/Super_Mario/Main_Characters/mario_ok_fixed.glb")\n' +
+    '  testRig("assets/models/Super_Mario/Main_Characters/Mario/mario.glb")\n' +
     "  testRigs[0].controller.play(\"run\")   cambia stato: idle|walk|run|jump|fall\n" +
     "  POSE.walkLegSwing = 30; rebuildRigs()  ritara le ampiezze a caldo\n" +
     "     (armSpread, walkArmSwing, walkKneeBend, runLean, ...)\n" +

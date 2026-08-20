@@ -16,14 +16,8 @@
 const MODELS_ROOT = "assets/models/Super_Mario";
 
 export const CHARACTER_MODELS = {
-  // mario_ok_fixed.glb (not the older MarioGLTF/mario.gltf) — this is the
-  // rigged model with a Mixamo skeleton BoneMap.js can recognize; see
-  // entities/animation/. Pointing this at mario.gltf silently disables all
-  // player animation (AnimationController.enabled becomes false, no error,
-  // the character just stops animating) since that older model has no
-  // usable skeleton.
-  mario: `${MODELS_ROOT}/Main_Characters/mario_ok_fixed.glb`,
-  luigi: `${MODELS_ROOT}/Main_Characters/LuigiGLTF/Luigi.gltf`,
+  mario: `${MODELS_ROOT}/Main_Characters/Mario/mario.glb`,
+  luigi: `${MODELS_ROOT}/Main_Characters/Luigi/luigi.glb`,
   yoshi: `${MODELS_ROOT}/Main_Characters/YoshiGLTF/yoshi.gltf`,
 };
 
