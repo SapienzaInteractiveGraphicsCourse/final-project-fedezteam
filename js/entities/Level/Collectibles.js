@@ -32,6 +32,33 @@ export default class Collectibles {
 
     this.questionMarkBlocks = [];
     this.mushroomGlb = null;
+
+    // undefined = not attempted yet, null = attempted and failed to load —
+    // same cache convention as Decorations._loadCoinModel. spawnStars() is
+    // called not just once at level load but also at RUNTIME every time a
+    // boss (Kamek/Bowser) is defeated, dropping a fresh star (see main.js);
+    // without this cache each defeat re-fetched and re-parsed star.glb from
+    // scratch, which was the actual cause of the brief stutter on boss
+    // defeat.
+    this._starGlbCache = undefined;
+  }
+
+  // Loads (and caches) the star model — see the comment on _starGlbCache.
+  async _loadStarModel() {
+    if (this._starGlbCache !== undefined) return this._starGlbCache;
+
+    try {
+      this._starGlbCache = await this.loader.loadAsync(ITEM_MODELS.star);
+      // Normalized once here — every star clone shares this material by
+      // reference, so this covers all of them regardless of which
+      // spawnStars() call they came from.
+      normalizeMaterials(this._starGlbCache.scene);
+    } catch (e) {
+      console.warn("[Collectibles] star.glb not found.");
+      this._starGlbCache = null;
+    }
+
+    return this._starGlbCache;
   }
 
   // Preloads the mushroom model once, reused both by the static mushroom
@@ -62,16 +89,7 @@ export default class Collectibles {
   // runtime for one-off stars (e.g. the one Kamek drops on defeat — see
   // main.js), since it just appends to this.stars either way.
   async spawnStars(starPositions) {
-    let starGlb = null;
-    try {
-      starGlb = await this.loader.loadAsync(ITEM_MODELS.star);
-      // Normalized once here — every star clone below shares this
-      // material by reference, so this covers all of them (see
-      // utils/materials.js for why this was needed at all).
-      normalizeMaterials(starGlb.scene);
-    } catch (e) {
-      console.warn("[Collectibles] star.glb not found.");
-    }
+    const starGlb = await this._loadStarModel();
 
     const positions = starPositions || [
       { x: -30, y: 2, z: -30 },

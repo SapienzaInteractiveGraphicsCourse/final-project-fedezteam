@@ -34,3 +34,6 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Mario's House Exterior**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/nintendo-64-paper-mario-marios-house-exterio-6eaf1353a8a34de4a9a1d74a41445f2d)
 - **Egg Planet**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/egg-planet-8e5dba7af88e487ea61992f804b91eb8)
 - **Grass**: Created by [Quaternius](https://poly.pizza/m/3tyh15Fbmsx) — [Model Link](https://poly.pizza/m/3tyh15Fbmsx) (CC0)
+https://sketchfab.com/3d-models/minecraft-sign-483093c29032437594e86b792dced8d4
+https://sounds.spriters-resource.com/wii/supermariogalaxy/asset/395356/
+https://sounds.spriters-resource.com/wii/supermariogalaxy/asset/395355/
