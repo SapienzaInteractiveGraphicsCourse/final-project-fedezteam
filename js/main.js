@@ -643,6 +643,25 @@ function updateGame(delta) {
     }
   }
 
+  // Boss zone music: kamek_battle/bowser_battle take over the BGM for the
+  // WHOLE obstacle course (ObstacleZone.containsPoint — approach platforms
+  // included, not just the arena itself, unlike the health bar above), back
+  // to the overworld theme as soon as the player leaves either. Gated on
+  // gameState === "PLAYING" so it can't fight the game-over/win jingle —
+  // updateGame() itself isn't guarded on that (unlike the MENU_* early
+  // return above), so without this a still-running per-frame call would
+  // restart the zone track right after showGameOver()/showWin() stopped it.
+  if (ui.gameState === "PLAYING") {
+    const playerPos = entityManager.player?.mesh?.position;
+    if (kamekZone && kamekZone.containsPoint(playerPos)) {
+      audio.playMusic("kamek_battle");
+    } else if (bowserZone && bowserZone.containsPoint(playerPos)) {
+      audio.playMusic("bowser_battle");
+    } else {
+      audio.playMusic();
+    }
+  }
+
   cameraManager.update(entityManager.player, input, delta);
   if (showColliders) cannonDebugger.update();
 }

@@ -41,29 +41,14 @@
       "z": 20
     },
     {
-      "x": -45,
-      "y": 7,
-      "z": -10
-    },
-    {
-      "x": 0,
-      "y": 8,
-      "z": -75
-    },
-    {
       "x": 96,
       "y": 7,
       "z": 70
     },
     {
-      "x": -96,
-      "y": 7,
-      "z": 45
-    },
-    {
-      "x": -15,
-      "y": 7,
-      "z": 116
+      "x": 96,
+      "y": 20,
+      "z": 70
     }
   ],
   "buildings": [
@@ -140,54 +125,6 @@
       "hitboxZ": 12
     },
     {
-      "name": "Base Bassa",
-      "x": -35,
-      "y": 0,
-      "z": -10,
-      "scaleX": 6,
-      "scaleY": 1.2,
-      "scaleZ": 6,
-      "hitboxX": 12,
-      "hitboxY": 2.4,
-      "hitboxZ": 12
-    },
-    {
-      "name": "Cima Alta",
-      "x": -45,
-      "y": 2.0,
-      "z": -10,
-      "scaleX": 6,
-      "scaleY": 2.5,
-      "scaleZ": 6,
-      "hitboxX": 12,
-      "hitboxY": 5,
-      "hitboxZ": 12
-    },
-    {
-      "name": "Gradino Nord",
-      "x": 0,
-      "y": 0,
-      "z": -60,
-      "scaleX": 8,
-      "scaleY": 1.5,
-      "scaleZ": 6,
-      "hitboxX": 16,
-      "hitboxY": 3,
-      "hitboxZ": 12
-    },
-    {
-      "name": "Altopiano Gigante Nord",
-      "x": 0,
-      "y": 2.5,
-      "z": -75,
-      "scaleX": 12,
-      "scaleY": 3.0,
-      "scaleZ": 10,
-      "hitboxX": 24,
-      "hitboxY": 6,
-      "hitboxZ": 20
-    },
-    {
       "name": "Passerella Est 1 (Bassa e Larga)",
       "x": 70,
       "y": 0,
@@ -256,42 +193,6 @@
       "scaleY": 2.6,
       "scaleZ": 7,
       "hitboxX": 14,
-      "hitboxY": 5.2,
-      "hitboxZ": 14
-    },
-    {
-      "name": "Passerella Sud 1 (Bassa e Larga)",
-      "x": -15,
-      "y": 0,
-      "z": 90,
-      "scaleX": 10,
-      "scaleY": 1.0,
-      "scaleZ": 8,
-      "hitboxX": 20,
-      "hitboxY": 2,
-      "hitboxZ": 16
-    },
-    {
-      "name": "Passerella Sud 2",
-      "x": -15,
-      "y": 1.4,
-      "z": 103,
-      "scaleX": 9,
-      "scaleY": 1.8,
-      "scaleZ": 8,
-      "hitboxX": 18,
-      "hitboxY": 3.6,
-      "hitboxZ": 16
-    },
-    {
-      "name": "Passerella Sud 3 (Alta)",
-      "x": -15,
-      "y": 3.0,
-      "z": 116,
-      "scaleX": 8,
-      "scaleY": 2.6,
-      "scaleZ": 7,
-      "hitboxX": 16,
       "hitboxY": 5.2,
       "hitboxZ": 14
     }

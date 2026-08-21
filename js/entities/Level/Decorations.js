@@ -182,26 +182,6 @@ export default class Decorations {
     const half = arenaSize / 2 - 10;
     const world = this.physicsWorld?.world || this.physicsWorld;
 
-    // Extra margin beyond each hill's own collider half-extent, so a prop
-    // can't spawn right at the platform's edge either (a tree's trunk
-    // collider alone is ~0.5 wide — see TRUNK_HALF_WIDTH below — so some
-    // slack keeps it visibly clear of the platform, not just technically
-    // outside its exact box).
-    const HILL_CLEARANCE = 2;
-    const isInsideHill = (x, z) => {
-      for (const h of hillFootprints) {
-        if (
-          x >= h.x - h.halfX - HILL_CLEARANCE &&
-          x <= h.x + h.halfX + HILL_CLEARANCE &&
-          z >= h.z - h.halfZ - HILL_CLEARANCE &&
-          z <= h.z + h.halfZ + HILL_CLEARANCE
-        ) {
-          return true;
-        }
-      }
-      return false;
-    };
-
     for (let x = -half; x <= half; x += step) {
       for (let z = -half; z <= half; z += step) {
         // Skip the central area where buildings/NPCs are placed.
@@ -213,8 +193,8 @@ export default class Decorations {
         // BUG FIX (palm trees spawning inside HillBlock platforms): skip
         // this grid cell entirely if the jittered position falls inside
         // (or too close to) any hill's real footprint — see hillFootprints
-        // above.
-        if (isInsideHill(posX, posZ)) continue;
+        // above and _isInsideHillFootprint below.
+        if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
 
         if (treeGlb && Math.random() > 0.85) {
           const tree = treeGlb.scene.clone();
@@ -442,7 +422,26 @@ export default class Decorations {
    * visual mesh count changes), and shadows are unaffected too: the merged
    * mesh still casts/receives exactly as every individual rock did.
    */
-  spawnRocks(arenaSize, count = 18) {
+  // Shared by every scatter method below that takes `hillFootprints`
+  // (spawnFieldProps, spawnRocks, spawnBushes): true if (x, z) falls inside
+  // — or within `clearance` units of — any HillBlock platform's real
+  // collider footprint (see HillBlock.js and GameLevel.js's hillFootprints
+  // computation), so props can't spawn inside or clipping through one.
+  _isInsideHillFootprint(x, z, hillFootprints = [], clearance = 2) {
+    for (const h of hillFootprints) {
+      if (
+        x >= h.x - h.halfX - clearance &&
+        x <= h.x + h.halfX + clearance &&
+        z >= h.z - h.halfZ - clearance &&
+        z <= h.z + h.halfZ + clearance
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  spawnRocks(arenaSize, count = 18, hillFootprints = []) {
     const rockMaterial = new THREE.MeshStandardMaterial({
       color: 0x8a8378,
       roughness: 0.95,
@@ -460,6 +459,10 @@ export default class Decorations {
       const dist = half - 2 - Math.random() * 6;
       const posX = Math.cos(angle) * dist;
       const posZ = Math.sin(angle) * dist;
+
+      // Skip this rock entirely if it would land inside (or clipping
+      // through the edge of) a HillBlock platform.
+      if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
 
       const radius = 0.6 + Math.random() * 1.4;
       const posY = radius * 0.35;
@@ -535,7 +538,7 @@ export default class Decorations {
    * keeping the 5-color variety. Shadows are unaffected: the merged mesh
    * casts/receives exactly as every individual bush did.
    */
-  spawnBushes(arenaSize, count = 26) {
+  spawnBushes(arenaSize, count = 26, hillFootprints = []) {
     const bushColors = [0x3f7d32, 0x4f9b3d, 0x2f6b28, 0x5aa83f, 0x6bb84a];
     const half = arenaSize / 2 - 15;
 
@@ -549,6 +552,10 @@ export default class Decorations {
 
       // Same central village exclusion zone as spawnFieldProps.
       if (posX > -40 && posX < 80 && posZ > -50 && posZ < 50) continue;
+
+      // Skip this bush entirely if it would land inside (or clipping
+      // through the edge of) a HillBlock platform.
+      if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
 
       const radius = 0.8 + Math.random() * 0.9;
       const color = bushColors[Math.floor(Math.random() * bushColors.length)];

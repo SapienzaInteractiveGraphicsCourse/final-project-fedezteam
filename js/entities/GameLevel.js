@@ -80,24 +80,35 @@ export default class GameLevel {
       hillFootprints,
     );
 
-    // Curated coin trail guiding the player up the hill staircase in
-    // level1.json ("Scalino 1/2/3", around x=30..50, z=20). Hand-placed to
-    // match that specific level layout, on top of the random field scatter.
+    // Final HillClimb layout: exactly 3 three-platform staircases
+    // (level1.json's "hills"). "Scalino" is HillClimb Standard, "Passerella
+    // Est" is HillClimb Yoshi, "Passerella Ovest" is coin-trail-only. The
+    // old 2-platform staircases ("Base Bassa"/"Cima Alta",
+    // "Gradino Nord"/"Altopiano Gigante Nord") and "Passerella Sud" were
+    // removed entirely, along with their coin trails, below.
+
+    // "Scalino 1/2/3" (level1.json, x=30..50, z=20) — HillClimb Standard,
+    // ends at the normal-height Power Star (50, 8, 20).
+    //
+    // BUG FIX (last coin overlapping the star): the trail used to end
+    // exactly at (50, 7.5, 20), which is basically on top of the star at
+    // (50, 8, 20) in level1.json — pulled back to (47, 6.8, 20), a step
+    // short of the star instead of coinciding with it.
     await this.decorations.spawnCoinTrail(
       [
         { x: 25, y: 2.5, z: 20 },
         { x: 30, y: 3.5, z: 20 },
         { x: 40, y: 5.0, z: 20 },
-        { x: 50, y: 7.5, z: 20 },
+        { x: 47, y: 6.8, z: 20 },
       ],
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
       { spacing: 2, arcHeight: 0.4 },
     );
 
-    // Same idea as above, one coin trail per new hill staircase added for
-    // the "big package" map pass (see level1.json: "Passerella Est/Ovest/
-    // Sud"). Heights are hand-tuned to roughly follow each staircase's
-    // step tops, ending near that staircase's star.
+    // "Passerella Est 1/2/3" (level1.json, x=70..96, z=70) — HillClimb
+    // Yoshi: keeps its normal-height Power Star ((96, 7, 70)) plus a SECOND
+    // star placed far higher ((96, 20, 70)), reachable only via Yoshi's
+    // boosted jump.
     await this.decorations.spawnCoinTrail(
       [
         { x: 60, y: 2.3, z: 70 },
@@ -108,22 +119,15 @@ export default class GameLevel {
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
       { spacing: 2, arcHeight: 0.4 },
     );
+
+    // "Passerella Ovest 1/2/3" (level1.json, x=-70..-96, z=45) — plain
+    // coin-trail-only staircase, no star.
     await this.decorations.spawnCoinTrail(
       [
         { x: -60, y: 2.3, z: 45 },
         { x: -70, y: 3.5, z: 45 },
         { x: -83, y: 4.9, z: 45 },
         { x: -96, y: 7.5, z: 45 },
-      ],
-      (coinMesh) => this.collectibles.registerCoin(coinMesh),
-      { spacing: 2, arcHeight: 0.4 },
-    );
-    await this.decorations.spawnCoinTrail(
-      [
-        { x: -15, y: 2.3, z: 80 },
-        { x: -15, y: 3.5, z: 90 },
-        { x: -15, y: 4.9, z: 103 },
-        { x: -15, y: 7.5, z: 116 },
       ],
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
       { spacing: 2, arcHeight: 0.4 },
@@ -140,8 +144,8 @@ export default class GameLevel {
     this.decorations.decorateStructures(levelData?.buildings);
 
     await this.decorations.spawnGrassField(mainIslandSize);
-    this.decorations.spawnRocks(mainIslandSize);
-    this.decorations.spawnBushes(mainIslandSize);
+    this.decorations.spawnRocks(mainIslandSize, undefined, hillFootprints);
+    this.decorations.spawnBushes(mainIslandSize, undefined, hillFootprints);
 
     // Small decorative ponds, hand-placed to stay clear of buildings, hills
     // and staircases. Purely visual (flat water disc, no collider/depth).

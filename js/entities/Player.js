@@ -34,12 +34,14 @@ export default class Player {
     this.canJump = false;
     this.radius = 1;
 
-    // Jump debounce for _updateOnPlanet only (see there) — flat-ground
+    // Jump SFX debounce for _updateOnPlanet only (see there) — flat-ground
     // jumping already gets a real one-shot via the "collide" event
     // resetting canJump (see spawn()), but on a planet `grounded` is a
     // continuous per-frame distance check with a tolerance margin, not an
-    // event, so without a separate latch a held jump key fires the jump
-    // (and its SFX) again on every frame that check hadn't cleared yet.
+    // event, and the jump velocity there legitimately needs to keep
+    // re-applying itself every frame the key is held to actually clear
+    // that tolerance zone. This flag gates only the SFX/bookkeeping to
+    // once per landing, not the velocity application itself.
     this._planetJumpLatched = false;
 
     enableShadows(this.mesh);
@@ -380,31 +382,37 @@ export default class Player {
       this.mesh.rotateY(this.modelOffset || 0);
     }
 
-    // BUG FIX (double jump SFX on the red planet): `grounded` above stays
-    // true for a frame or more after a jump starts (it's a tolerance-padded
-    // distance check, not a landing event — see its own comment), so a held
-    // jump key used to fire this whole block, SFX included, on every one of
-    // those frames. `_planetJumpLatched` gates it to once per landing: set
-    // the moment a jump fires, only cleared once the player has actually
-    // left the surface (grounded goes false, above), mirroring how canJump
-    // debounces flat-ground jumping via the real "collide" event.
+    // BUG FIX (double jump SFX on the red planet), take 2: `grounded` above
+    // stays true for a frame or more after a jump starts (it's a
+    // tolerance-padded distance check, not a landing event), so the launch
+    // below legitimately NEEDS to keep re-applying itself every one of
+    // those frames while the key is held — the "stick to surface" block
+    // earlier in this method zeroes any outward radial velocity while
+    // `grounded` reads true, so a single one-shot launch gets canceled
+    // again before the player has actually cleared the tolerance zone, and
+    // with the launch gated to one-shot too that cancellation was never
+    // re-applied — this was the "press space, one sound, then can never
+    // jump again" regression from gating the whole block instead of just
+    // the sound. So: velocity keeps launching every grounded+held frame
+    // exactly as before (that repetition is what lets the player actually
+    // escape the tolerance zone over 2-3 frames), but `_planetJumpLatched`
+    // now gates ONLY the SFX/bookkeeping to once per landing, cleared only
+    // once the player has actually left the surface (grounded goes false).
     if (!grounded) {
       this._planetJumpLatched = false;
     }
 
-    if (
-      (input.isPressed("space") || input.isPressed(" ")) &&
-      grounded &&
-      !this._planetJumpLatched
-    ) {
+    if ((input.isPressed("space") || input.isPressed(" ")) && grounded) {
       const jumpVel = new THREE.Vector3(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z);
       const tangential = jumpVel.clone().sub(up.clone().multiplyScalar(jumpVel.dot(up)));
       const launched = tangential.add(up.clone().multiplyScalar(this.jumpVelocity));
       this.body.velocity.set(launched.x, launched.y, launched.z);
-      this._planetJumpLatched = true;
 
-      if (audio && audio.playSFX) {
-        audio.playSFX("jump");
+      if (!this._planetJumpLatched) {
+        this._planetJumpLatched = true;
+        if (audio && audio.playSFX) {
+          audio.playSFX("jump");
+        }
       }
     }
 
