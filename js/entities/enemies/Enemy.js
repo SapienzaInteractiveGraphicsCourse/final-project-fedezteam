@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { enableShadows } from "../../utils/shadows.js";
+import { COLLISION_GROUPS } from "../../physics/PhysicsEngine.js";
 
 /**
  * Enemy.js — shared base class for every enemy in the game (Goomba, Kamek,
@@ -116,6 +117,14 @@ export default class Enemy {
       fixedRotation: true,
     });
 
+    // Collides with everything EXCEPT the player — see COLLISION_GROUPS'
+    // comment in PhysicsEngine.js. Every enemy-player interaction already
+    // goes through _checkPlayerContact below; a real cannon-es collision
+    // between the two dynamic spheres on top of that was unintentional and
+    // is what caused the "rimbalzo continuo" bug on Bowser.
+    this.body.collisionFilterGroup = COLLISION_GROUPS.ENEMY;
+    this.body.collisionFilterMask = -1 & ~COLLISION_GROUPS.PLAYER;
+
     if (this.physicsEngine && this.physicsEngine.world) {
       this.physicsEngine.world.addBody(this.body);
     }
@@ -203,7 +212,23 @@ export default class Enemy {
     const isFalling = player.body && player.body.velocity.y < 0;
     const isAbove = verticalDiff > this.radius * 0.3;
 
-    if (isFalling && isAbove) {
+    // BUG FIX (continuous bounce on Bowser): a stomp used to be accepted on
+    // ANY frame where isFalling && isAbove held, with no cooldown at all —
+    // only the side-contact branch below ever checked invulnerableTimer.
+    // So the instant Mario's bounce arc peaked and gravity started pulling
+    // him back down, if he was still horizontally within contactRange (easy
+    // on Bowser: radius 1 + targetHeight 3.4 keep the "above" window open
+    // far longer than Kamek's radius 0.3/targetHeight 2.2), _onStomped fired
+    // again immediately — re-bouncing him, re-granting invulnerability, and
+    // counting another hit the fight wasn't supposed to award yet. That's
+    // the "rimbalzo continuo": a rapid, self-sustaining stutter-bounce that
+    // also read as the boss' hitbox anomalously growing, since a single
+    // stomp was effectively registering hits across a much taller window
+    // than one legitimate stomp should. Gating this branch on
+    // invulnerableTimer too (the same guard the contact-damage branch
+    // already used) makes a stomp count once per invulnerability window,
+    // exactly as the multi-hit system was designed to work.
+    if (isFalling && isAbove && this.invulnerableTimer <= 0) {
       this._onStomped(player);
     } else if (this.invulnerableTimer <= 0 && this.playerHitCooldown <= 0) {
       this._onPlayerContact(player);

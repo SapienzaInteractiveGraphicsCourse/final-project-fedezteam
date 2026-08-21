@@ -647,6 +647,13 @@ initGameModels(assetLoader)
 
     entityManager.setMap(mapEntity);
 
+    // Classic void-fall respawn point for the main map (level1.json): if
+    // this is the only match (see setVoidFallZones below, for the two boss
+    // zones), falling into the void anywhere on the main island sends the
+    // player back to the game's actual starting point instead of a
+    // hardcoded (0,2,0) that could drift out of sync with the level file.
+    entityManager.setSpawnPoint(mapEntity.playerSpawn);
+
     if (mapEntity.yoshiSpawn) {
       const ySpawn = mapEntity.yoshiSpawn;
       const yoshiEntity = new Yoshi(assets.yoshi, physics);
@@ -696,7 +703,7 @@ initGameModels(assetLoader)
     }
 
     if (kamekZone.bossSpawn) {
-      const kamek = new Kamek(enemyAssets.kamek.clone(), physics);
+      const kamek = new Kamek(enemyAssets.kamek.clone(), physics, renderer.scene);
       kamek.spawn(kamekZone.bossSpawn.x, kamekZone.bossSpawn.y, kamekZone.bossSpawn.z);
 
       kamek.onStomped = () => {
@@ -722,8 +729,10 @@ initGameModels(assetLoader)
           mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY +2, z: dropZ }]);
         }
         if (mapEntity?.decorations) {
+          // Bright yellow (was plain white) so a boss-reward warp star
+          // reads as distinct from the decorative ones at level load.
           mapEntity.decorations.spawnWarpStars([
-            { x: dropX + +5, y: dropY + 4, z: dropZ+5, color: 0xffffff, target: "spawn" },
+            { x: dropX + +5, y: dropY + 4, z: dropZ+5, color: 0xffee00, target: "spawn" },
           ]);
         }
       };
@@ -743,7 +752,7 @@ initGameModels(assetLoader)
     }
 
     if (bowserZone.bossSpawn) {
-      const bowser = new Bowser(enemyAssets.bowser.clone(), physics);
+      const bowser = new Bowser(enemyAssets.bowser.clone(), physics, renderer.scene);
       bowser.spawn(bowserZone.bossSpawn.x, bowserZone.bossSpawn.y, bowserZone.bossSpawn.z);
 
       bowser.onStomped = () => {
@@ -763,14 +772,31 @@ initGameModels(assetLoader)
           mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY + 2, z: dropZ }]);
         }
         if (mapEntity?.decorations) {
+          // Bright yellow (was plain white) — same reasoning as Kamek's
+          // onDefeated above.
           mapEntity.decorations.spawnWarpStars([
-            { x: dropX + 5, y: dropY + 4, z: dropZ + 5, color: 0xffffff, target: "spawn" },
+            { x: dropX + 5, y: dropY + 4, z: dropZ + 5, color: 0xffee00, target: "spawn" },
           ]);
         }
       };
 
       entityManager.addEntity(bowser);
     }
+
+    // Zone-aware void-fall respawn: falling into the void while inside
+    // Kamek's or Bowser's obstacle course (including its boss arena) should
+    // respawn the player at THAT zone's own entrance, not drag them all the
+    // way back to the main island (see EntityManager.setVoidFallZones /
+    // ObstacleZone.containsPoint for the actual bounds check). Only zones
+    // that both loaded and ended up with a computed bounding box are
+    // registered — an empty/failed zone load is simply skipped, falling
+    // through to the classic spawn-point respawn set above.
+    entityManager.setVoidFallZones(
+      [
+        { zone: kamekZone, respawn: kamekZone?.entryPoint },
+        { zone: bowserZone, respawn: bowserZone?.entryPoint },
+      ].filter((entry) => entry.zone && entry.zone.bounds && entry.respawn),
+    );
 
     // The place the player is sent to after collecting every star: Peach's
     // castle with Peach waiting outside it. Built up front like the two
@@ -819,4 +845,4 @@ initGameModels(assetLoader)
     console.error("Error while loading assets:", error);
     const loadingText = document.getElementById("loading-text");
     if (loadingText) loadingText.innerText = "LOADING ERROR";
-  });
+  });

@@ -63,9 +63,54 @@ export default class Decorations {
     // just once at level load but also at RUNTIME every time a boss
     // (Kamek/Bowser) is defeated, dropping a single warp star back to spawn
     // (see main.js); without this cache each defeat re-fetched and
-    // re-parsed star_launch.glb from scratch, which was the actual cause of
-    // the brief stutter on boss defeat.
+    // re-parsed star_launch.glb from scratch, which used to be A cause of
+    // the brief stutter on boss defeat (see _warpLightPool below for the
+    // other, bigger one).
     this._starLaunchGlbCache = undefined;
+
+    // BUG FIX (boss-defeat/warp-star micro-freeze): fixed pool of reusable
+    // PointLights, created and added to the scene right now — i.e. well
+    // before the one-time renderer.compileAsync() warm-up in main.js runs —
+    // instead of spawnWarpStars() below doing `new THREE.PointLight(...)`
+    // on every call. Adding a NEW light to the scene forces three.js to
+    // recompile the shader of every material it now affects (light counts
+    // are baked into the shader source itself, as #define NUM_POINT_LIGHTS
+    // — confirmed via three.js's own docs/discussion of this), and that
+    // recompile is what caused the stutter: once right when a boss is
+    // defeated (a light was created for the reward star on the spot) and
+    // again moments later when the player walks up and collects it (the
+    // GPU driver can defer actually compiling/linking the new program until
+    // the next draw call that needs it, which often lands right around
+    // pickup). Every warp star from here on reuses one of these
+    // already-compiled-for lights instead, so nothing ever gets added to
+    // the scene again after startup — sized for the 4 decorative stars
+    // placed at level load (see GameLevel.js) plus one reserved slot each
+    // for Kamek's and Bowser's reward stars, with spare room to grow.
+    this._warpLightPool = [];
+    for (let i = 0; i < Decorations.WARP_LIGHT_POOL_SIZE; i++) {
+      const light = new THREE.PointLight(0xffffff, 0, 14, 2); // intensity 0 = off/unused
+      scene.add(light);
+      this._warpLightPool.push(light);
+    }
+    this._warpLightPoolIndex = 0;
+  }
+
+  // Hands out the next free light from the pool above (see the constructor
+  // for why), growing the pool on the spot — accepting the one-time
+  // recompile that was the whole point of pooling to avoid — only if every
+  // pooled light is already in use. Logged so the pool size can be raised
+  // if this ever actually triggers.
+  _nextWarpLight() {
+    if (this._warpLightPoolIndex >= this._warpLightPool.length) {
+      console.warn(
+        "[Decorations] warp light pool exhausted — creating an extra light " +
+          "(may cause a brief stutter). Consider raising Decorations.WARP_LIGHT_POOL_SIZE.",
+      );
+      const light = new THREE.PointLight(0xffffff, 0, 14, 2);
+      this.scene.add(light);
+      this._warpLightPool.push(light);
+    }
+    return this._warpLightPool[this._warpLightPoolIndex++];
   }
 
   // Loads (and caches) the warp star model — see the comment on
@@ -623,6 +668,15 @@ export default class Decorations {
    */
   static GROUND_OFFSET = {};
 
+  /**
+   * Size of the reusable warp-star glow-light pool (see _warpLightPool /
+   * _nextWarpLight) — currently 4 decorative stars at level load
+   * (GameLevel.js) + 1 reserved each for Kamek's and Bowser's reward stars
+   * = 6, plus a couple spare so future additions don't silently fall back
+   * to the (recompile-triggering) exhausted-pool path.
+   */
+  static WARP_LIGHT_POOL_SIZE = 8;
+
   // Adds a small decorated area (fence ring + a couple of lamp posts) around
   // every house-type building in the level, using the same building JSON
   // entries LevelLoader already consumed. Purely decorative primitives, no
@@ -930,10 +984,13 @@ export default class Decorations {
       this.scene.add(star);
 
       // Small matching-color glow so the star reads clearly against the
-      // skybox even from a distance.
-      const light = new THREE.PointLight(spot.color, 1.0, 14, 2);
+      // skybox even from a distance. Reuses a pre-warmed light from the
+      // pool instead of creating a new THREE.PointLight here — see
+      // _warpLightPool's comment in the constructor for why.
+      const light = this._nextWarpLight();
+      light.color.set(spot.color);
+      light.intensity = 1.0;
       light.position.set(spot.x, spot.y + 1, spot.z);
-      this.scene.add(light);
 
       this.warpStars.push({
         mesh: star,

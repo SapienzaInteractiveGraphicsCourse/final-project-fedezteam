@@ -18,9 +18,12 @@ import { normalizeMaterials } from "../../utils/materials.js";
  * the island (±120), Kamek's course (x 260..320) and Bowser's (x -300..-230).
  *
  * The difference from ObstacleZone is that this one is scenery, not a
- * course: no lava, no enemies, nothing to lose a life to. The ground is one
- * big slab so the player can walk around the castle without falling into
- * the void — the run is over at this point, the reward shouldn't be able to
+ * course: no lava, no enemies, nothing to lose a life to. The ground is a
+ * modestly-sized slab (just enough to comfortably fit the entry point, the
+ * castle and Peach — see the "ground"/"wallHeight" fields in the JSON)
+ * ringed by invisible boundary walls (see _buildBoundaryWalls) so it's
+ * actually impossible to walk off the edge into the void, rather than just
+ * unlikely — the run is over at this point, the reward shouldn't be able to
  * kill them.
  *
  * Both models are placed by MEASURING them rather than by trusting numbers
@@ -66,11 +69,16 @@ export default class EndingZone {
       x: 0,
       y: 6,
       z: -400,
-      size: { x: 170, y: 2, z: 170 },
+      size: { x: 110, y: 2, z: 140 },
     };
     const groundTop = ground.y + ground.size.y / 2;
 
     this._buildGround(ground);
+    // Invisible walls around the ground's perimeter — see the class doc
+    // and _buildBoundaryWalls itself for why. "wallHeight" is optional in
+    // the JSON (defaults below) since the ground's x/z size is what
+    // actually defines where the walls go.
+    this._buildBoundaryWalls(ground, data.wallHeight || 24);
 
     // The castle first: Peach's own placement doesn't depend on it (the
     // level file positions her directly), but loading it first means a
@@ -120,6 +128,47 @@ export default class EndingZone {
             new CANNON.Vec3(cfg.size.x / 2, cfg.size.y / 2, cfg.size.z / 2),
           ),
           position: new CANNON.Vec3(cfg.x, cfg.y, cfg.z),
+          material: this.physicsEngine?.defaultMaterial,
+        }),
+      );
+    }
+  }
+
+  /**
+   * Four invisible (no mesh, physics-only) walls ringing the ground's
+   * perimeter, tall enough that the player can never jump over them — the
+   * mirror image of ObstacleZone's fire poles (a visual with no collider):
+   * here it's a collider with no visual. This is what actually makes
+   * falling into the void impossible in this zone (the ground being one
+   * flat slab, by itself, only made it unlikely — walking off any edge was
+   * always still possible before this).
+   */
+  _buildBoundaryWalls(cfg, wallHeight) {
+    const world = this.physicsEngine?.world || this.physicsEngine;
+    if (!world) return;
+
+    const halfX = cfg.size.x / 2;
+    const halfZ = cfg.size.z / 2;
+    const groundTop = cfg.y + cfg.size.y / 2;
+    const thickness = 2;
+    const centerY = groundTop + wallHeight / 2;
+
+    // Each wall is a thin box just outside one edge of the ground, extended
+    // past the corners by `thickness` on both ends so the four walls fully
+    // close the ring with no gaps at the corners.
+    const walls = [
+      { x: cfg.x, z: cfg.z - halfZ - thickness / 2, sizeX: cfg.size.x + thickness * 2, sizeZ: thickness }, // north
+      { x: cfg.x, z: cfg.z + halfZ + thickness / 2, sizeX: cfg.size.x + thickness * 2, sizeZ: thickness }, // south
+      { x: cfg.x - halfX - thickness / 2, z: cfg.z, sizeX: thickness, sizeZ: cfg.size.z + thickness * 2 }, // west
+      { x: cfg.x + halfX + thickness / 2, z: cfg.z, sizeX: thickness, sizeZ: cfg.size.z + thickness * 2 }, // east
+    ];
+
+    for (const w of walls) {
+      world.addBody(
+        new CANNON.Body({
+          mass: 0,
+          shape: new CANNON.Box(new CANNON.Vec3(w.sizeX / 2, wallHeight / 2, w.sizeZ / 2)),
+          position: new CANNON.Vec3(w.x, centerY, w.z),
           material: this.physicsEngine?.defaultMaterial,
         }),
       );

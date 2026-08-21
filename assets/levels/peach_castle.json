@@ -1,6 +1,7 @@
 {
   "entryPoint": { "x": 0, "y": 9, "z": -352 },
-  "ground": { "x": 0, "y": 6, "z": -400, "size": { "x": 170, "y": 2, "z": 170 } },
+  "ground": { "x": 0, "y": 6, "z": -400, "size": { "x": 110, "y": 2, "z": 140 } },
+  "wallHeight": 24,
   "castle": { "x": 0, "z": -410, "height": 26 },
   "peach": { "x": 0, "z": -390, "height": 1.95, "rotationY": 0 }
 }

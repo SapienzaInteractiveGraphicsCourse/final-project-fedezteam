@@ -1,6 +1,34 @@
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 
 /**
+ * cannon-es collision filter groups/masks (bitmasks — see CANNON.Body's
+ * collisionFilterGroup/collisionFilterMask). Used by Player.js and Enemy.js
+ * so the player's and every enemy's dynamic bodies never produce a REAL
+ * cannon-es collision response against each other, while still colliding
+ * normally with everything else (ground, platforms, boss arenas, ...).
+ *
+ * BUG FIX (continuous bounce on Bowser): before this, player and enemy
+ * bodies were both plain dynamic spheres with cannon-es' default group/mask
+ * (collide with everything), so every stomp/contact was resolved TWICE —
+ * once by the game's own scripted logic (Enemy._onStomped setting
+ * player.body.velocity.y directly) and once more by cannon-es' own physics
+ * solver pushing the two overlapping dynamic spheres apart. That second,
+ * unscripted push is extra force the game never intended, and it's what
+ * "accumulo errato della forza di salto di Mario" refers to — it stacked on
+ * top of the scripted bounce instead of the scripted bounce being the only
+ * thing that happened. Bowser's larger radius (1 vs Kamek's 0.3) meant more
+ * overlap and a bigger, more noticeable extra push. Excluding the group
+ * pair below makes the scripted stomp/contact code (Enemy._checkPlayerContact)
+ * the ONLY thing that ever moves the player in response to an enemy — no
+ * separate physics impulse to fight it or accumulate on top of it.
+ */
+export const COLLISION_GROUPS = {
+  GROUND: 1,
+  PLAYER: 2,
+  ENEMY: 4,
+};
+
+/**
  * PhysicsEngine.js — owns the cannon-es World and steps it every frame.
  *
  * On top of the plain flat-gravity simulation, it layers an optional,

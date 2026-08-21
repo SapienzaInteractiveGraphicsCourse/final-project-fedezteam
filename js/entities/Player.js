@@ -2,6 +2,7 @@ import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { enableShadows } from "../utils/shadows.js";
 import AnimationController from "./animation/AnimationController.js";
+import { COLLISION_GROUPS } from "../physics/PhysicsEngine.js";
 
 /**
  * Player.js — the player character's movement, physics body and animation
@@ -85,6 +86,15 @@ export default class Player {
       material: this.physicsEngine?.defaultMaterial,
       fixedRotation: true, // Prevents the character from tumbling/rolling.
     });
+
+    // Collides with everything (ground, platforms, boss arenas, ...) EXCEPT
+    // enemy bodies — see COLLISION_GROUPS' own comment in PhysicsEngine.js
+    // for why: enemy contact is already fully handled by scripted logic
+    // (Enemy._checkPlayerContact), so a real cannon-es collision on top of
+    // that was redundant and was the actual source of the erroneous extra
+    // jump-force accumulation on Bowser's stomp bounce.
+    this.body.collisionFilterGroup = COLLISION_GROUPS.PLAYER;
+    this.body.collisionFilterMask = -1 & ~COLLISION_GROUPS.ENEMY;
 
     // 3. Collision listener used to reset the jump flag on landing. Only
     // used by _updateFlat — _updateOnPlanet has its own distance-based

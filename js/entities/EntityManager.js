@@ -13,6 +13,32 @@ export default class EntityManager {
 
     this.spaceWasPressed = false;
     this.isFallingScreamPlaying = false;
+
+    // Classic void-fall respawn point (see setSpawnPoint) — defaults to the
+    // old hardcoded value so nothing changes for anyone who never calls it.
+    this.spawnPoint = { x: 0, y: 2, z: 0 };
+
+    // Extra void-fall respawn zones (see setVoidFallZones), checked before
+    // falling back to spawnPoint — e.g. falling into the void during a boss
+    // fight respawns at that zone's own entrance instead of the main island.
+    this.voidFallZones = [];
+  }
+
+  // Sets the classic void-fall respawn point (called from main.js with
+  // mapEntity.playerSpawn once level1.json is parsed) — used whenever a
+  // fall doesn't land inside any zone registered via setVoidFallZones.
+  setSpawnPoint(point) {
+    if (point) this.spawnPoint = point;
+  }
+
+  // Registers extra void-fall respawn zones: an array of
+  // { zone, respawn }, where `zone` exposes containsPoint(pos) (an
+  // ObstacleZone instance already does — see there) and `respawn` is the
+  // {x,y,z} to send the player back to. Checked in order, first match wins;
+  // falls back to spawnPoint if nothing matches. Called from main.js once
+  // the Kamek/Bowser zones have finished loading.
+  setVoidFallZones(zones) {
+    this.voidFallZones = zones || [];
   }
 
   setMap(mapEntity) {
@@ -121,7 +147,23 @@ export default class EntityManager {
           ui && ui.removeLife ? ui.removeLife(1, audio) : false;
         if (isGameOver) return;
 
-        this.player.body.position.set(0, 2, 0);
+        // Zone-aware respawn: falling into the void while inside a boss
+        // zone (Kamek's or Bowser's obstacle course, including its arena)
+        // sends the player back to THAT zone's own entrance instead of the
+        // main island — see setVoidFallZones (wired from main.js). Falls
+        // back to the level's classic spawn point (see setSpawnPoint)
+        // everywhere else, e.g. the main map (level1.json). player.position
+        // is read here BEFORE it's overwritten below, so it still reflects
+        // where the player actually fell from.
+        let target = this.spawnPoint;
+        for (const entry of this.voidFallZones) {
+          if (entry.zone && entry.zone.containsPoint(this.player.position)) {
+            target = entry.respawn;
+            break;
+          }
+        }
+
+        this.player.body.position.set(target.x, target.y, target.z);
         this.player.body.velocity.set(0, 0, 0);
       });
     }

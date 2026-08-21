@@ -106,6 +106,13 @@ export const TEXTURES = {
   // that mark, centered, and downscaled to a sane in-game decal size. The
   // original gameover.png is left untouched.
   gameoverLogo: "assets/images/gameover_logo.png",
+  // Procedurally generated (PIL, no external download — see the
+  // make_lava_brick.py/make_magic_brick.py generation notes in the boss
+  // arena feature's delivery), tileable platform textures for the two boss
+  // arenas (see BossArena.js / ARENA_THEMES): dark lava-stone/brick for
+  // Bowser's arena, purple magic brick with gold inlay for Kamek's.
+  lavaBrickTexture: "assets/images/lava_brick_texture.png",
+  magicBrickTexture: "assets/images/magic_brick_texture.png",
 };
 
 export const DRACO_DECODER_PATH =
