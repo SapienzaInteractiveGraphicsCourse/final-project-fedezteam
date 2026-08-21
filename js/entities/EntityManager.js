@@ -32,11 +32,12 @@ export default class EntityManager {
   }
 
   // Registers extra void-fall respawn zones: an array of
-  // { zone, respawn }, where `zone` exposes containsPoint(pos) (an
-  // ObstacleZone instance already does — see there) and `respawn` is the
-  // {x,y,z} to send the player back to. Checked in order, first match wins;
-  // falls back to spawnPoint if nothing matches. Called from main.js once
-  // the Kamek/Bowser zones have finished loading.
+  // { zone, respawn, music }, where `zone` exposes containsPoint(pos) (an
+  // ObstacleZone instance already does — see there), `respawn` is the
+  // {x,y,z} to send the player back to, and `music` (optional) is the
+  // looping track that belongs to that zone. Checked in order, first match
+  // wins; falls back to spawnPoint and the overworld theme if nothing
+  // matches. Called from main.js once the Kamek/Bowser zones have loaded.
   setVoidFallZones(zones) {
     this.voidFallZones = zones || [];
   }
@@ -156,15 +157,25 @@ export default class EntityManager {
         // is read here BEFORE it's overwritten below, so it still reflects
         // where the player actually fell from.
         let target = this.spawnPoint;
+        let music; // left undefined = whatever plays outside the zones
         for (const entry of this.voidFallZones) {
           if (entry.zone && entry.zone.containsPoint(this.player.position)) {
             target = entry.respawn;
+            music = entry.music;
             break;
           }
         }
 
         this.player.body.position.set(target.x, target.y, target.z);
         this.player.body.velocity.set(0, 0, 0);
+
+        // The music follows wherever the respawn actually left the player.
+        // Falling inside a boss zone keeps them in it (see above), so its
+        // battle theme keeps playing; a fall anywhere else lands back on
+        // the island, and playMusic() with no track named goes to the
+        // overworld theme. Every other way in or out of a zone is a warp
+        // star, handled by Decorations.onWarp (wired up in main.js).
+        if (audio && audio.playMusic) audio.playMusic(music);
       });
     }
 

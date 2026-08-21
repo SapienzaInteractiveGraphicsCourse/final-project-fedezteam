@@ -1,7 +1,12 @@
 // Manifest of every sound effect and music track used by the game, keyed by
 // the name AudioManager will use to reference it.
 export const SOUND_MANIFEST = [
+  // Looping music. The first one is what the game opens on; the other two
+  // take over inside the matching boss zone (see AudioManager.playMusic and
+  // the ZONE_MUSIC table in main.js).
   { key: 'bgm', path: 'assets/audio/overworld_bgm.mp3', loop: true },
+  { key: 'kamek_battle', path: 'assets/audio/kamek_battle.mp3', loop: true },
+  { key: 'bowser_battle', path: 'assets/audio/bowser_battle.mp3', loop: true },
   { key: 'pause', path: 'assets/audio/menu_pause.wav' },
   { key: 'coin', path: 'assets/audio/coin_collect.wav' },
   { key: 'star', path: 'assets/audio/star_collect.wav' },

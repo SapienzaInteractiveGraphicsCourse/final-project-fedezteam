@@ -47,6 +47,12 @@ export default class Decorations {
     this.satellites = [];
     this.ponds = [];
     this.warpStars = [];
+    // Called with a warp star's `target` right after it has moved the
+    // player (see _updateWarpStars). main.js uses it to swap the background
+    // music for the zone the player just landed in — same "let the outside
+    // react, never reach out from in here" rule the rest of this class
+    // follows.
+    this.onWarp = null;
     // Filled in from outside (see setSpawnPoint/setKamekZoneEntry/
     // setBowserZoneEntry, called from GameLevel.js/main.js once those
     // points are known) so warp stars targeting "spawn", "kamek_zone" or
@@ -1242,6 +1248,9 @@ export default class Decorations {
 
       player.body.position.set(dest.x, dest.y, dest.z);
       player.body.velocity.set(0, 0, 0);
+
+      if (this.onWarp) this.onWarp(w.target);
+
       return; // one warp per frame is enough, even if stars are ever close together
     }
   }

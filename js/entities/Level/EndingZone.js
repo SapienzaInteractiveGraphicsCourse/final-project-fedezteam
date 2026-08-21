@@ -33,6 +33,36 @@ import { normalizeMaterials } from "../../utils/materials.js";
  * castle only ~1.1, with its origin off to one side — hardcoded offsets
  * would silently break the moment either file is re-exported.
  */
+/**
+ * Dimensions of the perimeter fence. Its height is set against MARIO's jump
+ * and nothing else: he leaves the ground at 18 u/s against a gravity of 30
+ * (see EntityManager's per-character stats and PhysicsEngine), so he peaks
+ * 18^2 / (2 * 30) = 5.4 units up. The railing tops out at 6.35 and the
+ * stone pillars at 7.45 — over it, but only just, which is the point: a
+ * fence sized to be un-hoppable rather than sized to loom.
+ *
+ * Luigi jumps far higher (22 u/s, 8.07 units) and does clear the railing
+ * for now. He still can't get out: _buildBoundaryWalls puts an invisible
+ * wall on the same line that is several times this tall, so what he hits
+ * mid-air is that instead. Whether that's fixed by raising the fence or by
+ * bringing his jump back in line is a decision about him, not about here.
+ */
+const FENCE = {
+  depth: 0.8, // thickness of the low wall the railing stands on
+  baseHeight: 1.6,
+  barHeight: 4.4,
+  barSize: 0.16,
+  barSpacing: 1.8,
+  railHeight: 0.35,
+  railDepth: 0.5,
+  postEvery: 12, // one stone pillar roughly every N units along each side
+  postSize: 1.2,
+  postExtra: 0.7, // how far the pillars rise above the railing
+  capHeight: 0.4,
+  stoneColor: 0xc9c4bb, // the castle's masonry
+  metalColor: 0xd9a441, // its gold trim
+};
+
 export default class EndingZone {
   // Stores the scene/physics references and resets zone state. Nothing is
   // built yet — call load() to actually populate the zone.
@@ -74,11 +104,15 @@ export default class EndingZone {
     const groundTop = ground.y + ground.size.y / 2;
 
     this._buildGround(ground);
-    // Invisible walls around the ground's perimeter — see the class doc
-    // and _buildBoundaryWalls itself for why. "wallHeight" is optional in
-    // the JSON (defaults below) since the ground's x/z size is what
-    // actually defines where the walls go.
-    this._buildBoundaryWalls(ground, data.wallHeight || 24);
+
+    // The visible fence and the invisible walls are both laid out from this
+    // one perimeter, so a collider can never end up somewhere other than
+    // where the player can see a fence. "wallHeight" is optional in the
+    // JSON (default below) since the ground's x/z size is what actually
+    // decides where the ring goes.
+    const perimeter = this._perimeter(ground);
+    this._buildFence(perimeter);
+    this._buildBoundaryWalls(perimeter, data.wallHeight || 24);
 
     // The castle first: Peach's own placement doesn't depend on it (the
     // level file positions her directly), but loading it first means a
@@ -135,40 +169,224 @@ export default class EndingZone {
   }
 
   /**
-   * Four invisible (no mesh, physics-only) walls ringing the ground's
-   * perimeter, tall enough that the player can never jump over them — the
-   * mirror image of ObstacleZone's fire poles (a visual with no collider):
-   * here it's a collider with no visual. This is what actually makes
-   * falling into the void impossible in this zone (the ground being one
-   * flat slab, by itself, only made it unlikely — walking off any edge was
-   * always still possible before this).
+   * The single line the whole boundary is built from: the centre line of
+   * the fence, pulled half its own thickness inside the ground's edge so
+   * the fence stands ON the grass rather than hanging over the drop.
+   *
+   * Returns the four runs that make up the ring, each with its centre, its
+   * length, and which axis it runs along — everything the fence and the
+   * colliders need, worked out once.
    */
-  _buildBoundaryWalls(cfg, wallHeight) {
+  _perimeter(cfg) {
+    const groundTop = cfg.y + cfg.size.y / 2;
+    const inset = FENCE.depth / 2;
+
+    const minX = cfg.x - cfg.size.x / 2 + inset;
+    const maxX = cfg.x + cfg.size.x / 2 - inset;
+    const minZ = cfg.z - cfg.size.z / 2 + inset;
+    const maxZ = cfg.z + cfg.size.z / 2 - inset;
+
+    return {
+      groundTop,
+      // outX/outZ point away from the middle of the zone: the colliders use
+      // them to sit on the outer side of the fence, over the drop.
+      runs: [
+        { x: cfg.x, z: minZ, length: maxX - minX, axis: "x", outX: 0, outZ: -1 }, // north
+        { x: cfg.x, z: maxZ, length: maxX - minX, axis: "x", outX: 0, outZ: 1 }, // south
+        { x: minX, z: cfg.z, length: maxZ - minZ, axis: "z", outX: -1, outZ: 0 }, // west
+        { x: maxX, z: cfg.z, length: maxZ - minZ, axis: "z", outX: 1, outZ: 0 }, // east
+      ],
+      corners: [
+        { x: minX, z: minZ },
+        { x: maxX, z: minZ },
+        { x: minX, z: maxZ },
+        { x: maxX, z: maxZ },
+      ],
+    };
+  }
+
+  /**
+   * The visible fence: a low stone wall carrying a run of gold railings,
+   * with stone pillars at the corners and at intervals along each side.
+   *
+   * The bars are one InstancedMesh rather than ~250 separate meshes (same
+   * treatment the grass gets in Decorations.spawnFieldProps) — it's a
+   * single draw call, and the fence is on screen for the whole ending. They
+   * also don't cast shadows: at 0.18 units thick each one contributes
+   * nothing readable to the shadow map and they are by far the most
+   * numerous thing here.
+   */
+  _buildFence(perimeter) {
+    const stone = new THREE.MeshStandardMaterial({
+      color: FENCE.stoneColor,
+      roughness: 0.9,
+      metalness: 0.0,
+      envMapIntensity: 0.4,
+    });
+    const metal = new THREE.MeshStandardMaterial({
+      color: FENCE.metalColor,
+      roughness: 0.45,
+      metalness: 0.35,
+      envMapIntensity: 0.4,
+    });
+
+    const { groundTop } = perimeter;
+    const baseY = groundTop + FENCE.baseHeight / 2;
+    const barY = groundTop + FENCE.baseHeight + FENCE.barHeight / 2;
+    const railY = groundTop + FENCE.baseHeight + FENCE.barHeight + FENCE.railHeight / 2;
+    const postHeight = FENCE.baseHeight + FENCE.barHeight + FENCE.railHeight + FENCE.postExtra;
+
+    const barMatrices = [];
+    const postSpots = [...perimeter.corners];
+    const dummy = new THREE.Object3D();
+
+    for (const run of perimeter.runs) {
+      const alongX = run.axis === "x";
+      // Each run is stretched by the fence's own thickness so neighbouring
+      // runs meet at the corners instead of leaving a notch.
+      const spanned = run.length + FENCE.depth;
+
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          alongX ? spanned : FENCE.depth,
+          FENCE.baseHeight,
+          alongX ? FENCE.depth : spanned,
+        ),
+        stone,
+      );
+      base.position.set(run.x, baseY, run.z);
+      base.castShadow = true;
+      base.receiveShadow = true;
+      this.scene.add(base);
+
+      const rail = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          alongX ? spanned : FENCE.railDepth,
+          FENCE.railHeight,
+          alongX ? FENCE.railDepth : spanned,
+        ),
+        metal,
+      );
+      rail.position.set(run.x, railY, run.z);
+      rail.castShadow = true;
+      this.scene.add(rail);
+
+      // Pillars spread evenly along this run, corners excluded (they were
+      // already added above, shared between the two runs that meet there).
+      const gaps = Math.max(1, Math.round(run.length / FENCE.postEvery));
+      for (let i = 1; i < gaps; i++) {
+        const offset = -run.length / 2 + (i * run.length) / gaps;
+        postSpots.push({
+          x: alongX ? run.x + offset : run.x,
+          z: alongX ? run.z : run.z + offset,
+        });
+      }
+
+      // Bars, skipping any that would end up buried inside a pillar.
+      const barCount = Math.floor(run.length / FENCE.barSpacing);
+      for (let i = 0; i <= barCount; i++) {
+        const offset = -run.length / 2 + (i * run.length) / barCount;
+        const bx = alongX ? run.x + offset : run.x;
+        const bz = alongX ? run.z : run.z + offset;
+
+        const insidePost = postSpots.some(
+          (p) =>
+            Math.abs(p.x - bx) < FENCE.postSize / 2 &&
+            Math.abs(p.z - bz) < FENCE.postSize / 2,
+        );
+        if (insidePost) continue;
+
+        dummy.position.set(bx, barY, bz);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        barMatrices.push(dummy.matrix.clone());
+      }
+    }
+
+    const bars = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(FENCE.barSize, FENCE.barHeight, FENCE.barSize),
+      metal,
+      barMatrices.length,
+    );
+    bars.castShadow = false;
+    bars.receiveShadow = false;
+    barMatrices.forEach((m, i) => bars.setMatrixAt(i, m));
+    this.scene.add(bars);
+
+    // Pillars and their caps get the same instanced treatment as the bars —
+    // there are a few dozen of each and they are all identical.
+    const posts = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(FENCE.postSize, postHeight, FENCE.postSize),
+      stone,
+      postSpots.length,
+    );
+    const caps = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(FENCE.postSize * 1.25, FENCE.capHeight, FENCE.postSize * 1.25),
+      stone,
+      postSpots.length,
+    );
+    posts.castShadow = caps.castShadow = true;
+    posts.receiveShadow = true;
+
+    postSpots.forEach((spot, i) => {
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(1, 1, 1);
+
+      dummy.position.set(spot.x, groundTop + postHeight / 2, spot.z);
+      dummy.updateMatrix();
+      posts.setMatrixAt(i, dummy.matrix);
+
+      dummy.position.set(spot.x, groundTop + postHeight + FENCE.capHeight / 2, spot.z);
+      dummy.updateMatrix();
+      caps.setMatrixAt(i, dummy.matrix);
+    });
+
+    this.scene.add(posts);
+    this.scene.add(caps);
+  }
+
+  /**
+   * The colliders behind the fence: four invisible boxes sitting on the
+   * exact same perimeter, each one starting at the fence's inner face and
+   * extending outward over the drop, where there is nothing else to get in
+   * the way. They are far taller than the fence looks (`wallHeight`), which
+   * costs nothing and means no amount of bouncing off scenery can ever put
+   * the player on the wrong side of it.
+   */
+  _buildBoundaryWalls(perimeter, wallHeight) {
     const world = this.physicsEngine?.world || this.physicsEngine;
     if (!world) return;
 
-    const halfX = cfg.size.x / 2;
-    const halfZ = cfg.size.z / 2;
-    const groundTop = cfg.y + cfg.size.y / 2;
-    const thickness = 2;
-    const centerY = groundTop + wallHeight / 2;
+    const thickness = 4;
+    const centerY = perimeter.groundTop + wallHeight / 2;
+    // The wall's inner face lines up with the fence's inner face, so the
+    // player is stopped right where the stonework is rather than a stride
+    // short of it or a stride past it.
+    const shift = thickness / 2 - FENCE.depth / 2;
 
-    // Each wall is a thin box just outside one edge of the ground, extended
-    // past the corners by `thickness` on both ends so the four walls fully
-    // close the ring with no gaps at the corners.
-    const walls = [
-      { x: cfg.x, z: cfg.z - halfZ - thickness / 2, sizeX: cfg.size.x + thickness * 2, sizeZ: thickness }, // north
-      { x: cfg.x, z: cfg.z + halfZ + thickness / 2, sizeX: cfg.size.x + thickness * 2, sizeZ: thickness }, // south
-      { x: cfg.x - halfX - thickness / 2, z: cfg.z, sizeX: thickness, sizeZ: cfg.size.z + thickness * 2 }, // west
-      { x: cfg.x + halfX + thickness / 2, z: cfg.z, sizeX: thickness, sizeZ: cfg.size.z + thickness * 2 }, // east
-    ];
+    for (const run of perimeter.runs) {
+      const alongX = run.axis === "x";
 
-    for (const w of walls) {
+      // Extended past the corners on both ends so the ring closes with no
+      // gaps for the player to slip through diagonally.
+      const spanned = run.length + thickness * 2;
+
       world.addBody(
         new CANNON.Body({
           mass: 0,
-          shape: new CANNON.Box(new CANNON.Vec3(w.sizeX / 2, wallHeight / 2, w.sizeZ / 2)),
-          position: new CANNON.Vec3(w.x, centerY, w.z),
+          shape: new CANNON.Box(
+            new CANNON.Vec3(
+              (alongX ? spanned : thickness) / 2,
+              wallHeight / 2,
+              (alongX ? thickness : spanned) / 2,
+            ),
+          ),
+          position: new CANNON.Vec3(
+            run.x + run.outX * shift,
+            centerY,
+            run.z + run.outZ * shift,
+          ),
           material: this.physicsEngine?.defaultMaterial,
         }),
       );
