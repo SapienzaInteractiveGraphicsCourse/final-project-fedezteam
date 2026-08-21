@@ -822,10 +822,34 @@ export default class Decorations {
           color: cfg.color,
           roughness: cfg.roughness,
           metalness: cfg.metalness,
+          // Same environment-reflection cap as every other hand-built
+          // material in the project (see spawnSkyPlanet above) — left out
+          // here too until now.
+          envMapIntensity: 0.4,
         }),
       );
       mesh.castShadow = false;
       mesh.receiveShadow = false;
+
+      // Placed on its orbit right away, with the same math update() uses
+      // every frame, instead of being left at the mesh's default (0,0,0).
+      // update() is what normally keeps this mesh moving along its orbit,
+      // but update() only runs once actual gameplay starts (main.js's
+      // updateGame() returns early during MENU_WELCOME/MENU_NAME, before
+      // entityManager.player exists) — so without this, both satellites
+      // sat at the world origin, right on top of Mario's house, for the
+      // entire main menu, and only jumped to their real orbit position the
+      // instant gameplay began. That pale sphere sitting near the house
+      // (confirmed via a scene dump: both satellites at exactly x=0,y=0,z=0)
+      // was this, not the toad house — half-buried in the ground at the
+      // origin, the light-blue satellite (#bfe9ff) reads as a plain white
+      // dome poking out of the lawn.
+      const angle = Math.random() * Math.PI * 2;
+      const x = this.skyPlanet.position.x + Math.cos(angle) * cfg.orbitRadius;
+      const z = this.skyPlanet.position.z + Math.sin(angle) * cfg.orbitRadius * Math.cos(cfg.tilt);
+      const y = this.skyPlanet.position.y + Math.sin(angle) * cfg.orbitRadius * Math.sin(cfg.tilt);
+      mesh.position.set(x, y, z);
+
       this.scene.add(mesh);
 
       return {
@@ -833,7 +857,7 @@ export default class Decorations {
         orbitRadius: cfg.orbitRadius,
         orbitSpeed: cfg.orbitSpeed,
         tilt: cfg.tilt,
-        angle: Math.random() * Math.PI * 2,
+        angle,
       };
     });
   }

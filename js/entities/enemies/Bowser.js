@@ -26,7 +26,7 @@ export default class Bowser extends Boss {
       radius: 1,
       targetHeight: 3.4,
       hitsToDefeat: 5,
-      invulnerabilityDuration: 4,
+      invulnerabilityDuration: 2,
       stompBounceVelocity: 13,
       // Ranged attack tuning: slightly shorter range than detection (so
       // Bowser closes in a bit before breathing fire) and a longer charge

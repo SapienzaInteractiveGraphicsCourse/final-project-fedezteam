@@ -53,6 +53,14 @@ export default class ObstacleZone {
     // this zone's own entrance instead of the main island's spawn point.
     // Stays null if load() never ran or the zone had no platforms/arena.
     this.bounds = null;
+
+    // Circular footprint of just the boss arena itself (a subset of
+    // `bounds` above, which also covers the approach platforms) — see
+    // isPlayerInArena() below, used by main.js to show/hide the boss health
+    // bar specifically while the player is on the arena, not the whole
+    // course.
+    this.arenaCenter = null; // {x, z}
+    this.arenaRadius = 0;
   }
 
   // Fetches a zone JSON file and builds its platforms/lava/entry point into
@@ -149,6 +157,8 @@ export default class ObstacleZone {
       const arena = new BossArena(this.scene, this.physicsEngine);
       await arena.build(data.arena);
       expandBounds(data.arena.x, data.arena.z, data.arena.radius);
+      this.arenaCenter = { x: data.arena.x, z: data.arena.z };
+      this.arenaRadius = data.arena.radius;
     }
 
     // Pad the accumulated footprint generously (well past a single jump)
@@ -183,6 +193,24 @@ export default class ObstacleZone {
       pos.z >= this.bounds.minZ &&
       pos.z <= this.bounds.maxZ
     );
+  }
+
+  /**
+   * True once the player's horizontal position is within the boss arena's
+   * circular footprint (plus a small margin, so the health bar appears
+   * right as the player steps onto the platform rather than exactly at its
+   * mathematical edge). False if this zone has no arena (data.arena was
+   * missing) or the player hasn't reached it yet. Used by main.js to show/
+   * hide the boss health bar — deliberately narrower than containsPoint()
+   * above, which also covers the approach platforms leading up to it.
+   */
+  isPlayerInArena(pos) {
+    if (!this.arenaCenter || !pos) return false;
+    const dx = pos.x - this.arenaCenter.x;
+    const dz = pos.z - this.arenaCenter.z;
+    const margin = 2;
+    const r = this.arenaRadius + margin;
+    return dx * dx + dz * dz <= r * r;
   }
 
   /**

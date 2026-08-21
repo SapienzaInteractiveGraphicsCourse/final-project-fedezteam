@@ -436,6 +436,12 @@ let mapEntity = null;
 let kamekZone = null;
 let bowserZone = null;
 let endingZone = null;
+// Hoisted out of the async asset-loading callback (where they're actually
+// created — see initGameModels().then below) so updateGame()'s per-frame
+// loop can reach them to drive the boss health bar (see showBossHealthBar/
+// hideBossHealthBar calls below).
+let kamek = null;
+let bowser = null;
 
 const ui = new UIManager();
 const audio = new AudioManager();
@@ -616,6 +622,27 @@ function updateGame(delta) {
     });
   }
 
+  // Boss health bar: shown only while the player is standing on the
+  // relevant boss' arena (ObstacleZone.isPlayerInArena — see its own
+  // comment), hidden as soon as they leave OR the boss is defeated.
+  // updateBossHealthBar() itself is driven by each boss' onStomped
+  // callback above, for an immediate per-hit update rather than waiting
+  // for next frame's arena check.
+  if (kamekZone && kamek && entityManager.player?.mesh) {
+    if (!kamek.isDefeated && kamekZone.isPlayerInArena(entityManager.player.mesh.position)) {
+      ui.showBossHealthBar("kamek", "KAMEK", kamek.hitsToDefeat);
+    } else if (ui.activeBossHpKey === "kamek") {
+      ui.hideBossHealthBar();
+    }
+  }
+  if (bowserZone && bowser && entityManager.player?.mesh) {
+    if (!bowser.isDefeated && bowserZone.isPlayerInArena(entityManager.player.mesh.position)) {
+      ui.showBossHealthBar("bowser", "BOWSER", bowser.hitsToDefeat);
+    } else if (ui.activeBossHpKey === "bowser") {
+      ui.hideBossHealthBar();
+    }
+  }
+
   cameraManager.update(entityManager.player, input, delta);
   if (showColliders) cannonDebugger.update();
 }
@@ -703,11 +730,12 @@ initGameModels(assetLoader)
     }
 
     if (kamekZone.bossSpawn) {
-      const kamek = new Kamek(enemyAssets.kamek.clone(), physics, renderer.scene);
+      kamek = new Kamek(enemyAssets.kamek.clone(), physics, renderer.scene);
       kamek.spawn(kamekZone.bossSpawn.x, kamekZone.bossSpawn.y, kamekZone.bossSpawn.z);
 
       kamek.onStomped = () => {
         if (audio && audio.playSFX) audio.playSFX("jump");
+        ui.updateBossHealthBar(kamek.hitsTaken, kamek.hitsToDefeat);
       };
       kamek.onDamagePlayer = () => {
         damagePlayer();
@@ -752,11 +780,12 @@ initGameModels(assetLoader)
     }
 
     if (bowserZone.bossSpawn) {
-      const bowser = new Bowser(enemyAssets.bowser.clone(), physics, renderer.scene);
+      bowser = new Bowser(enemyAssets.bowser.clone(), physics, renderer.scene);
       bowser.spawn(bowserZone.bossSpawn.x, bowserZone.bossSpawn.y, bowserZone.bossSpawn.z);
 
       bowser.onStomped = () => {
         if (audio && audio.playSFX) audio.playSFX("jump");
+        ui.updateBossHealthBar(bowser.hitsTaken, bowser.hitsToDefeat);
       };
       bowser.onDamagePlayer = () => {
         damagePlayer();

@@ -33,6 +33,18 @@ export default class UIManager {
     this.btnMario = document.getElementById("btn-mario");
     this.btnLuigi = document.getElementById("btn-luigi");
 
+    // Boss health bar (see showBossHealthBar/updateBossHealthBar/
+    // hideBossHealthBar below) — driven from main.js while the player is on
+    // Bowser's or Kamek's arena.
+    this.bossHpBar = document.getElementById("boss-hp-bar");
+    this.bossHpNameEl = document.getElementById("boss-hp-name");
+    this.bossHpBlocksEl = document.getElementById("boss-hp-blocks");
+    this._bossHpBlockEls = [];
+    // Tracks which boss the bar is currently built for, so main.js's
+    // per-frame showBossHealthBar call only rebuilds the segments when it
+    // changed — see showBossHealthBar.
+    this.activeBossHpKey = null;
+
     this.gameState = "MENU_WELCOME";
     this.selectedCharacter = "mario";
     this.isPaused = false;
@@ -176,6 +188,60 @@ export default class UIManager {
   addCoin(amount = 1) {
     this.coins += amount;
     if (this.coinsCountEl) this.coinsCountEl.textContent = this.coins;
+  }
+
+  /**
+   * Shows the boss health bar for `key` (a stable id like "bowser"/"kamek",
+   * used only to detect "is this already the active boss" — never shown to
+   * the player) with `name` as the label and `maxHits` segments, so the
+   * bar's segment count always matches that boss' actual hit count (5 for
+   * Bowser, 3 for Kamek — see Bowser.js/Kamek.js's hitsToDefeat). Safe to
+   * call every frame the player is inside the arena — rebuilding the
+   * block elements only happens the first time (or if a different boss
+   * becomes active), everything else is just un-hiding the bar.
+   */
+  showBossHealthBar(key, name, maxHits) {
+    if (!this.bossHpBar) return;
+
+    if (this.activeBossHpKey !== key) {
+      this.activeBossHpKey = key;
+      if (this.bossHpNameEl) this.bossHpNameEl.textContent = name;
+
+      if (this.bossHpBlocksEl) {
+        this.bossHpBlocksEl.innerHTML = "";
+        this._bossHpBlockEls = [];
+        for (let i = 0; i < maxHits; i++) {
+          const block = document.createElement("div");
+          block.className = "boss-hp-block";
+          this.bossHpBlocksEl.appendChild(block);
+          this._bossHpBlockEls.push(block);
+        }
+      }
+    }
+
+    this.bossHpBar.classList.remove("hidden");
+  }
+
+  // Blackens `hitsTaken` blocks starting from the RIGHT end (the boss'
+  // health draining left-to-right as it takes hits), leaving the remaining
+  // blocks their normal yellow — called from main.js's onStomped handlers,
+  // right when Enemy._onStomped reports a new hit.
+  updateBossHealthBar(hitsTaken, maxHits) {
+    const blocks = this._bossHpBlockEls;
+    if (!blocks || blocks.length === 0) return;
+
+    const hits = Math.max(0, Math.min(hitsTaken, maxHits));
+    blocks.forEach((block, i) => {
+      const fromRight = blocks.length - 1 - i;
+      block.classList.toggle("hit", fromRight < hits);
+    });
+  }
+
+  // Hides the bar (called once the player leaves the arena, or the boss is
+  // defeated). Doesn't reset activeBossHpKey: re-entering the SAME boss'
+  // arena via showBossHealthBar doesn't need to rebuild them.
+  hideBossHealthBar() {
+    if (this.bossHpBar) this.bossHpBar.classList.add("hidden");
   }
 
   addStar(amount = 1, audio = null) {

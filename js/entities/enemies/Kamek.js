@@ -24,7 +24,7 @@ export default class Kamek extends Boss {
       radius: 0.3,
       targetHeight: 2.2,
       hitsToDefeat: 3,
-      invulnerabilityDuration: 5,
+      invulnerabilityDuration: 2,
       stompBounceVelocity: 11,
       // Ranged attack tuning: full detection range (Kamek casts from
       // further away than Bowser bothers to) and a shorter charge, matching

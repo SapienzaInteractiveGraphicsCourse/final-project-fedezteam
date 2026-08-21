@@ -150,6 +150,7 @@ export default class Enemy {
       this.body.position.z,
     );
 
+    this._updateInvulnerabilityFlicker();
     this._updateWaddle(delta);
 
     if (player && player.mesh) {
@@ -186,6 +187,23 @@ export default class Enemy {
     } else {
       this.body.velocity.x *= 0.9;
       this.body.velocity.z *= 0.9;
+    }
+  }
+
+  // Blinks the whole mesh on/off while invulnerableTimer is counting down
+  // (only ever non-zero for a boss between stomps — see _onStomped), the
+  // classic "just got hit and can't be chain-stomped yet" tell. Driven by
+  // invulnerableTimer's own countdown rather than a separate elapsed-time
+  // accumulator, so the flicker is perfectly in sync regardless of frame
+  // rate and needs no extra state to reset when it ends. Restores full
+  // visibility on the very last tick so the boss never gets stuck invisible
+  // if invulnerabilityDuration doesn't divide evenly into flicker periods.
+  _updateInvulnerabilityFlicker() {
+    if (this.invulnerableTimer > 0) {
+      const FLICKER_RATE = 10; // on/off toggles per second
+      this.mesh.visible = Math.floor(this.invulnerableTimer * FLICKER_RATE) % 2 === 0;
+    } else if (!this.mesh.visible) {
+      this.mesh.visible = true;
     }
   }
 
@@ -230,7 +248,27 @@ export default class Enemy {
     // exactly as the multi-hit system was designed to work.
     if (isFalling && isAbove && this.invulnerableTimer <= 0) {
       this._onStomped(player);
-    } else if (this.invulnerableTimer <= 0 && this.playerHitCooldown <= 0) {
+      return;
+    }
+
+    // BUG FIX (damage from jumping on the head): side-contact damage used to
+    // fire on ANY frame that wasn't a successful stomp — including a player
+    // still mid-air on their way to landing on top (rising or floating over
+    // a tall boss like Bowser/Kamek, horizontally within contactRange but
+    // not yet falling, or falling but not quite past the isAbove threshold
+    // yet). That read as "I jumped on his head and got hurt anyway", even
+    // though the player was airborne the whole time and never actually
+    // walked into the boss. Player.js computes its own "grounded" the same
+    // way (canJump && velocity.y > -2, see Player.update) — reusing that
+    // definition here means _onPlayerContact can now only fire while the
+    // player has their feet on the ground, matching "il danno da contatto
+    // e' solo laterale, quando non sono in salto": a stomp can still land
+    // (or whiff) at any height, but lateral bump damage is a ground-only
+    // interaction again.
+    const isGrounded = !!(player.canJump && player.body && player.body.velocity.y > -2);
+    if (!isGrounded) return;
+
+    if (this.invulnerableTimer <= 0 && this.playerHitCooldown <= 0) {
       this._onPlayerContact(player);
     }
   }
