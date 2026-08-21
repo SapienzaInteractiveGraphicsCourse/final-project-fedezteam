@@ -34,6 +34,14 @@ export default class Player {
     this.canJump = false;
     this.radius = 1;
 
+    // Jump debounce for _updateOnPlanet only (see there) — flat-ground
+    // jumping already gets a real one-shot via the "collide" event
+    // resetting canJump (see spawn()), but on a planet `grounded` is a
+    // continuous per-frame distance check with a tolerance margin, not an
+    // event, so without a separate latch a held jump key fires the jump
+    // (and its SFX) again on every frame that check hadn't cleared yet.
+    this._planetJumpLatched = false;
+
     enableShadows(this.mesh);
 
     // Procedural skeletal animation. If the model has no recognizable
@@ -372,11 +380,28 @@ export default class Player {
       this.mesh.rotateY(this.modelOffset || 0);
     }
 
-    if ((input.isPressed("space") || input.isPressed(" ")) && grounded) {
+    // BUG FIX (double jump SFX on the red planet): `grounded` above stays
+    // true for a frame or more after a jump starts (it's a tolerance-padded
+    // distance check, not a landing event — see its own comment), so a held
+    // jump key used to fire this whole block, SFX included, on every one of
+    // those frames. `_planetJumpLatched` gates it to once per landing: set
+    // the moment a jump fires, only cleared once the player has actually
+    // left the surface (grounded goes false, above), mirroring how canJump
+    // debounces flat-ground jumping via the real "collide" event.
+    if (!grounded) {
+      this._planetJumpLatched = false;
+    }
+
+    if (
+      (input.isPressed("space") || input.isPressed(" ")) &&
+      grounded &&
+      !this._planetJumpLatched
+    ) {
       const jumpVel = new THREE.Vector3(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z);
       const tangential = jumpVel.clone().sub(up.clone().multiplyScalar(jumpVel.dot(up)));
       const launched = tangential.add(up.clone().multiplyScalar(this.jumpVelocity));
       this.body.velocity.set(launched.x, launched.y, launched.z);
+      this._planetJumpLatched = true;
 
       if (audio && audio.playSFX) {
         audio.playSFX("jump");

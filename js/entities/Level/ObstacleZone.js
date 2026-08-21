@@ -58,8 +58,10 @@ export default class ObstacleZone {
     // `bounds` above, which also covers the approach platforms) — see
     // isPlayerInArena() below, used by main.js to show/hide the boss health
     // bar specifically while the player is on the arena, not the whole
-    // course.
-    this.arenaCenter = null; // {x, z}
+    // course. `y` (arena platform height) is included too so main.js can
+    // also use this as the fixed drop point for the post-victory Power
+    // Star/Warp Star, instead of wherever the boss happened to die.
+    this.arenaCenter = null; // {x, y, z}
     this.arenaRadius = 0;
   }
 
@@ -157,7 +159,7 @@ export default class ObstacleZone {
       const arena = new BossArena(this.scene, this.physicsEngine);
       await arena.build(data.arena);
       expandBounds(data.arena.x, data.arena.z, data.arena.radius);
-      this.arenaCenter = { x: data.arena.x, z: data.arena.z };
+      this.arenaCenter = { x: data.arena.x, y: data.arena.y, z: data.arena.z };
       this.arenaRadius = data.arena.radius;
     }
 

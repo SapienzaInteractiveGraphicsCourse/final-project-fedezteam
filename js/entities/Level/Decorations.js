@@ -47,12 +47,6 @@ export default class Decorations {
     this.satellites = [];
     this.ponds = [];
     this.warpStars = [];
-    // Called with a warp star's `target` right after it has moved the
-    // player (see _updateWarpStars). main.js uses it to swap the background
-    // music for the zone the player just landed in — same "let the outside
-    // react, never reach out from in here" rule the rest of this class
-    // follows.
-    this.onWarp = null;
     // Filled in from outside (see setSpawnPoint/setKamekZoneEntry/
     // setBowserZoneEntry, called from GameLevel.js/main.js once those
     // points are known) so warp stars targeting "spawn", "kamek_zone" or
@@ -161,7 +155,16 @@ export default class Decorations {
 
   // Scatters trees, flowers and loose coins across the island, avoiding the
   // central area reserved for buildings/NPCs.
-  async spawnFieldProps(arenaSize, onCoinSpawned) {
+  //
+  // @param {{x:number,z:number,halfX:number,halfZ:number}[]} [hillFootprints]
+  //   Horizontal footprint of every HillBlock platform (block_grass_large/
+  //   hill/hill_step — see HillBlock.js), passed in from GameLevel.js
+  //   (read straight from the level JSON, since buildBuildingsAndNPCs
+  //   itself doesn't run until after this). Used below to stop a tree/
+  //   flower/coin from landing inside — or clipping through the edge of —
+  //   a platform, which used to be possible since this scatter had no idea
+  //   where the level's hills actually sat.
+  async spawnFieldProps(arenaSize, onCoinSpawned, hillFootprints = []) {
     let flowerGlb = null,
       treeGlb = null;
 
@@ -179,6 +182,26 @@ export default class Decorations {
     const half = arenaSize / 2 - 10;
     const world = this.physicsWorld?.world || this.physicsWorld;
 
+    // Extra margin beyond each hill's own collider half-extent, so a prop
+    // can't spawn right at the platform's edge either (a tree's trunk
+    // collider alone is ~0.5 wide — see TRUNK_HALF_WIDTH below — so some
+    // slack keeps it visibly clear of the platform, not just technically
+    // outside its exact box).
+    const HILL_CLEARANCE = 2;
+    const isInsideHill = (x, z) => {
+      for (const h of hillFootprints) {
+        if (
+          x >= h.x - h.halfX - HILL_CLEARANCE &&
+          x <= h.x + h.halfX + HILL_CLEARANCE &&
+          z >= h.z - h.halfZ - HILL_CLEARANCE &&
+          z <= h.z + h.halfZ + HILL_CLEARANCE
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     for (let x = -half; x <= half; x += step) {
       for (let z = -half; z <= half; z += step) {
         // Skip the central area where buildings/NPCs are placed.
@@ -186,6 +209,12 @@ export default class Decorations {
 
         const posX = x + (Math.random() - 0.5) * 6;
         const posZ = z + (Math.random() - 0.5) * 6;
+
+        // BUG FIX (palm trees spawning inside HillBlock platforms): skip
+        // this grid cell entirely if the jittered position falls inside
+        // (or too close to) any hill's real footprint — see hillFootprints
+        // above.
+        if (isInsideHill(posX, posZ)) continue;
 
         if (treeGlb && Math.random() > 0.85) {
           const tree = treeGlb.scene.clone();
@@ -1248,9 +1277,6 @@ export default class Decorations {
 
       player.body.position.set(dest.x, dest.y, dest.z);
       player.body.velocity.set(0, 0, 0);
-
-      if (this.onWarp) this.onWarp(w.target);
-
       return; // one warp per frame is enough, even if stars are ever close together
     }
   }

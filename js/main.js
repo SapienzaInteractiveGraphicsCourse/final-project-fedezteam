@@ -6,7 +6,7 @@ import GameLoop from "./core/GameLoop.js";
 import InputManager from "./core/InputManager.js";
 import UIManager from "./ui/UIManager.js";
 import PhysicsEngine from "./physics/PhysicsEngine.js";
-import AudioManager, { OVERWORLD_MUSIC } from "./core/Audio/AudioManager.js";
+import AudioManager from "./core/Audio/AudioManager.js";
 import { initGameAudio } from "./core/Audio/soundConfig.js";
 import { getStoredMuteState } from "./utils/storage.js";
 import Yoshi from "./entities/Yoshi.js";
@@ -459,17 +459,6 @@ let menuCameraAngle = 0;
 // Raw GLTF models, loaded once and reused whenever a character is spawned.
 const rawModels = { mario: null, luigi: null };
 
-// Which looping track belongs to which place. Keyed by the warp stars'
-// `target` (see Decorations.spawnWarpStars) because those stars are the only
-// way into or out of a boss zone, which makes stepping on one exactly the
-// moment the player changes place. Anything not listed here — going back to
-// spawn, hopping to the sky planet — is "not in a boss zone", i.e. the
-// overworld theme.
-const ZONE_MUSIC = {
-  kamek_zone: "kamek_battle",
-  bowser_zone: "bowser_battle",
-};
-
 // 3. UI EVENT WIRING
 
 ui.onCharacterSelect((character) => {
@@ -590,85 +579,6 @@ function damagePlayer() {
   if (!isGameOver && audio && audio.playSFX) audio.playSFX("damage");
 }
 
-/**
- * Lays out what a defeated boss leaves behind: the collectible star, and the
- * warp star that takes the player home.
- *
- * Deliberately NOT on the spot where the boss died. The player is standing
- * right there at that moment, and a star is picked up from 2.8 units away,
- * so the reward was being swept up in the same instant the fight ended —
- * no pause, no walk over to it, half the time without even seeing it.
- *
- * Both pieces are positioned relative to the ARENA rather than to the body,
- * which is what keeps them on solid floor however the fight ended, and puts
- * them on opposite sides of it, far enough apart that collecting the star
- * can't also trip the warp star's teleport trigger.
- */
-function dropBossReward(zone, boss) {
-  const death = boss.mesh ? boss.mesh.position : null;
-  const center = zone?.arenaCenter;
-
-  // Height comes from the level file, not from wherever the boss happened
-  // to be on its last frame: a boss that dies in mid-air would otherwise
-  // leave its star floating out of reach.
-  const floorY = zone?.bossSpawn?.y ?? (death ? death.y : 10);
-  const dropX = death ? death.x : (zone?.bossSpawn?.x ?? 0);
-  const dropZ = death ? death.z : (zone?.bossSpawn?.z ?? 0);
-
-  // Everything is measured FROM the body, along the line back toward the
-  // middle of the arena. Toward the middle is the one direction that can't
-  // run out of floor — the arena is a disc and the boss died somewhere
-  // inside it — so both rewards are guaranteed to land on solid ground
-  // however close to the rim the fight ended.
-  //
-  // (Laying them out around the arena's centre instead was the obvious
-  // first idea and it's wrong: a boss that dies at roughly the distance
-  // the star is placed at leaves the star right on top of the body, which
-  // is the exact thing this is meant to avoid.)
-  let ux = 1;
-  let uz = 0;
-  if (center && death) {
-    const dx = center.x - death.x;
-    const dz = center.z - death.z;
-    const len = Math.hypot(dx, dz);
-    if (len > 0.001) {
-      ux = dx / len;
-      uz = dz / len;
-    }
-  }
-
-  // Fixed distances, so the layout is the same every fight: the star a
-  // short walk in from the body, the warp star off to one side of it.
-  // STAR_STEP is comfortably past the 2.8-unit pickup radius (the reward
-  // used to be collected the instant the boss died, without the player
-  // even seeing it), and WARP_SIDE keeps the way home clear of both the
-  // body and the star, so walking over to collect it can't also trip the
-  // warp's 2.5-unit teleport trigger.
-  const STAR_STEP = 9;
-  const WARP_SIDE = 11;
-
-  const starX = dropX + ux * STAR_STEP;
-  const starZ = dropZ + uz * STAR_STEP;
-
-  if (mapEntity?.collectibles) {
-    mapEntity.collectibles.spawnStars([{ x: starX, y: floorY + 3, z: starZ }]);
-  }
-  if (mapEntity?.decorations) {
-    // Bright yellow (was plain white) so a boss-reward warp star reads as
-    // distinct from the decorative ones placed at level load.
-    mapEntity.decorations.spawnWarpStars([
-      {
-        // Perpendicular to the line above: (-uz, ux).
-        x: starX - uz * WARP_SIDE,
-        y: floorY + 5,
-        z: starZ + ux * WARP_SIDE,
-        color: 0xffee00,
-        target: "spawn",
-      },
-    ]);
-  }
-}
-
 // 4. GAME LOOP
 
 function updateGame(delta) {
@@ -771,15 +681,6 @@ initGameModels(assetLoader)
     // hardcoded (0,2,0) that could drift out of sync with the level file.
     entityManager.setSpawnPoint(mapEntity.playerSpawn);
 
-    // Swap the background music whenever a warp star moves the player.
-    if (mapEntity.decorations) {
-      mapEntity.decorations.onWarp = (target) => {
-        if (audio && audio.playMusic) {
-          audio.playMusic(ZONE_MUSIC[target] || OVERWORLD_MUSIC);
-        }
-      };
-    }
-
     if (mapEntity.yoshiSpawn) {
       const ySpawn = mapEntity.yoshiSpawn;
       const yoshiEntity = new Yoshi(assets.yoshi, physics);
@@ -840,14 +741,50 @@ initGameModels(assetLoader)
         damagePlayer();
       };
       kamek.onDefeated = () => {
-        // A real star to walk over and collect (not an instant grant), plus
-        // a warp star to head back to spawn — same "poke the level's
-        // existing systems from outside, after the event" pattern used
-        // everywhere else for this kind of thing (EntityManager's void-fall
-        // respawn, Enemy's stomp bounce). kamek.mesh stays valid after
-        // _defeat() (only removed from the scene graph, never nulled out),
-        // so its last position is still readable inside dropBossReward.
-        dropBossReward(kamekZone, kamek);
+        // A real star to walk over and collect (not an instant grant),
+        // plus a warp star right next to it to head back to spawn — same
+        // "poke the level's existing systems from outside, after the
+        // event" pattern used everywhere else for this kind of thing
+        // (EntityManager's void-fall respawn, Enemy's stomp bounce).
+        //
+        // BUG FIX (instant/accidental pickup): the drop point used to be
+        // wherever kamek.mesh last stood at the moment of the final stomp —
+        // which, since a stomp only lands at close range, could be right
+        // under (or one step from) the player, granting the star/warp
+        // instantly instead of as something to walk over. Anchored to the
+        // arena's own fixed center instead (kamekZone.arenaCenter — see
+        // ObstacleZone.load), independent of where the fight happened to
+        // end, with a fallback to bossSpawn only if the zone had no arena.
+        const center = kamekZone.arenaCenter;
+        let dropX = center ? center.x : (kamekZone.bossSpawn?.x ?? 320);
+        let dropY = (center ? center.y : (kamekZone.bossSpawn?.y ?? 10)) + 1;
+        let dropZ = center ? center.z : (kamekZone.bossSpawn?.z ?? 260);
+
+        // Extra safety net on top of the fixed arena-center anchor above:
+        // nudge the drop point away if it still ends up suspiciously close
+        // to the player (who may well be standing near the arena's middle
+        // right after winning) or to kamek's last position, so the reward
+        // can never spawn exactly on top of either.
+        const tooClose = (px, pz) => Math.hypot(dropX - px, dropZ - pz) < 4;
+        const playerPos = entityManager.player?.mesh?.position;
+        if (
+          (playerPos && tooClose(playerPos.x, playerPos.z)) ||
+          (kamek.mesh && tooClose(kamek.mesh.position.x, kamek.mesh.position.z))
+        ) {
+          dropX += 6;
+          dropZ += 6;
+        }
+
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY +2, z: dropZ }]);
+        }
+        if (mapEntity?.decorations) {
+          // Bright yellow (was plain white) so a boss-reward warp star
+          // reads as distinct from the decorative ones at level load.
+          mapEntity.decorations.spawnWarpStars([
+            { x: dropX + +5, y: dropY + 4, z: dropZ+5, color: 0xffee00, target: "spawn" },
+          ]);
+        }
       };
 
       entityManager.addEntity(kamek);
@@ -876,8 +813,36 @@ initGameModels(assetLoader)
         damagePlayer();
       };
       bowser.onDefeated = () => {
-        // Same reward drop as Kamek's onDefeated above.
-        dropBossReward(bowserZone, bowser);
+        // Same "drop a real collectible star + a warp star back to spawn"
+        // pattern as Kamek's onDefeated above — including the same fix:
+        // anchored to the arena's fixed center (bowserZone.arenaCenter)
+        // instead of wherever bowser.mesh last stood, plus the same
+        // too-close-to-player/boss safety nudge.
+        const center = bowserZone.arenaCenter;
+        let dropX = center ? center.x : (bowserZone.bossSpawn?.x ?? -230);
+        let dropY = (center ? center.y : (bowserZone.bossSpawn?.y ?? 10)) + 1;
+        let dropZ = center ? center.z : (bowserZone.bossSpawn?.z ?? 300);
+
+        const tooClose = (px, pz) => Math.hypot(dropX - px, dropZ - pz) < 4;
+        const playerPos = entityManager.player?.mesh?.position;
+        if (
+          (playerPos && tooClose(playerPos.x, playerPos.z)) ||
+          (bowser.mesh && tooClose(bowser.mesh.position.x, bowser.mesh.position.z))
+        ) {
+          dropX += 6;
+          dropZ += 6;
+        }
+
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY + 2, z: dropZ }]);
+        }
+        if (mapEntity?.decorations) {
+          // Bright yellow (was plain white) — same reasoning as Kamek's
+          // onDefeated above.
+          mapEntity.decorations.spawnWarpStars([
+            { x: dropX + 5, y: dropY + 4, z: dropZ + 5, color: 0xffee00, target: "spawn" },
+          ]);
+        }
       };
 
       entityManager.addEntity(bowser);
@@ -893,10 +858,8 @@ initGameModels(assetLoader)
     // through to the classic spawn-point respawn set above.
     entityManager.setVoidFallZones(
       [
-        // `music` keeps the battle theme running when a fall respawns the
-        // player inside the zone rather than back on the island.
-        { zone: kamekZone, respawn: kamekZone?.entryPoint, music: ZONE_MUSIC.kamek_zone },
-        { zone: bowserZone, respawn: bowserZone?.entryPoint, music: ZONE_MUSIC.bowser_zone },
+        { zone: kamekZone, respawn: kamekZone?.entryPoint },
+        { zone: bowserZone, respawn: bowserZone?.entryPoint },
       ].filter((entry) => entry.zone && entry.zone.bounds && entry.respawn),
     );
 
@@ -947,4 +910,4 @@ initGameModels(assetLoader)
     console.error("Error while loading assets:", error);
     const loadingText = document.getElementById("loading-text");
     if (loadingText) loadingText.innerText = "LOADING ERROR";
-  });
+  });

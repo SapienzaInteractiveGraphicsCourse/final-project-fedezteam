@@ -60,8 +60,24 @@ export default class GameLevel {
 
     const mainIslandSize = platformsData[0]?.size.x || 60;
 
-    await this.decorations.spawnFieldProps(mainIslandSize, (coinMesh) =>
-      this.collectibles.registerCoin(coinMesh),
+    // Horizontal footprint of every HillBlock platform (block_grass_large/
+    // hill/hill_step — see HillBlock.js), computed with the exact same
+    // half-extent formula HillBlock uses for its own collider. Read
+    // straight from the raw level JSON here (available immediately after
+    // loadLevelData above) rather than waiting for buildBuildingsAndNPCs,
+    // which doesn't actually build them until further down — passed to
+    // spawnFieldProps so its random tree/flower/coin scatter can avoid
+    // landing inside one.
+    const hillFootprints = (levelData?.hills || []).map((h) => {
+      const sX = h.scaleX !== undefined ? h.scaleX : (h.scale ?? 1);
+      const sZ = h.scaleZ !== undefined ? h.scaleZ : (h.scale ?? 1);
+      return { x: h.x || 0, z: h.z || 0, halfX: 0.98 * sX, halfZ: 0.98 * sZ };
+    });
+
+    await this.decorations.spawnFieldProps(
+      mainIslandSize,
+      (coinMesh) => this.collectibles.registerCoin(coinMesh),
+      hillFootprints,
     );
 
     // Curated coin trail guiding the player up the hill staircase in
