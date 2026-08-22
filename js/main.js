@@ -17,6 +17,10 @@ import ObstacleZone from "./entities/Level/ObstacleZone.js";
 import EndingZone from "./entities/Level/EndingZone.js";
 import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
+import InteractionManager from "./interactions/InteractionManager.js";
+import QuestManager from "./interactions/QuestManager.js";
+import PeachCutscene from "./interactions/PeachCutscene.js";
+import { MAP_MODELS } from "./core/Assets/manifest.js";
 import * as THREE from "three";
 import CannonDebugger from "https://cdn.jsdelivr.net/npm/cannon-es-debugger@1.0.0/+esm";
 import Stats from "three/addons/libs/stats.module.js";
@@ -432,6 +436,11 @@ const entityManager = new EntityManager(
   physics,
   renderer.dirLight,
 );
+
+// Toad's 25-coin quest listens on every coin pickup, whichever quest stage
+// it's actually in — see QuestManager.onCoinCollected for the no-op guard.
+entityManager.onCoinCollected = () => questManager.onCoinCollected();
+
 let mapEntity = null;
 let kamekZone = null;
 let bowserZone = null;
@@ -443,10 +452,24 @@ let endingZone = null;
 let kamek = null;
 let bowser = null;
 
+// Yoshi's egg -> mount mechanic (see js/interactions/) — hoisted the same
+// way as kamek/bowser above, since they're actually created inside the
+// async asset-loading callback further down but need to be reachable from
+// updateGame()'s per-frame loop.
+let yoshiEggMesh = null;
+let yoshiEntity = null;
+let peachCutscene = null;
+
 const ui = new UIManager();
 const audio = new AudioManager();
 initGameAudio(audio);
 ui.setAudio(audio);
+
+// Owns every "walk up and press E" interaction in the game: Toad's quest
+// dialogue, hatching Yoshi's egg, mounting/dismounting Yoshi, and talking
+// to Peach at the end — see js/interactions/.
+const interactions = new InteractionManager(ui);
+const questManager = new QuestManager(ui);
 
 // Restore the mute state saved from a previous session, if any.
 audio.setMute(getStoredMuteState());
@@ -662,7 +685,36 @@ function updateGame(delta) {
     }
   }
 
-  cameraManager.update(entityManager.player, input, delta);
+  // "Premi E per ..." interactions (Toad's quest, Yoshi's egg/mount,
+  // Peach's dialogue trigger) — suppressed while a dialogue line is
+  // already up, both so the prompt doesn't fight the speech bubble for
+  // screen space and so E doesn't simultaneously advance a line AND
+  // re-trigger whatever's underneath it.
+  if (!ui.dialogueActive) {
+    interactions.update(entityManager.player.mesh.position, input);
+  } else {
+    ui.hideInteractionPrompt();
+  }
+
+  // Dialogue advance (Peach's cutscene or Toad's quest lines): E ONLY, per
+  // spec — Space is deliberately not read here at all, so it stays free
+  // for jumping the instant a dialogue box closes. While Peach's cutscene
+  // is active the camera is also a fixed cinematic shot on her
+  // (PeachCutscene.updateCamera) instead of the normal follow-cam.
+  if (ui.dialogueActive && input.consumeJustPressed("e")) {
+    if (peachCutscene && peachCutscene.active) {
+      peachCutscene.advance();
+    } else if (questManager.dialogueOpen) {
+      questManager.closeToadDialogue();
+    }
+  }
+
+  if (peachCutscene && peachCutscene.active) {
+    peachCutscene.updateCamera();
+  } else {
+    cameraManager.update(entityManager.player, input, delta);
+  }
+
   if (showColliders) cannonDebugger.update();
 }
 
@@ -693,19 +745,115 @@ initGameModels(assetLoader)
 
     entityManager.setMap(mapEntity);
 
+    // Toad's quest dialogue: looked up by type from the NPCs GameLevel just
+    // spawned (see LevelLoader.buildBuildingsAndNPCs / NPC.js — this is
+    // also where Toad's previously-missing collision comes from). Skipped
+    // gracefully (console warning only) if level1.json ever stops defining
+    // a "toad" NPC.
+    const toadNpc = mapEntity.npcs?.find((n) => n.type === "toad");
+    if (toadNpc) {
+      questManager.onRewardStar = () => {
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([
+            { x: toadNpc.position.x + 3, y: toadNpc.position.y + 2, z: toadNpc.position.z },
+          ]);
+        }
+      };
+
+      interactions.register({
+        position: toadNpc.position,
+        radius: 3.5,
+        prompt: () => questManager.getToadPrompt(),
+        onInteract: () => questManager.onToadInteract(),
+      });
+    } else {
+      console.warn('[main] No "toad" NPC found in level1.json — Toad\'s quest is not registered.');
+    }
+
+    // Yoshi's egg -> mount mechanic: Yoshi starts hatched inside an egg at
+    // the level's yoshiSpawn point. Pressing E hatches it (no animation, per
+    // spec) into the rideable Yoshi from before; pressing E on Yoshi
+    // himself afterward mounts/dismounts (see Yoshi.mount()/dismount() and
+    // Player.setMountedOnYoshi for the boosted jump while riding).
+    if (mapEntity.yoshiSpawn && assets.yoshi) {
+      const ySpawn = mapEntity.yoshiSpawn;
+
+      try {
+        const eggGltf = await new GLTFLoader().loadAsync(MAP_MODELS.yoshiEgg);
+        yoshiEggMesh = eggGltf.scene;
+
+        // Measure-then-scale to a sensible in-world size, same recipe used
+        // throughout the level (see EndingZone._placeModel) rather than
+        // trusting a hardcoded scale on a model whose native size is
+        // unknown here.
+        yoshiEggMesh.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(yoshiEggMesh);
+        const height = box.max.y - box.min.y || 1;
+        const targetHeight = 2.2;
+        yoshiEggMesh.scale.setScalar(targetHeight / height);
+        yoshiEggMesh.updateMatrixWorld(true);
+        const scaledBox = new THREE.Box3().setFromObject(yoshiEggMesh);
+
+        yoshiEggMesh.position.set(ySpawn.x, ySpawn.y - scaledBox.min.y, ySpawn.z);
+        yoshiEggMesh.traverse((c) => {
+          if (c.isMesh) {
+            c.castShadow = true;
+            c.receiveShadow = true;
+          }
+        });
+        renderer.scene.add(yoshiEggMesh);
+
+        const eggInteractable = interactions.register({
+          position: yoshiEggMesh.position,
+          radius: 3,
+          prompt: "Premi E per schiudere l'uovo",
+          onInteract: () => {
+            if (!yoshiEggMesh) return;
+
+            renderer.scene.remove(yoshiEggMesh);
+            interactions.unregister(eggInteractable);
+            yoshiEggMesh = null;
+
+            yoshiEntity = new Yoshi(assets.yoshi, physics);
+            yoshiEntity.spawn(ySpawn.x, ySpawn.y, ySpawn.z);
+            entityManager.setYoshi(yoshiEntity);
+
+            interactions.register({
+              // Live reference, not a copy: once mounted, Yoshi.update()
+              // follows the player every frame, so this keeps tracking him
+              // automatically without re-registering.
+              position: yoshiEntity.mesh.position,
+              radius: 3,
+              prompt: () =>
+                yoshiEntity.isRidden ? "Premi E per scendere da Yoshi" : "Premi E per salire su Yoshi",
+              onInteract: () => {
+                if (yoshiEntity.isRidden) {
+                  yoshiEntity.dismount();
+                  entityManager.player?.setMountedOnYoshi(false);
+                } else {
+                  yoshiEntity.mount();
+                  entityManager.player?.setMountedOnYoshi(true);
+                }
+              },
+            });
+
+            if (audio && audio.playSFX) audio.playSFX("star");
+          },
+        });
+      } catch (e) {
+        console.warn("[main] Could not load the Yoshi egg model — falling back to spawning Yoshi directly.", e);
+        yoshiEntity = new Yoshi(assets.yoshi, physics);
+        yoshiEntity.spawn(ySpawn.x, ySpawn.y, ySpawn.z);
+        entityManager.setYoshi(yoshiEntity);
+      }
+    }
+
     // Classic void-fall respawn point for the main map (level1.json): if
     // this is the only match (see setVoidFallZones below, for the two boss
     // zones), falling into the void anywhere on the main island sends the
     // player back to the game's actual starting point instead of a
     // hardcoded (0,2,0) that could drift out of sync with the level file.
     entityManager.setSpawnPoint(mapEntity.playerSpawn);
-
-    if (mapEntity.yoshiSpawn) {
-      const ySpawn = mapEntity.yoshiSpawn;
-      const yoshiEntity = new Yoshi(assets.yoshi, physics);
-      yoshiEntity.spawn(ySpawn.x, ySpawn.y, ySpawn.z);
-      entityManager.setYoshi(yoshiEntity);
-    }
 
     // Enemies. Loaded separately from the character models (see
     // assetConfig.initEnemyModels) since they aren't part of CHARACTER_MODELS;
@@ -760,6 +908,8 @@ initGameModels(assetLoader)
         damagePlayer();
       };
       kamek.onDefeated = () => {
+        questManager.onKamekDefeated();
+
         // A real star to walk over and collect (not an instant grant),
         // plus a warp star right next to it to head back to spawn — same
         // "poke the level's existing systems from outside, after the
@@ -832,6 +982,8 @@ initGameModels(assetLoader)
         damagePlayer();
       };
       bowser.onDefeated = () => {
+        questManager.onBowserDefeated();
+
         // Same "drop a real collectible star + a warp star back to spawn"
         // pattern as Kamek's onDefeated above — including the same fix:
         // anchored to the arena's fixed center (bowserZone.arenaCenter)
@@ -890,6 +1042,22 @@ initGameModels(assetLoader)
     // ui.onReachPeach handler below.
     endingZone = new EndingZone(renderer.scene, physics);
     await endingZone.load("./assets/levels/peach_castle.json");
+
+    // Peach's ending dialogue: walk up to her at the castle and press E —
+    // only available once the player has actually been teleported there
+    // (ui.gameState === "ENDING", set by ui.onReachPeach above), and not
+    // while a dialogue line is already up.
+    if (endingZone.peach) {
+      peachCutscene = new PeachCutscene(ui, renderer.camera, endingZone.peach, endingZone.castle);
+
+      interactions.register({
+        position: endingZone.peach.position,
+        radius: 4,
+        prompt: "Premi E per parlare con Peach",
+        isAvailable: () => ui.gameState === "ENDING" && !ui.dialogueActive,
+        onInteract: () => peachCutscene.start(ui.heroName || "eroe"),
+      });
+    }
 
     rawModels.mario = assets.mario;
     rawModels.luigi = assets.luigi;

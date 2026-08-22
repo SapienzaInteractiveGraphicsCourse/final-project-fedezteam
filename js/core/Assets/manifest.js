@@ -37,8 +37,9 @@ export const MAP_MODELS = {
   // Every Toad House variant currently shares this same red model file
   // (see BuildingFactory / ToadHouse for the collision-side handling).
   toadHouseRed: `${MODELS_ROOT}/Map/toad_house_red.glb`,
-  // Used purely as a decorative "planet" floating in the sky (see
-  // Decorations.spawnYoshiEggPlanet), not as a gameplay prop.
+  // Yoshi's egg -> mount mechanic: spawned at level1.json's yoshiSpawn
+  // point, hatches into the rideable Yoshi on "Premi E" — see main.js's
+  // startup sequence and js/interactions/InteractionManager.js.
   yoshiEgg: `${MODELS_ROOT}/Map/yoshi_egg.glb`,
   // Mario Galaxy-style "launch star", placed at the island's edges (see
   // Decorations.spawnWarpStars). Currently a visual landmark only — no

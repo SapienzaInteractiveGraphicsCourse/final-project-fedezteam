@@ -14,6 +14,12 @@ export default class EntityManager {
     this.spaceWasPressed = false;
     this.isFallingScreamPlaying = false;
 
+    // Optional hook, set from main.js (see QuestManager.onCoinCollected) —
+    // called every time ANY coin is picked up anywhere in the level, on top
+    // of the existing ui.addCoin()/SFX handling below. Left null by default
+    // so nothing changes for anyone who never sets it.
+    this.onCoinCollected = null;
+
     // Classic void-fall respawn point (see setSpawnPoint) — defaults to the
     // old hardcoded value so nothing changes for anyone who never calls it.
     this.spawnPoint = { x: 0, y: 2, z: 0 };
@@ -112,6 +118,11 @@ export default class EntityManager {
     // screens themselves) stays frozen as before.
     if (ui && ui.gameState !== "PLAYING" && ui.gameState !== "ENDING") return;
 
+    // Frozen during Peach's cutscene dialogue (see PeachCutscene.js /
+    // main.js): gameState stays "ENDING" throughout it, so this extra check
+    // is what actually stops the player from walking around mid-dialogue.
+    if (ui && ui.dialogueActive) return;
+
     if (this.physicsEngine) {
       this.physicsEngine.update(delta);
     }
@@ -178,6 +189,7 @@ export default class EntityManager {
         () => {
           if (audio && audio.playSFX) audio.playSFX("coin");
           if (ui && ui.addCoin) ui.addCoin();
+          if (this.onCoinCollected) this.onCoinCollected();
         },
         () => {
           if (audio && audio.playSFX) audio.playSFX("star");

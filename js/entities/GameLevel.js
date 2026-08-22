@@ -36,6 +36,7 @@ export default class GameLevel {
 
     this.playerSpawn = null;
     this.yoshiSpawn = null;
+    this.npcs = [];
 
     this.levelLoader = new LevelLoader(this.scene, this.physicsWorld, this.loader);
     this.collectibles = new Collectibles(this.scene, this.physicsWorld, this.loader);
@@ -86,9 +87,18 @@ export default class GameLevel {
     // old 2-platform staircases ("Base Bassa"/"Cima Alta",
     // "Gradino Nord"/"Altopiano Gigante Nord") and "Passerella Sud" were
     // removed entirely, along with their coin trails, below.
+    //
+    // STAR REBALANCE: ui.maxStars (5, the win condition) is made up of
+    // exactly 2 HillClimb stars (one here, one on Passerella Est below) +
+    // Toad's quest reward + Kamek's + Bowser's (all three spawned
+    // dynamically — see main.js). Passerella Est's old second/lower star
+    // and every OTHER star that used to be scattered around the map were
+    // removed from level1.json's "stars" array — except the red planet's
+    // own star (see below), kept as a findable bonus beyond the 5 needed
+    // to win, same as the extra ones the boss zones drop.
 
     // "Scalino 1/2/3" (level1.json, x=30..50, z=20) — HillClimb Standard,
-    // ends at the normal-height Power Star (50, 8, 20).
+    // the "usual" platform, ends at the normal-height Power Star (50, 8, 20).
     //
     // BUG FIX (last coin overlapping the star): the trail used to end
     // exactly at (50, 7.5, 20), which is basically on top of the star at
@@ -106,9 +116,12 @@ export default class GameLevel {
     );
 
     // "Passerella Est 1/2/3" (level1.json, x=70..96, z=70) — HillClimb
-    // Yoshi: keeps its normal-height Power Star ((96, 7, 70)) plus a SECOND
-    // star placed far higher ((96, 20, 70)), reachable only via Yoshi's
-    // boosted jump.
+    // Yoshi: a single Power Star at (96, 15, 70), ~7.5 units above the top
+    // platform (y≈7.5) — out of reach of a normal jump for either
+    // character, only reachable via Yoshi's boosted jump (see
+    // Player.YOSHI_JUMP_BOOST). Originally at y=20 with a second, lower
+    // duplicate star also on this platform; per the star-count rebalance
+    // both were replaced by this single star, lowered by 5 units.
     await this.decorations.spawnCoinTrail(
       [
         { x: 60, y: 2.3, z: 70 },
@@ -136,7 +149,11 @@ export default class GameLevel {
     await this.collectibles.spawnStars(levelData?.stars);
     await this.collectibles.spawnMushrooms(levelData?.mushrooms);
     await this.collectibles.spawnQuestionMarkBlocks(levelData?.questionMarkBlocks);
-    await this.levelLoader.buildBuildingsAndNPCs(
+
+    // Kept on the instance (not just awaited-and-discarded) so main.js can
+    // look up NPCs by type and register their interactions — e.g. Toad's
+    // quest dialogue (see js/interactions/QuestManager.js).
+    this.npcs = await this.levelLoader.buildBuildingsAndNPCs(
       levelData?.buildings,
       levelData?.npcs,
       levelData?.hills,
@@ -173,8 +190,11 @@ export default class GameLevel {
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
     );
 
-    // One collectible star on the red planet too, a short walk from where
-    // the "sky" warp star lands the player (see spawnWarpStars below).
+    // One extra collectible star on the red planet, a short walk from
+    // where the "sky" warp star lands the player (see spawnWarpStars
+    // below) — a bonus findable star on top of the 5 that make up
+    // ui.maxStars (2 HillClimb + Toad's quest reward + Kamek + Bowser),
+    // same as the extra ones the boss zones drop.
     await this.collectibles.spawnStars([{ x: -254, y: 214, z: 10 }]);
 
     // Mario Galaxy-style warp stars. "sky" sends the player to the red

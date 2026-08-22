@@ -4,8 +4,8 @@ import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 // import also resolves on case-sensitive hosts such as GitHub Pages.
 import BuildingFactory from "../Buildings/BuildingFactory.js";
 import { BUILDING_MODEL_DIR, NPC_MODEL_DIR, MAP_MODELS, TEXTURES } from "../../core/Assets/manifest.js";
-import { enableShadows } from "../../utils/shadows.js";
 import { normalizeMaterials } from "../../utils/materials.js";
+import NPC from "../NPC.js";
 
 /**
  * Owns everything about the STATIC part of a level: parsing the level JSON,
@@ -150,20 +150,29 @@ export default class LevelLoader {
       }
     }
 
+    // Returned to the caller (see GameLevel.loadLevel's this.npcs) so
+    // main.js can look NPCs up by type and register their interactions
+    // (e.g. Toad's quest dialogue) — see js/interactions/.
+    const npcInstances = [];
+
     for (const npc of npcsData) {
       try {
         const glb = await this.loader.loadAsync(`${NPC_MODEL_DIR}${npc.type}.glb`);
         const mesh = glb.scene.clone();
-
-        mesh.scale.set(npc.scale, npc.scale, npc.scale);
-        mesh.position.set(npc.x, npc.y, npc.z);
-
-        enableShadows(mesh);
         normalizeMaterials(mesh);
-        this.scene.add(mesh);
+
+        // BUG FIX (missing NPC collision): a bare mesh here used to mean
+        // nothing stopped the player from walking straight through an NPC
+        // (Toad, ...) — NPC gives it the same static box-collider treatment
+        // ToadHouse.js already uses for its own structure. See NPC.js.
+        const instance = new NPC(mesh, this.physicsWorld, npc);
+        this.scene.add(instance.mesh);
+        npcInstances.push(instance);
       } catch (e) {
         console.warn(`[LevelLoader] Could not load NPC: ${npc.type}.glb`);
       }
     }
+
+    return npcInstances;
   }
 }

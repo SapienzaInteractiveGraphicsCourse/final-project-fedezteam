@@ -44,6 +44,31 @@ export default class Player {
     // once per landing, not the velocity application itself.
     this._planetJumpLatched = false;
 
+    // Set from main.js alongside Yoshi.mount()/dismount() (see the "Premi
+    // E" mount interaction) — while true, jump velocity is boosted so the
+    // player can clear the y=20 bonus star on "HillClimb Yoshi" that a
+    // normal jump can't reach. Everywhere else this is simply 1x, so
+    // movement is byte-for-byte unchanged off of Yoshi.
+    this.mountedOnYoshi = false;
+    // ~1.75x jump velocity -> roughly 1.75x^2 (~3x) jump HEIGHT (v^2/2g).
+    // Chosen so a jump from the top of "Passerella Est 3" (around y=7.5)
+    // comfortably clears the HillClimb Yoshi star at y=15 (a ~7.5-unit gap,
+    // out of reach of either character's normal jump) for both Mario and
+    // Luigi's own jumpVelocity, with margin to spare.
+    this.YOSHI_JUMP_BOOST = 1.75;
+    // Purely visual: while mounted, the rider's own mesh sits this much
+    // above (positive) or below (negative) YOSHI's own resulting height —
+    // read and applied by Yoshi.update()'s isRidden branch, which is what
+    // actually has the final say on the rider's mesh position while
+    // mounted (it runs after this class's own mesh sync each frame — see
+    // EntityManager.update's call order — and overwrites it). The
+    // mesh-sync lines below in _updateFlat/_updateOnPlanet still apply it
+    // too, but that's immediately superseded once mounted; kept only so
+    // nothing looks wrong for the one frame between mounting and Yoshi's
+    // own update running. Ground contact itself is never derived from this
+    // value — see Yoshi.js's own comment for why.
+    this.MOUNT_RIDE_HEIGHT = 0.5;
+
     enableShadows(this.mesh);
 
     // Procedural skeletal animation. If the model has no recognizable
@@ -102,9 +127,12 @@ export default class Player {
     // for why: enemy contact is already fully handled by scripted logic
     // (Enemy._checkPlayerContact), so a real cannon-es collision on top of
     // that was redundant and was the actual source of the erroneous extra
-    // jump-force accumulation on Bowser's stomp bounce.
+    // jump-force accumulation on Bowser's stomp bounce. Also excludes YOSHI
+    // for the same reason (see COLLISION_GROUPS.YOSHI's own comment) — a
+    // real collision between the two while mounted is what was flinging the
+    // player through the floor the instant Yoshi was mounted.
     this.body.collisionFilterGroup = COLLISION_GROUPS.PLAYER;
-    this.body.collisionFilterMask = -1 & ~COLLISION_GROUPS.ENEMY;
+    this.body.collisionFilterMask = -1 & ~COLLISION_GROUPS.ENEMY & ~COLLISION_GROUPS.YOSHI;
 
     // 3. Collision listener used to reset the jump flag on landing. Only
     // used by _updateFlat — _updateOnPlanet has its own distance-based
@@ -126,6 +154,12 @@ export default class Player {
     if (this.physicsEngine && this.physicsEngine.world) {
       this.physicsEngine.world.addBody(this.body);
     }
+  }
+
+  // Toggled from main.js's Yoshi mount/dismount interaction (see
+  // Yoshi.mount()/dismount()). See YOSHI_JUMP_BOOST above for why.
+  setMountedOnYoshi(mounted) {
+    this.mountedOnYoshi = !!mounted;
   }
 
   // Per-frame entry point: routes to the flat-ground or planet-gravity
@@ -226,7 +260,8 @@ export default class Player {
     }
 
     if ((input.isPressed("space") || input.isPressed(" ")) && this.canJump) {
-      this.body.velocity.y = this.jumpVelocity;
+      const jumpBoost = this.mountedOnYoshi ? this.YOSHI_JUMP_BOOST : 1;
+      this.body.velocity.y = this.jumpVelocity * jumpBoost;
       this.canJump = false;
 
       if (audio && audio.playSFX) {
@@ -235,30 +270,44 @@ export default class Player {
     }
 
     // Sync the visual mesh to the physics body, compensating for the
-    // sphere-center offset applied in spawn().
+    // sphere-center offset applied in spawn() — plus, while mounted on
+    // Yoshi, the MOUNT_RIDE_HEIGHT tweak above so the rider reads as
+    // actually sitting on Yoshi's back instead of overlapping him exactly
+    // (see MOUNT_RIDE_HEIGHT's own comment; Yoshi.js follows the player's
+    // UNOFFSET body position instead of this mesh, so the two don't
+    // compound).
+    const rideHeight = this.mountedOnYoshi ? this.MOUNT_RIDE_HEIGHT : 0;
     this.mesh.position.set(
       this.body.position.x,
-      this.body.position.y - this.radius,
+      this.body.position.y - this.radius + rideHeight,
       this.body.position.z,
     );
 
     // The animation state is DERIVED from the motion already computed
     // above: the controller never touches velocity or input, so how the
-    // character is driven stays exactly the same either way.
+    // character is driven stays exactly the same either way. EXCEPT while
+    // mounted on Yoshi: the rider's legs don't walk/run themselves anymore
+    // (Yoshi carries him), so speed is forced to 0 and grounded to true —
+    // the legs stay in their idle pose instead of cycling a walk/run
+    // animation while the two of them move.
     if (this.animation) {
-      const v = this.body.velocity;
+      if (this.mountedOnYoshi) {
+        this.animation.update(delta, { speed: 0, verticalVelocity: 0, grounded: true });
+      } else {
+        const v = this.body.velocity;
 
-      // canJump alone isn't enough to mean "grounded": it stays true even
-      // while walking off the edge of a platform, since no new collision
-      // arrives to clear it. Vertical velocity resolves that case — a
-      // falling body has negative y velocity.
-      const grounded = this.canJump && v.y > -2;
+        // canJump alone isn't enough to mean "grounded": it stays true even
+        // while walking off the edge of a platform, since no new collision
+        // arrives to clear it. Vertical velocity resolves that case — a
+        // falling body has negative y velocity.
+        const grounded = this.canJump && v.y > -2;
 
-      this.animation.update(delta, {
-        speed: Math.hypot(v.x, v.z),
-        verticalVelocity: v.y,
-        grounded,
-      });
+        this.animation.update(delta, {
+          speed: Math.hypot(v.x, v.z),
+          verticalVelocity: v.y,
+          grounded,
+        });
+      }
     }
   }
 
@@ -403,9 +452,10 @@ export default class Player {
     }
 
     if ((input.isPressed("space") || input.isPressed(" ")) && grounded) {
+      const jumpBoost = this.mountedOnYoshi ? this.YOSHI_JUMP_BOOST : 1;
       const jumpVel = new THREE.Vector3(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z);
       const tangential = jumpVel.clone().sub(up.clone().multiplyScalar(jumpVel.dot(up)));
-      const launched = tangential.add(up.clone().multiplyScalar(this.jumpVelocity));
+      const launched = tangential.add(up.clone().multiplyScalar(this.jumpVelocity * jumpBoost));
       this.body.velocity.set(launched.x, launched.y, launched.z);
 
       if (!this._planetJumpLatched) {
@@ -418,8 +468,13 @@ export default class Player {
 
     // Sync the mesh to the body along the local up instead of always
     // subtracting from world Y, so the model's feet stay on the planet's
-    // curved surface no matter where on it the player is standing.
-    const feet = bodyPos.clone().sub(up.clone().multiplyScalar(this.radius));
+    // curved surface no matter where on it the player is standing — plus
+    // the same MOUNT_RIDE_HEIGHT tweak while mounted on Yoshi as
+    // _updateFlat.
+    const rideHeight = this.mountedOnYoshi ? this.MOUNT_RIDE_HEIGHT : 0;
+    const feet = bodyPos
+      .clone()
+      .sub(up.clone().multiplyScalar(this.radius - rideHeight));
     this.mesh.position.copy(feet);
 
     // BUG FIX (missing animation on planets): _updateFlat already does this,
@@ -428,17 +483,23 @@ export default class Player {
     // along the LOCAL tangent/up axes instead of world X/Z/Y, since "up" can
     // point in any direction here.
     if (this.animation) {
-      const finalVel = this.body.velocity;
-      const radialSpeed = finalVel.x * up.x + finalVel.y * up.y + finalVel.z * up.z;
-      const tangentSpeedSq =
-        finalVel.x * finalVel.x + finalVel.y * finalVel.y + finalVel.z * finalVel.z -
-        radialSpeed * radialSpeed;
+      if (this.mountedOnYoshi) {
+        // Same reasoning as _updateFlat: legs stay in their idle pose while
+        // Yoshi is doing the moving.
+        this.animation.update(delta, { speed: 0, verticalVelocity: 0, grounded: true });
+      } else {
+        const finalVel = this.body.velocity;
+        const radialSpeed = finalVel.x * up.x + finalVel.y * up.y + finalVel.z * up.z;
+        const tangentSpeedSq =
+          finalVel.x * finalVel.x + finalVel.y * finalVel.y + finalVel.z * finalVel.z -
+          radialSpeed * radialSpeed;
 
-      this.animation.update(delta, {
-        speed: Math.sqrt(Math.max(tangentSpeedSq, 0)),
-        verticalVelocity: radialSpeed,
-        grounded,
-      });
+        this.animation.update(delta, {
+          speed: Math.sqrt(Math.max(tangentSpeedSq, 0)),
+          verticalVelocity: radialSpeed,
+          grounded,
+        });
+      }
     }
   }
 
