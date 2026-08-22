@@ -12,13 +12,16 @@
  *     Est (HillClimb Yoshi). Detected via markYoshiHatched() (called once
  *     from main.js's hatchYoshiEgg) followed by onStarCollected("yoshiHighStar").
  *   Phase 3 (Stella 3 - Kamek): talk to Toad to get the Kamek quest, defeat
- *     Kamek (only a return Warp Star waits at his arena now — see main.js's
- *     kamek.onDefeated), then talk to Toad again to claim the star.
+ *     Kamek — his arena drops both the star AND the return Warp Star (see
+ *     main.js's kamek.onDefeated) — then talk to Toad again to report back
+ *     and unlock the next quest.
  *   Phase 4 (Stella 4 - Monete): talk to Toad to get the 25-coin quest,
- *     collect the coins, then talk to Toad again to claim the star.
- *   Phase 5 (Stella 5 - Bowser): defeat Bowser (same as Kamek, only a
- *     return Warp Star waits at his arena), then talk to Toad again to
- *     claim the final star.
+ *     collect the coins, then talk to Toad again to turn them in and claim
+ *     Toad's own reward star (there's no arena for this one to drop a star
+ *     at, unlike Phases 3 and 5).
+ *   Phase 5 (Stella 5 - Bowser): defeat Bowser — same as Kamek, his arena
+ *     drops both the star and the return Warp Star — then talk to Toad one
+ *     last time to report back and finish the game.
  *
  * Phase 1 and 2 are free-standing (the player can do them in any order,
  * whenever they like) — only Toad's own chain (Fasi 3 -> 4 -> 5) is a
@@ -31,11 +34,12 @@
  * Toad's OWN quest chain keeps the state-machine shape it always had (a
  * `stage` string + a switch): it's still strictly linear —
  * NONE -> KAMEK_QUEST -> KAMEK_RETURN -> COIN_QUEST -> COIN_QUEST_READY ->
- * BOWSER_QUEST -> BOWSER_RETURN -> ALL_DONE. Toad is the only source of
- * all three of these stars now: Kamek's and Bowser's arenas no longer drop
- * a star directly (see main.js's onDefeated handlers) — only the return
- * Warp Star — so every one of the three is handed over by talking to Toad
- * after the fact, same as the coin quest always worked.
+ * BOWSER_QUEST -> BOWSER_RETURN -> ALL_DONE. Reporting back to Toad after
+ * Kamek/Bowser (the two *_RETURN stages) is what UNLOCKS the next quest —
+ * it does NOT hand over a star, since Kamek and Bowser each already
+ * dropped their own at their arena (see main.js's onDefeated handlers).
+ * The coin quest is the odd one out: there's no arena for it, so Toad
+ * hands over its Power Star himself, right on turn-in (onRewardStar).
  *
  * Coin counting: the quest tracks the player's TOTAL coin wallet
  * (ui.coins), not a separate "collected since accepting" counter — a
@@ -74,13 +78,13 @@ export default class QuestManager {
     // from Peach's multi-line "advance" — see closeToadDialogue).
     this.dialogueOpen = false;
 
-    // Set from main.js once Toad's position is known — each spawns a
-    // Power Star reward next to him once its quest is reported: Kamek's,
-    // the coin quest's, and Bowser's (three separate rewards, since none
-    // of the three bosses/quests drop a star on their own anymore).
-    this.onKamekReturnReward = null;
+    // Set from main.js once Toad's position is known — spawns a Power Star
+    // reward next to him on the coin quest's turn-in ONLY. Kamek and
+    // Bowser each drop their own star at their arena instead (see main.js's
+    // onDefeated handlers) — reporting back to Toad for those two just
+    // advances the quest chain, see onToadInteract's KAMEK_RETURN/
+    // BOWSER_RETURN cases.
     this.onRewardStar = null;
-    this.onBowserReturnReward = null;
 
     this._renderObjective();
   }
@@ -109,10 +113,11 @@ export default class QuestManager {
         break;
 
       case "KAMEK_RETURN":
+        // No reward star here — Kamek already dropped one at his arena;
+        // this just unlocks the coin quest.
         this.stage = "COIN_QUEST";
-        if (this.onKamekReturnReward) this.onKamekReturnReward();
         this._showToadDialogue(
-          `Well done! Here is a Power Star for you! Now, bring me ${this.coinTarget} coins and another reward is yours!`,
+          `Well done defeating Kamek! Now, bring me ${this.coinTarget} coins and a reward is yours!`,
         );
         this._syncCoinProgress();
         this._renderObjective();
@@ -140,10 +145,11 @@ export default class QuestManager {
         break;
 
       case "BOWSER_RETURN":
+        // Same as Kamek's return above — no reward star here either,
+        // Bowser already dropped his at the arena.
         this.stage = "ALL_DONE";
-        if (this.onBowserReturnReward) this.onBowserReturnReward();
         this._showToadDialogue(
-          "Congratulations, hero! Here is the final Power Star — the Mushroom Kingdom is safe once more!",
+          "Congratulations, hero! You defeated Bowser — the Mushroom Kingdom is safe once more!",
         );
         this._renderObjective();
         break;
@@ -180,7 +186,7 @@ export default class QuestManager {
   onKamekDefeated() {
     if (this.stage !== "KAMEK_QUEST") return;
     this.stage = "KAMEK_RETURN";
-    this.ui.showToast("Kamek is defeated! Take the Warp Star back and report to Toad!");
+    this.ui.showToast("Kamek is defeated! Grab the star, then report back to Toad!");
     this._renderObjective();
   }
 
@@ -188,7 +194,7 @@ export default class QuestManager {
   onBowserDefeated() {
     if (this.stage !== "BOWSER_QUEST") return;
     this.stage = "BOWSER_RETURN";
-    this.ui.showToast("Bowser is defeated! Take the Warp Star back and report to Toad!");
+    this.ui.showToast("Bowser is defeated! Grab the star, then report back to Toad!");
     this._renderObjective();
   }
 
@@ -252,10 +258,10 @@ export default class QuestManager {
           text = "Phase 3: talk to Toad to start Kamek's quest.";
           break;
         case "KAMEK_QUEST":
-          text = "Phase 3: defeat Kamek!";
+          text = "Phase 3: defeat Kamek and collect his star!";
           break;
         case "KAMEK_RETURN":
-          text = "Phase 3: return to Toad to claim your star.";
+          text = "Phase 3: report back to Toad.";
           break;
         case "COIN_QUEST":
           text = `Phase 4: bring Toad ${this.coinTarget} coins.`;
@@ -264,10 +270,10 @@ export default class QuestManager {
           text = "Phase 4: return to Toad to claim your star.";
           break;
         case "BOWSER_QUEST":
-          text = "Phase 5: defeat Bowser!";
+          text = "Phase 5: defeat Bowser and collect his star!";
           break;
         case "BOWSER_RETURN":
-          text = "Phase 5: return to Toad to claim your final star.";
+          text = "Phase 5: report back to Toad.";
           break;
         case "ALL_DONE":
         default:

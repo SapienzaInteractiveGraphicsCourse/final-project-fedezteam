@@ -817,24 +817,12 @@ initGameModels(assetLoader)
       // Same reward pattern, for reporting Kamek's defeat back to Toad
       // (Fase 3 of the quest HUD — see QuestManager) — offset to the other
       // side of him so the two reward stars never spawn on top of each other.
-      questManager.onKamekReturnReward = () => {
-        if (mapEntity?.collectibles) {
-          mapEntity.collectibles.spawnStars([
-            { x: toadNpc.position.x - 3, y: toadNpc.position.y + 2, z: toadNpc.position.z },
-          ]);
-        }
-      };
-
-      // Same reward pattern, for reporting Bowser's defeat back to Toad
-      // (Fase 5 of the quest HUD — see QuestManager) — offset further out
-      // so it doesn't land on top of either of the other two reward spots.
-      questManager.onBowserReturnReward = () => {
-        if (mapEntity?.collectibles) {
-          mapEntity.collectibles.spawnStars([
-            { x: toadNpc.position.x, y: toadNpc.position.y + 2, z: toadNpc.position.z + 3 },
-          ]);
-        }
-      };
+      // NOTE: no onKamekReturnReward / onBowserReturnReward here anymore —
+      // Kamek and Bowser each drop their own star at their arena again (see
+      // their onDefeated below), so reporting back to Toad now only
+      // advances the quest chain (assigns the next quest / unlocks Bowser),
+      // it doesn't hand over a star. Only the coin quest still does that
+      // (onRewardStar above), since there's no arena for it to drop one at.
 
       interactions.register({
         position: toadNpc.position,
@@ -1085,10 +1073,9 @@ initGameModels(assetLoader)
           dropZ += 6;
         }
 
-        // No star dropped here anymore — Kamek's arena only leaves the
-        // return Warp Star; the actual Power Star for this quest is now
-        // handed over by Toad once the player reports back to him (see
-        // QuestManager.onKamekReturnReward, wired below).
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY + 2, z: dropZ }]);
+        }
         if (mapEntity?.decorations) {
           // Bright yellow (was plain white) so a boss-reward warp star
           // reads as distinct from the decorative ones at level load.
@@ -1159,10 +1146,9 @@ initGameModels(assetLoader)
           dropZ += 6;
         }
 
-        // No star dropped here anymore — same reasoning as Kamek's
-        // onDefeated above: Toad hands over the final Power Star once the
-        // player reports back to him (see QuestManager.onBowserReturnReward,
-        // wired below).
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY + 2, z: dropZ }]);
+        }
         if (mapEntity?.decorations) {
           // Bright yellow (was plain white) — same reasoning as Kamek's
           // onDefeated above.

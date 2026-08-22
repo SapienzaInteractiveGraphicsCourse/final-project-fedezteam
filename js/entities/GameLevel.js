@@ -108,12 +108,13 @@ export default class GameLevel {
     // exactly the 5 stars named "Stella 1..5" by the quest HUD (see
     // QuestManager): the Red Planet star (below), the HillClimb Yoshi star
     // on Passerella Est (below — the "id" fields are what let QuestManager
-    // recognize each one specifically), and Toad's three quest rewards for
-    // Kamek/coins/Bowser (spawned dynamically — see main.js). HillClimb
+    // recognize each one specifically), Kamek's and Bowser's own arena
+    // drops (spawned dynamically on defeat — see main.js's onDefeated
+    // handlers), and Toad's own reward for the coin quest (also main.js —
+    // the coin quest has no arena of its own to drop a star at). HillClimb
     // Standard's own star was removed (it's the "stella bassa" the quest
     // spec asked to drop — the staircase and its coin trail are unchanged,
-    // just no longer end at a star), and Kamek/Bowser no longer drop a
-    // star directly at their arenas — see main.js's onDefeated handlers.
+    // just no longer end at a star).
 
     // "Scalino 1/2/3" (level1.json, x=30..50, z=20) — HillClimb Standard.
     // Used to end at a Power Star (50, 8, 20); that star was removed (see
