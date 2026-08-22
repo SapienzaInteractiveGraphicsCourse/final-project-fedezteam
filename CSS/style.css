@@ -698,6 +698,28 @@ position: absolute;
   white-space: nowrap;
 }
 
+/* L'immagine della schermata finale (the_end.png, 801x997) contiene DUE
+   personaggi invece dell'uno del peach_logo per cui erano tarati i limiti
+   qui sopra: con il tetto condiviso di 220px veniva disegnata a 177x220,
+   cioe' ~85px a testa, e non si capiva chi fossero. Qui sale a 300px.
+
+   Il tetto pero' NON e' fisso: il resto della scheda (titolo, riga di
+   testo, margini, pulsante) occupa circa 320px, quindi a 300px di immagine
+   la card arriva a 619px e su una finestra bassa non ci sta piu' — a
+   800x560 sbordava sopra e sotto. calc(100vh - 340px) e' esattamente
+   "quanto spazio resta all'immagine", e min() lascia i 300px pieni finche'
+   ce n'e' abbastanza: 300 a 700px di finestra, 280 a 620, 220 a 560.
+
+   width:auto invece del 100% ereditato: cosi' e' l'altezza a guidare e la
+   larghezza segue le proporzioni, senza le bande vuote ai lati che
+   object-fit lasciava dentro un riquadro piu' largo dell'immagine.
+   La scheda di vittoria precedente non e' toccata. */
+#victory-finale-img {
+  width: auto;
+  max-width: 100% !important;
+  max-height: min(300px, calc(100vh - 340px)) !important;
+}
+
 .btn-gold:hover {
   background-color: #ffe14d !important;
 }

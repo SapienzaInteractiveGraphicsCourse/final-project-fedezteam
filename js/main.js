@@ -884,7 +884,10 @@ initGameModels(assetLoader)
             },
           });
 
-          if (audio && audio.playSFX) audio.playSFX("star");
+          // Yoshi's own cry, not the star-pickup chime this used to borrow
+          // before he had a sound of his own — nothing is being collected
+          // here, he's hatching.
+          if (audio && audio.playSFX) audio.playSFX("yoshi_spawn");
         };
 
         // The reverse: Yoshi went into the void with the player on his back
