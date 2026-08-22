@@ -1,20 +1,26 @@
 /**
  * QuestManager.js — drives the top-right "quest objective" HUD panel
  * through 5 sequential phases (see UIManager.showQuestObjective, wired from
- * _renderObjective below):
+ * _renderObjective below), each one named after one of the 5 stars that
+ * make up ui.maxStars (see GameLevel.js's "STAR REBALANCE" comment):
  *
- *   Fase 1 (Stella 1 - Pianeta Rosso): use the yellow Warp Star to reach the
+ *   Phase 1 (Stella 1 - Pianeta Rosso): use the yellow Warp Star to reach the
  *     Red Planet and collect its star. Detected via onStarCollected(id) —
  *     see EntityManager.onStarCollected / Collectibles' star `id` field.
- *   Fase 2 (Stella 2 - Yoshi): find and hatch Yoshi's egg. Detected via
- *     markYoshiHatched(), called once from main.js's hatchYoshiEgg.
- *   Fase 3 (Stella 3 - Kamek): talk to Toad to get the Kamek quest, defeat
- *     Kamek, then talk to Toad again to claim the star.
- *   Fase 4 (Stella 4 - Monete): talk to Toad to get the 25-coin quest,
+ *   Phase 2 (Stella 2 - Yoshi & Stella Alta): hatch Yoshi's egg, then use
+ *     his boosted jump to reach and collect the high star on Passerella
+ *     Est (HillClimb Yoshi). Detected via markYoshiHatched() (called once
+ *     from main.js's hatchYoshiEgg) followed by onStarCollected("yoshiHighStar").
+ *   Phase 3 (Stella 3 - Kamek): talk to Toad to get the Kamek quest, defeat
+ *     Kamek (only a return Warp Star waits at his arena now — see main.js's
+ *     kamek.onDefeated), then talk to Toad again to claim the star.
+ *   Phase 4 (Stella 4 - Monete): talk to Toad to get the 25-coin quest,
  *     collect the coins, then talk to Toad again to claim the star.
- *   Fase 5 (Stella 5 - Bowser): defeat Bowser.
+ *   Phase 5 (Stella 5 - Bowser): defeat Bowser (same as Kamek, only a
+ *     return Warp Star waits at his arena), then talk to Toad again to
+ *     claim the final star.
  *
- * Fasi 1 and 2 are free-standing (the player can do them in any order,
+ * Phase 1 and 2 are free-standing (the player can do them in any order,
  * whenever they like) — only Toad's own chain (Fasi 3 -> 4 -> 5) is a
  * strict sequence, tracked by `stage`. The HUD panel always shows the
  * FIRST incomplete phase in 1..5 order, which is a pure display choice: it
@@ -23,9 +29,13 @@
  * order) — see _renderObjective.
  *
  * Toad's OWN quest chain keeps the state-machine shape it always had (a
- * `stage` string + a switch): it's still strictly linear, just reordered —
- * Kamek before coins now, instead of coins before Kamek — per the current
- * spec.
+ * `stage` string + a switch): it's still strictly linear —
+ * NONE -> KAMEK_QUEST -> KAMEK_RETURN -> COIN_QUEST -> COIN_QUEST_READY ->
+ * BOWSER_QUEST -> BOWSER_RETURN -> ALL_DONE. Toad is the only source of
+ * all three of these stars now: Kamek's and Bowser's arenas no longer drop
+ * a star directly (see main.js's onDefeated handlers) — only the return
+ * Warp Star — so every one of the three is handed over by talking to Toad
+ * after the fact, same as the coin quest always worked.
  *
  * Coin counting: the quest tracks the player's TOTAL coin wallet
  * (ui.coins), not a separate "collected since accepting" counter — a
@@ -38,7 +48,7 @@
  * cutscene uses) rather than a toast, and — per spec — closed with E only
  * (see main.js's updateGame, which no longer accepts Space for this).
  * Ambient, non-interaction-triggered notices (Kamek/Bowser defeated, the
- * Red Planet/Yoshi stars) stay as toasts: there's no "E press" moment to
+ * Red Planet/high stars) stay as toasts: there's no "E press" moment to
  * gate a blocking dialogue on for those.
  */
 export default class QuestManager {
@@ -46,12 +56,17 @@ export default class QuestManager {
     this.ui = ui;
 
     // Toad's own chain: NONE -> KAMEK_QUEST -> KAMEK_RETURN -> COIN_QUEST
-    // -> COIN_QUEST_READY -> BOWSER_QUEST -> ALL_DONE.
+    // -> COIN_QUEST_READY -> BOWSER_QUEST -> BOWSER_RETURN -> ALL_DONE.
     this.stage = "NONE";
     this.coinTarget = 25;
 
-    // Fasi 1 & 2 — independent of Toad's chain, see class comment above.
+    // Phase 1 — independent of Toad's chain, see class comment above.
     this.redPlanetStarDone = false;
+
+    // Phase 2 — two sub-steps, both independent of Toad's chain: the egg
+    // has to be hatched before the high star is even reachable, so the HUD
+    // text can tell the two apart (see _renderObjective).
+    this.yoshiEggHatched = false;
     this.yoshiStarDone = false;
 
     // True while a Toad dialogue line is up (ui.dialogueActive mirrors
@@ -59,11 +74,13 @@ export default class QuestManager {
     // from Peach's multi-line "advance" — see closeToadDialogue).
     this.dialogueOpen = false;
 
-    // Set from main.js once Toad's position is known — spawns a Power Star
-    // reward next to him when the Kamek quest / coin quest are turned in
-    // (two separate rewards now, one per Toad sub-quest).
+    // Set from main.js once Toad's position is known — each spawns a
+    // Power Star reward next to him once its quest is reported: Kamek's,
+    // the coin quest's, and Bowser's (three separate rewards, since none
+    // of the three bosses/quests drop a star on their own anymore).
     this.onKamekReturnReward = null;
     this.onRewardStar = null;
+    this.onBowserReturnReward = null;
 
     this._renderObjective();
   }
@@ -74,6 +91,7 @@ export default class QuestManager {
   getToadPrompt() {
     if (this.stage === "KAMEK_RETURN") return "Press E to report Kamek's defeat";
     if (this.stage === "COIN_QUEST_READY") return "Press E to hand over the coins";
+    if (this.stage === "BOWSER_RETURN") return "Press E to report Bowser's defeat";
     return "Press E to talk to Toad";
   }
 
@@ -121,6 +139,15 @@ export default class QuestManager {
         this._showToadDialogue("Defeat Bowser in his arena!");
         break;
 
+      case "BOWSER_RETURN":
+        this.stage = "ALL_DONE";
+        if (this.onBowserReturnReward) this.onBowserReturnReward();
+        this._showToadDialogue(
+          "Congratulations, hero! Here is the final Power Star — the Mushroom Kingdom is safe once more!",
+        );
+        this._renderObjective();
+        break;
+
       case "ALL_DONE":
         this._showToadDialogue("Thank you for saving the Mushroom Kingdom!");
         break;
@@ -153,15 +180,15 @@ export default class QuestManager {
   onKamekDefeated() {
     if (this.stage !== "KAMEK_QUEST") return;
     this.stage = "KAMEK_RETURN";
-    this.ui.showToast("Kamek is defeated! Report back to Toad!");
+    this.ui.showToast("Kamek is defeated! Take the Warp Star back and report to Toad!");
     this._renderObjective();
   }
 
   // Called from Bowser's onDefeated (wired in main.js). Same reasoning.
   onBowserDefeated() {
     if (this.stage !== "BOWSER_QUEST") return;
-    this.stage = "ALL_DONE";
-    this.ui.showToast("You defeated Bowser! You are a true hero of the Mushroom Kingdom!");
+    this.stage = "BOWSER_RETURN";
+    this.ui.showToast("Bowser is defeated! Take the Warp Star back and report to Toad!");
     this._renderObjective();
   }
 
@@ -173,15 +200,20 @@ export default class QuestManager {
       this.redPlanetStarDone = true;
       this.ui.showToast("Red Planet star collected!");
       this._renderObjective();
+    } else if (id === "yoshiHighStar" && !this.yoshiStarDone) {
+      this.yoshiStarDone = true;
+      this.ui.showToast("High star collected!");
+      this._renderObjective();
     }
   }
 
   // Called once from main.js's hatchYoshiEgg, right when the egg actually
-  // hatches.
+  // hatches — only unlocks the SECOND half of Phase 2 (reaching the high
+  // star with Yoshi's jump); see onStarCollected("yoshiHighStar") above.
   markYoshiHatched() {
-    if (this.yoshiStarDone) return;
-    this.yoshiStarDone = true;
-    this.ui.showToast("Yoshi hatched — star obtained!");
+    if (this.yoshiEggHatched) return;
+    this.yoshiEggHatched = true;
+    this.ui.showToast("Yoshi hatched!");
     this._renderObjective();
   }
 
@@ -209,28 +241,33 @@ export default class QuestManager {
     let text;
 
     if (!this.redPlanetStarDone) {
-      text = "Fase 1: use the yellow Warp Star to reach the Red Planet and collect its star!";
+      text = "Phase 1: use the yellow Warp Star to reach the Red Planet and collect its star!";
+    } else if (!this.yoshiEggHatched) {
+      text = "Phase 2: find Yoshi's egg and hatch it, then use his jump to reach the high star!";
     } else if (!this.yoshiStarDone) {
-      text = "Fase 2: find Yoshi's egg and hatch it!";
+      text = "Phase 2: use Yoshi's jump to reach and collect the high star!";
     } else {
       switch (this.stage) {
         case "NONE":
-          text = "Fase 3: talk to Toad to start Kamek's quest.";
+          text = "Phase 3: talk to Toad to start Kamek's quest.";
           break;
         case "KAMEK_QUEST":
-          text = "Fase 3: defeat Kamek!";
+          text = "Phase 3: defeat Kamek!";
           break;
         case "KAMEK_RETURN":
-          text = "Fase 3: return to Toad to claim your star.";
+          text = "Phase 3: return to Toad to claim your star.";
           break;
         case "COIN_QUEST":
-          text = `Fase 4: bring Toad ${this.coinTarget} coins.`;
+          text = `Phase 4: bring Toad ${this.coinTarget} coins.`;
           break;
         case "COIN_QUEST_READY":
-          text = "Fase 4: return to Toad to claim your star.";
+          text = "Phase 4: return to Toad to claim your star.";
           break;
         case "BOWSER_QUEST":
-          text = "Fase 5: defeat Bowser!";
+          text = "Phase 5: defeat Bowser!";
+          break;
+        case "BOWSER_RETURN":
+          text = "Phase 5: return to Toad to claim your final star.";
           break;
         case "ALL_DONE":
         default:

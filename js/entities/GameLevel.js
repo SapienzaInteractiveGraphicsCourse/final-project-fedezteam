@@ -75,10 +75,26 @@ export default class GameLevel {
       return { x: h.x || 0, z: h.z || 0, halfX: 0.98 * sX, halfZ: 0.98 * sZ };
     });
 
+    // Round exclusion zones around every island-side warp star (defined
+    // early, purely as coordinates, so it's ready before the tree/rock/
+    // bush scatter below runs — the actual spawnWarpStars/spawnZoneSigns
+    // calls that use these same spots happen much later in this method).
+    // A single generous radius per star (see Decorations._isNearAnyPoint's
+    // default) is enough to also cover that star's zone sign, which only
+    // sits ~3 units further out — no need to list the signs separately.
+    // The red planet's own "spawn" warp star isn't included: it's up on
+    // the sky planet, nowhere near where trees/rocks/bushes scatter below.
+    const warpAvoidPoints = [
+      { x: 118, z: -30 }, // -> the red planet
+      { x: 60, z: 115 }, // -> Kamek's obstacle course (+ its sign)
+      { x: -60, z: 115 }, // -> Bowser's obstacle course (+ its sign)
+    ];
+
     await this.decorations.spawnFieldProps(
       mainIslandSize,
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
       hillFootprints,
+      warpAvoidPoints,
     );
 
     // Final HillClimb layout: exactly 3 three-platform staircases
@@ -88,22 +104,24 @@ export default class GameLevel {
     // "Gradino Nord"/"Altopiano Gigante Nord") and "Passerella Sud" were
     // removed entirely, along with their coin trails, below.
     //
-    // STAR REBALANCE: ui.maxStars (5, the win condition) is made up of
-    // exactly 2 HillClimb stars (one here, one on Passerella Est below) +
-    // Toad's quest reward + Kamek's + Bowser's (all three spawned
-    // dynamically — see main.js). Passerella Est's old second/lower star
-    // and every OTHER star that used to be scattered around the map were
-    // removed from level1.json's "stars" array — except the red planet's
-    // own star (see below), kept as a findable bonus beyond the 5 needed
-    // to win, same as the extra ones the boss zones drop.
+    // STAR REBALANCE: ui.maxStars (5, the win condition) is now made up of
+    // exactly the 5 stars named "Stella 1..5" by the quest HUD (see
+    // QuestManager): the Red Planet star (below), the HillClimb Yoshi star
+    // on Passerella Est (below — the "id" fields are what let QuestManager
+    // recognize each one specifically), and Toad's three quest rewards for
+    // Kamek/coins/Bowser (spawned dynamically — see main.js). HillClimb
+    // Standard's own star was removed (it's the "stella bassa" the quest
+    // spec asked to drop — the staircase and its coin trail are unchanged,
+    // just no longer end at a star), and Kamek/Bowser no longer drop a
+    // star directly at their arenas — see main.js's onDefeated handlers.
 
-    // "Scalino 1/2/3" (level1.json, x=30..50, z=20) — HillClimb Standard,
-    // the "usual" platform, ends at the normal-height Power Star (50, 8, 20).
-    //
-    // BUG FIX (last coin overlapping the star): the trail used to end
-    // exactly at (50, 7.5, 20), which is basically on top of the star at
-    // (50, 8, 20) in level1.json — pulled back to (47, 6.8, 20), a step
-    // short of the star instead of coinciding with it.
+    // "Scalino 1/2/3" (level1.json, x=30..50, z=20) — HillClimb Standard.
+    // Used to end at a Power Star (50, 8, 20); that star was removed (see
+    // STAR REBALANCE above), so this is now a plain coin-trail staircase,
+    // same as Passerella Ovest below. The trail's own endpoint (47, 6.8, 20)
+    // is left as-is — it was never on the star itself, just a step short of
+    // it, so nothing about the trail needs to change now that the star is
+    // gone.
     await this.decorations.spawnCoinTrail(
       [
         { x: 25, y: 2.5, z: 20 },
@@ -122,6 +140,10 @@ export default class GameLevel {
     // Player.YOSHI_JUMP_BOOST). Originally at y=20 with a second, lower
     // duplicate star also on this platform; per the star-count rebalance
     // both were replaced by this single star, lowered by 5 units.
+    //
+    // id: "yoshiHighStar" — lets QuestManager recognize THIS star being
+    // collected as Fase 2 of the quest HUD ("hatch Yoshi's egg, then use
+    // his jump to reach the high star" — see QuestManager.onStarCollected).
     await this.decorations.spawnCoinTrail(
       [
         { x: 60, y: 2.3, z: 70 },
@@ -146,7 +168,12 @@ export default class GameLevel {
       { spacing: 2, arcHeight: 0.4 },
     );
 
-    await this.collectibles.spawnStars(levelData?.stars);
+    // Not levelData?.stars anymore (see STAR REBALANCE above) — the low
+    // HillClimb Standard star it used to include was removed, and the
+    // remaining HillClimb Yoshi star needs its own `id` (see comment on
+    // Passerella Est's coin trail above), so it's spawned explicitly here
+    // instead of straight from the level JSON.
+    await this.collectibles.spawnStars([{ x: 96, y: 15, z: 70, id: "yoshiHighStar" }]);
     await this.collectibles.spawnMushrooms(levelData?.mushrooms);
     await this.collectibles.spawnQuestionMarkBlocks(levelData?.questionMarkBlocks);
 
@@ -161,8 +188,8 @@ export default class GameLevel {
     this.decorations.decorateStructures(levelData?.buildings);
 
     await this.decorations.spawnGrassField(mainIslandSize);
-    this.decorations.spawnRocks(mainIslandSize, undefined, hillFootprints);
-    this.decorations.spawnBushes(mainIslandSize, undefined, hillFootprints);
+    this.decorations.spawnRocks(mainIslandSize, undefined, hillFootprints, warpAvoidPoints);
+    this.decorations.spawnBushes(mainIslandSize, undefined, hillFootprints, warpAvoidPoints);
 
     // Small decorative ponds, hand-placed to stay clear of buildings, hills
     // and staircases. Purely visual (flat water disc, no collider/depth).
@@ -190,11 +217,9 @@ export default class GameLevel {
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
     );
 
-    // One extra collectible star on the red planet, a short walk from
-    // where the "sky" warp star lands the player (see spawnWarpStars
-    // below) — a bonus findable star on top of the 5 that make up
-    // ui.maxStars (2 HillClimb + Toad's quest reward + Kamek + Bowser),
-    // same as the extra ones the boss zones drop.
+    // One collectible star on the red planet, a short walk from where the
+    // "sky" warp star lands the player (see spawnWarpStars below) — Stella
+    // 1 of the 5 that make up ui.maxStars (see STAR REBALANCE above).
     // id: "redPlanetStar" — lets QuestManager recognize THIS specific star
     // being picked up (see Collectibles.update -> onStarCollected(star) and
     // EntityManager.onStarCollected), which is how Fase 1 of the quest HUD

@@ -384,6 +384,18 @@ export default class UIManager {
   // separate screen from showWin()'s star-collection win screen: that one
   // leads INTO the ending zone, this one is what closes it out.
   showVictoryFinale() {
+    // A distinct terminal state (not "ENDING" anymore) — this is what
+    // actually stops the player from walking around under the final popup:
+    // EntityManager.update() only keeps updating the player while
+    // gameState is "PLAYING" or "ENDING", so anything else (this included)
+    // freezes movement/physics automatically, and the Escape/P pause
+    // shortcut is gated the same way (see _setupListeners), so the whole
+    // game is inert behind this screen. dialogueActive is already false by
+    // the time this runs (see PeachCutscene.advance), so that alone was NOT
+    // enough to keep the player frozen once the dialogue closed — this is
+    // the actual fix.
+    this.gameState = "VICTORY_FINALE";
+
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "none";
     if (this.victoryFinaleScreen) this.victoryFinaleScreen.classList.remove("hidden");

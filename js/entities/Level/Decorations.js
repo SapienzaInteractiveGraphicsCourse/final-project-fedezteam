@@ -169,7 +169,11 @@ export default class Decorations {
   //   flower/coin from landing inside — or clipping through the edge of —
   //   a platform, which used to be possible since this scatter had no idea
   //   where the level's hills actually sat.
-  async spawnFieldProps(arenaSize, onCoinSpawned, hillFootprints = []) {
+  // @param {{x:number,z:number,radius?:number}[]} [avoidPoints]
+  //   Round exclusion zones (warp stars + their signs — see GameLevel.js's
+  //   `warpAvoidPoints`) a tree/flower/coin also can't land inside — see
+  //   _isNearAnyPoint.
+  async spawnFieldProps(arenaSize, onCoinSpawned, hillFootprints = [], avoidPoints = []) {
     let flowerGlb = null,
       treeGlb = null;
 
@@ -200,6 +204,9 @@ export default class Decorations {
         // (or too close to) any hill's real footprint — see hillFootprints
         // above and _isInsideHillFootprint below.
         if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
+
+        // ...or on top of (or right next to) a warp star/its sign.
+        if (this._isNearAnyPoint(posX, posZ, avoidPoints)) continue;
 
         if (treeGlb && Math.random() > 0.85) {
           const tree = treeGlb.scene.clone();
@@ -446,7 +453,25 @@ export default class Decorations {
     return false;
   }
 
-  spawnRocks(arenaSize, count = 18, hillFootprints = []) {
+  // Same idea as _isInsideHillFootprint above, but for a list of round
+  // exclusion zones instead of rectangular ones — used to keep trees/
+  // flowers/rocks/bushes from spawning on top of (or right next to) a warp
+  // star or its zone sign (see GameLevel.js's `warpAvoidPoints`, passed in
+  // as `avoidPoints` below). `radius` defaults generously enough to cover
+  // both a warp star AND its sign (only ~3 units further out) with a
+  // single point per star, so callers don't need to list the signs
+  // separately.
+  _isNearAnyPoint(x, z, points = [], radius = 6) {
+    for (const p of points) {
+      const r = p.radius ?? radius;
+      const dx = x - p.x;
+      const dz = z - p.z;
+      if (dx * dx + dz * dz <= r * r) return true;
+    }
+    return false;
+  }
+
+  spawnRocks(arenaSize, count = 18, hillFootprints = [], avoidPoints = []) {
     const rockMaterial = new THREE.MeshStandardMaterial({
       color: 0x8a8378,
       roughness: 0.95,
@@ -468,6 +493,9 @@ export default class Decorations {
       // Skip this rock entirely if it would land inside (or clipping
       // through the edge of) a HillBlock platform.
       if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
+
+      // ...or on top of (or right next to) a warp star/its sign.
+      if (this._isNearAnyPoint(posX, posZ, avoidPoints)) continue;
 
       const radius = 0.6 + Math.random() * 1.4;
       const posY = radius * 0.35;
@@ -543,7 +571,7 @@ export default class Decorations {
    * keeping the 5-color variety. Shadows are unaffected: the merged mesh
    * casts/receives exactly as every individual bush did.
    */
-  spawnBushes(arenaSize, count = 26, hillFootprints = []) {
+  spawnBushes(arenaSize, count = 26, hillFootprints = [], avoidPoints = []) {
     const bushColors = [0x3f7d32, 0x4f9b3d, 0x2f6b28, 0x5aa83f, 0x6bb84a];
     const half = arenaSize / 2 - 15;
 
@@ -561,6 +589,9 @@ export default class Decorations {
       // Skip this bush entirely if it would land inside (or clipping
       // through the edge of) a HillBlock platform.
       if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
+
+      // ...or on top of (or right next to) a warp star/its sign.
+      if (this._isNearAnyPoint(posX, posZ, avoidPoints)) continue;
 
       const radius = 0.8 + Math.random() * 0.9;
       const color = bushColors[Math.floor(Math.random() * bushColors.length)];

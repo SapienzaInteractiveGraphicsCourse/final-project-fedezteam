@@ -11,12 +11,11 @@
  * happens once the player then walks up to her there and interacts.
  */
 export default class PeachCutscene {
-  constructor(ui, camera, peachGroup, castleGroup, audio = null) {
+  constructor(ui, camera, peachGroup, castleGroup) {
     this.ui = ui;
     this.camera = camera;
     this.peach = peachGroup;
     this.castle = castleGroup;
-    this.audio = audio;
 
     this.active = false;
     this.lineIndex = 0;
@@ -25,9 +24,9 @@ export default class PeachCutscene {
     // the character-select screen (see UIManager._triggerStart / heroName).
     this.lines = [
       'Thank you for saving me, ${heroName}!',
-      'I knew you would defeat Bowser and collect every Power Star.',
-      'The Mushroom Kingdom is safe again, and it is all thanks to you.',
-      'What do you say we all celebrate with a nice cake back at the castle?',
+      'I knew you could do it — defeating Bowser and collecting every Power Star.',
+      'The Mushroom Kingdom is safe once more, thanks to you.',
+      'How about we all celebrate together with a nice cake at the castle?',
     ];
   }
 
@@ -44,16 +43,6 @@ export default class PeachCutscene {
     const raw = this.lines[this.lineIndex];
     const text = raw.replace('${heroName}', this.heroName || 'hero');
     const isLast = this.lineIndex >= this.lines.length - 1;
-
-    // Peach's voice, one clip per line: the character-specific greeting on
-    // the opening line — she calls out to Mario and to Luigi differently,
-    // hence "peach_call" resolving through the active character (see
-    // soundConfig's mario_peach_call/luigi_peach_call) — and a short
-    // generic blip on every line after it. The press that CLOSES the
-    // dialogue gets nothing: it hands over to the victory finale, and a
-    // fifth blip on the way out would land on top of it (see advance()).
-    this.audio?.playSFX?.(this.lineIndex === 0 ? 'peach_call' : 'peach_talk');
-
     this.ui.showDialogue('PEACH', text, isLast);
   }
 
