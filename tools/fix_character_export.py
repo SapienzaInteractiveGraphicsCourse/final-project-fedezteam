@@ -32,7 +32,7 @@ stanno dentro, quindi la pelle segue senza sorprese.
 import json, os, struct, sys
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CHARS = os.path.join(BASE, "assets/models/Super_Mario/Main_Characters")
+MODELS = os.path.join(BASE, "assets/models/Super_Mario")
 
 # Per ogni personaggio: da dove, a dove, che immagine va su quale materiale
 # (per NOME, perché l'ordine cambia a ogni export), quanto dev'essere alto e
@@ -40,12 +40,19 @@ CHARS = os.path.join(BASE, "assets/models/Super_Mario/Main_Characters")
 #
 # Le altezze sono quelle dei modelli originali, così i nuovi entrano al posto
 # dei vecchi senza ritoccare né la sfera di collisione né la telecamera.
+# Verso in cui deve guardare il modello finito. I due giocabili seguono
+# Player.spawn (modelOffset ruota il modello dando per scontato il -X); i
+# nemici seguono invece Enemy.update, che fa mesh.rotation.y = atan2(dx, dz),
+# cioè dà per scontato che il modello guardi lungo +Z.
+TARGET_FACING = (-1, 0, 0)
+ENEMY_FACING = (0, 0, 1)
+
 CHARACTERS = {
     "mario": {
-        "src": "Mario/mario_ok.glb",
-        "dst": "Mario/mario.glb",
+        "src": "Main_Characters/Mario/mario_ok.glb",
+        "dst": "Main_Characters/Mario/mario.glb",
         "textures": {  # sottostringa del nome materiale -> file immagine
-            "TexMap": "Mario/Image_0.jpg",
+            "TexMap": "Main_Characters/Mario/Image_0.jpg",
         },
         "height": 1.6390000581741333,
         "facing": (-1, 0, 0),  # già giusto: nessuna rotazione
@@ -56,11 +63,11 @@ CHARACTERS = {
         "stray_uv": {"bones": ("Foot", "Toe"), "u_max": 0.25},
     },
     "luigi": {
-        "src": "Luigi/luigi_ok.glb",
-        "dst": "Luigi/luigi.glb",
+        "src": "Main_Characters/Luigi/luigi_ok.glb",
+        "dst": "Main_Characters/Luigi/luigi.glb",
         "textures": {
-            "Body__m_Body": "Luigi/Image_0.png",
-            "Body__m_Eye": "Luigi/Image_1.png",
+            "Body__m_Body": "Main_Characters/Luigi/Image_0.png",
+            "Body__m_Eye": "Main_Characters/Luigi/Image_1.png",
         },
         # Le pupille sono mesh SEPARATE che nel modello originale sono
         # invisibili (alpha 0): gli occhi che si vedono sono disegnati su
@@ -71,9 +78,31 @@ CHARACTERS = {
         "height": 1.7714,
         "facing": (0, 0, 1),  # guarda in +Z: va ruotato per guardare in -X
     },
+    # Bowser non è un giocabile: è il boss finale (vedi entities/enemies/
+    # Bowser.js). Il rig arriva da Mixamo e porta gli stessi problemi degli
+    # altri, più uno suo.
+    "bowser": {
+        "src": "Enemies/bowser_ok.glb",
+        "dst": "Enemies/bowser.glb",
+        # TUTTE le 25 texture sono sparite nel passaggio da Mixamo: il file
+        # non contiene una sola immagine. Ci sono però ancora tutte dentro il
+        # modello che il gioco usava prima — quello senza ossa, messo da parte
+        # come bowser_textures.glb — e i 25 materiali si abbinano uno a uno
+        # per nome (Blender ha solo aggiunto il suffisso ".001"). Quindi le
+        # immagini vengono trapiantate da lì invece che da 25 file sciolti.
+        "textures_from": "Enemies/bowser_textures.glb",
+        # Dentro c'è "Armature|mixamo.com|Layer0": 2 fotogrammi in 0.067
+        # secondi, cioè una T-pose ferma, non un'animazione. Le animazioni
+        # vere le costruisce AnimationController dalla posa di riposo.
+        "drop_animations": "T-pose ferma di 2 fotogrammi",
+        # Enemy.spawn riscala comunque all'altezza del boss, ma tanto vale
+        # che il file esca già giusto (vedi targetHeight in Bowser.js).
+        "height": 3.4,
+        "facing": (0, 0, 1),
+        "target_facing": ENEMY_FACING,
+    },
 }
 
-TARGET_FACING = (-1, 0, 0)  # quello che Player.spawn si aspetta
 MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
 
 
@@ -154,6 +183,55 @@ def repaint_stray_faces(js, bin_, cfg):
             print(f"  UV sballate    : {len(fuori)} facce attorno a {'/'.join(rule['bones'])}"
                   f" riportate sul cuoio {tuple(round(x, 3) for x in bersaglio)}")
 
+def embed_image(js, bin_, data, mime, name):
+    """Infila i byte di un'immagine nel .glb e ritorna l'indice della texture."""
+    bin_ += b"\0" * ((4 - len(bin_) % 4) % 4)
+    js["bufferViews"].append(
+        {"buffer": 0, "byteOffset": len(bin_), "byteLength": len(data)}
+    )
+    bin_ += data
+    js.setdefault("images", []).append({
+        "bufferView": len(js["bufferViews"]) - 1,
+        "mimeType": mime,
+        "name": name,
+    })
+    js.setdefault("samplers", [])
+    if not js["samplers"]:
+        js["samplers"].append({"magFilter": 9729, "minFilter": 9987})
+    js.setdefault("textures", []).append({"sampler": 0, "source": len(js["images"]) - 1})
+    return len(js["textures"]) - 1
+
+
+def donor_textures(path):
+    """Legge le baseColorTexture di un altro GLB.
+
+    Serve quando il rig arriva da Mixamo/Sketchfab senza immagini ma esiste
+    ancora la versione precedente del modello, non animata, che le ha tutte
+    dentro. Ritorna ({nome materiale: indice texture del donatore},
+    {indice texture: (byte dell'immagine, mimeType)}).
+    """
+    js, bin_ = read_glb(path)
+    by_material, images = {}, {}
+    for mat in js.get("materials", []):
+        idx = mat.get("pbrMetallicRoughness", {}).get("baseColorTexture", {}).get("index")
+        if idx is None:
+            continue
+        by_material[mat["name"]] = idx
+        if idx not in images:
+            img = js["images"][js["textures"][idx]["source"]]
+            bv = js["bufferViews"][img["bufferView"]]
+            off = bv.get("byteOffset", 0)
+            images[idx] = (bytes(bin_[off:off + bv["byteLength"]]),
+                           img.get("mimeType", "image/png"))
+    return by_material, images
+
+
+def base_material_name(name):
+    """"mesh0000mat.001" -> "mesh0000mat" — Blender numera i doppioni."""
+    head, _, tail = name.rpartition(".")
+    return head if head and tail.isdigit() else name
+
+
 def read_glb(path):
     d = open(path, "rb").read()
     magic, _, length = struct.unpack("<III", d[:12])
@@ -188,8 +266,8 @@ def y_rotation(frm, to):
 
 
 def fix(name, cfg):
-    src = os.path.join(CHARS, cfg["src"])
-    dst = os.path.join(CHARS, cfg["dst"])
+    src = os.path.join(MODELS, cfg["src"])
+    dst = os.path.join(MODELS, cfg["dst"])
     print(f"\n=== {name}  ({cfg['src']} -> {cfg['dst']})")
     js, bin_ = read_glb(src)
     nodes, scene = js["nodes"], js["scenes"][js.get("scene", 0)]
@@ -223,12 +301,23 @@ def fix(name, cfg):
     if not js["animations"]:
         del js["animations"]
 
+    if cfg.get("drop_animations") and js.get("animations"):
+        print(f"  animazioni     : {len(js['animations'])} scartate ({cfg['drop_animations']})")
+        del js["animations"]
+
     used = {n["skin"] for n in nodes if "skin" in n}
     while js.get("skins") and len(js["skins"]) - 1 not in used:
         print(f"  skin rimosso   : {js['skins'].pop().get('name')}")
 
     # --- 3. texture --------------------------------------------------------
+    donor_by_mat, donor_images = ({}, {})
+    if cfg.get("textures_from"):
+        donor_by_mat, donor_images = donor_textures(os.path.join(MODELS, cfg["textures_from"]))
+        print(f"  donatore       : {cfg['textures_from']} "
+              f"({len(donor_images)} immagini su {len(donor_by_mat)} materiali)")
+
     cache = {}
+    trapiantate = 0
     for mat in js["materials"]:
         pbr = mat.setdefault("pbrMetallicRoughness", {})
 
@@ -242,31 +331,38 @@ def fix(name, cfg):
 
         if "baseColorTexture" in pbr:
             continue
-        rel = next((v for k, v in cfg["textures"].items() if k in mat["name"]), None)
+
+        # Prima strada: l'immagine sta dentro un altro GLB, abbinata per nome
+        # del materiale. Una riga per materiale non viene stampata — con 25
+        # materiali sarebbe solo rumore — se ne stampa il totale a fine giro.
+        donor_idx = donor_by_mat.get(base_material_name(mat["name"]))
+        if donor_idx is not None:
+            key = ("donor", donor_idx)
+            if key not in cache:
+                data, mime = donor_images[donor_idx]
+                cache[key] = embed_image(js, bin_, data, mime,
+                                         base_material_name(mat["name"]))
+            pbr["baseColorTexture"] = {"index": cache[key]}
+            trapiantate += 1
+            continue
+
+        # Seconda strada: un file immagine sul disco, abbinato per
+        # sottostringa del nome del materiale.
+        rel = next((v for k, v in cfg.get("textures", {}).items() if k in mat["name"]), None)
         if rel is None:
             print(f"  materiale      : {mat['name']} lasciato com'era")
             continue
         if rel not in cache:
-            data = open(os.path.join(CHARS, rel), "rb").read()
-            bin_ += b"\0" * ((4 - len(bin_) % 4) % 4)
-            js["bufferViews"].append(
-                {"buffer": 0, "byteOffset": len(bin_), "byteLength": len(data)}
+            cache[rel] = embed_image(
+                js, bin_,
+                open(os.path.join(MODELS, rel), "rb").read(),
+                MIME[os.path.splitext(rel)[1].lower()],
+                os.path.basename(rel),
             )
-            bin_ += data
-            js.setdefault("images", []).append({
-                "bufferView": len(js["bufferViews"]) - 1,
-                "mimeType": MIME[os.path.splitext(rel)[1].lower()],
-                "name": os.path.basename(rel),
-            })
-            js.setdefault("samplers", [])
-            if not js["samplers"]:
-                js["samplers"].append({"magFilter": 9729, "minFilter": 9987})
-            js.setdefault("textures", []).append(
-                {"sampler": 0, "source": len(js["images"]) - 1}
-            )
-            cache[rel] = len(js["textures"]) - 1
         pbr["baseColorTexture"] = {"index": cache[rel]}
         print(f"  texture        : {mat['name']} <- {os.path.basename(rel)}")
+    if trapiantate:
+        print(f"  texture        : {trapiantate} materiali riagganciati al donatore")
     js["buffers"][0]["byteLength"] = len(bin_) + ((4 - len(bin_) % 4) % 4)
 
     # --- 4. nodo radice: scala, piedi a terra, verso giusto ----------------
@@ -285,9 +381,10 @@ def fix(name, cfg):
         "scale": [s, s, s],
         "translation": [0.0, -ymin * s, 0.0],
     }
-    if tuple(cfg["facing"]) != TARGET_FACING:
-        root["rotation"] = y_rotation(cfg["facing"], TARGET_FACING)
-        print(f"  orientamento   : {tuple(cfg['facing'])} -> {TARGET_FACING}")
+    target = tuple(cfg.get("target_facing", TARGET_FACING))
+    if tuple(cfg["facing"]) != target:
+        root["rotation"] = y_rotation(cfg["facing"], target)
+        print(f"  orientamento   : {tuple(cfg['facing'])} -> {target}")
     nodes.append(root)
     scene["nodes"] = [len(nodes) - 1]
     print(f"  altezza        : {ymax - ymin:.3f} -> {cfg['height']:.3f} (scala {s:.5f}),"

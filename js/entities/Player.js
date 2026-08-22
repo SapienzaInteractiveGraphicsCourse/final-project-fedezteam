@@ -75,11 +75,11 @@ export default class Player {
     // skeleton (BoneMap.isUsable === false) the controller stays inert: the
     // character still moves exactly as before, just without a walk cycle.
     this.animation = new AnimationController(this.mesh, {
-      // The run threshold FOLLOWS the character's speed rather than being a
-      // fixed number: Luigi walks at 20, which is faster than Mario runs.
-      // A single fixed threshold would leave Luigi always running and never
-      // walking — this margin above moveSpeed keeps normal pace as a walk
-      // and only sprinting as a run.
+      // The run threshold FOLLOWS the character's own speed rather than
+      // being a fixed number, so a character who walks faster than another
+      // one runs can't end up stuck in the run cycle at walking pace. This
+      // margin above moveSpeed keeps normal pace a walk and only sprinting
+      // (sprintMultiplier, 1.5x) a run.
       runSpeed: this.moveSpeed * 1.1,
     });
   }

@@ -13,7 +13,7 @@
  *  - position: {x, y, z} (only x/z are used unless use3D is set)
  *  - radius: interaction range in world units (default 3)
  *  - prompt: string OR a getter — whatever showInteractionPrompt() should
- *    display (e.g. "Premi E per parlare con Toad"); re-read every frame the
+ *    display (e.g. "Press E to talk to Toad"); re-read every frame the
  *    player is in range, so it can change with quest/mount state.
  *  - onInteract: called once per physical E press while in range.
  *  - isAvailable: optional () => boolean; interactable is skipped entirely
@@ -69,7 +69,7 @@ export default class InteractionManager {
 
     if (nearest) {
       const prompt = typeof nearest.prompt === "function" ? nearest.prompt() : nearest.prompt;
-      this.ui?.showInteractionPrompt?.(prompt || "Premi E");
+      this.ui?.showInteractionPrompt?.(prompt || "Press E");
 
       if (input.consumeJustPressed("e")) {
         nearest.onInteract?.();

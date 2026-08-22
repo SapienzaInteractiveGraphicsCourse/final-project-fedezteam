@@ -27,7 +27,7 @@ export default class Yoshi {
     enableShadows(this.mesh);
   }
 
-  // Mount/dismount, driven by the "Premi E" interaction registered in
+  // Mount/dismount, driven by the "Press E" interaction registered in
   // main.js (see js/interactions/InteractionManager.js). update() above
   // already knows how to follow the player while `isRidden` is true —
   // these just flip that flag; Player.js's own mountedOnYoshi flag (set
@@ -77,6 +77,23 @@ export default class Yoshi {
 
       this.physicsEngine.world.addBody(this.body);
     }
+  }
+
+  // The mirror image of spawn(): drops the physics body this class created
+  // and put in the world. Used when Yoshi is lost to the void while being
+  // ridden (see EntityManager's void-fall handler), after which he goes
+  // back inside his egg and a fresh Yoshi is built on the next hatch.
+  //
+  // The MESH is deliberately not touched here: it belongs to the shared
+  // asset cache and was added to the scene by EntityManager.setYoshi, so
+  // taking it out again is EntityManager's job, symmetrically.
+  despawn() {
+    this.isRidden = false;
+
+    if (this.body && this.physicsEngine && this.physicsEngine.world) {
+      this.physicsEngine.world.removeBody(this.body);
+    }
+    this.body = null;
   }
 
   update(delta, inputOrPlayer, playerRef) {

@@ -38,7 +38,7 @@ export const MAP_MODELS = {
   // (see BuildingFactory / ToadHouse for the collision-side handling).
   toadHouseRed: `${MODELS_ROOT}/Map/toad_house_red.glb`,
   // Yoshi's egg -> mount mechanic: spawned at level1.json's yoshiSpawn
-  // point, hatches into the rideable Yoshi on "Premi E" — see main.js's
+  // point, hatches into the rideable Yoshi on "Press E" — see main.js's
   // startup sequence and js/interactions/InteractionManager.js.
   yoshiEgg: `${MODELS_ROOT}/Map/yoshi_egg.glb`,
   // Mario Galaxy-style "launch star", placed at the island's edges (see

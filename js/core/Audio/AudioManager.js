@@ -16,10 +16,17 @@ export default class AudioManager {
     this.isMuted = false;
     this.currentCharacter = "mario"; // Default character.
 
-    // Effects that ship as two per-character variants (mario_jump1/mario_jump2,
-    // luigi_damage1/luigi_damage2, ...). Each entry holds which variant plays
-    // next, so repeating the same action doesn't replay the identical clip.
-    this.variantToggles = { jump: false, damage: false };
+    // Optional stand-in for currentCharacter when resolving a
+    // character-specific effect: set to "yoshi" while he's being ridden, so
+    // jumping and falling come out in HIS voice instead of the rider's (see
+    // setVoice and _resolveSFX). Null means "just use the character".
+    this.voice = null;
+
+    // Which of the two takes plays next, per effect name — see _resolveSFX,
+    // which fills this in on demand. Populated lazily rather than declared
+    // up front: an effect gets a second take by shipping the file, not by
+    // being listed here.
+    this.variantToggles = {};
 
     this.hasStarted = false;
 
@@ -60,6 +67,21 @@ export default class AudioManager {
     if (character) {
       this.currentCharacter = character.toLowerCase();
     }
+  }
+
+  /**
+   * Puts someone else in front of the playable character when resolving
+   * character-specific effects — currently only Yoshi, while the player is
+   * riding him (see main.js's mount/dismount interaction). Call with no
+   * argument (or null) to hand the voice back.
+   *
+   * This is an override, not a replacement: _resolveSFX still falls through
+   * to the character for any effect the voice has no clip of its own for,
+   * so Yoshi taking over "jump" and "fall" doesn't have to mean inventing a
+   * Yoshi version of every other sound in the game.
+   */
+  setVoice(voice = null) {
+    this.voice = voice ? voice.toLowerCase() : null;
   }
 
   /**
@@ -149,28 +171,65 @@ export default class AudioManager {
   }
 
   /**
-   * Plays a sound effect by name.
+   * Turns the name a call site asked for into an actual manifest key, or
+   * null if nothing matches. Three cases, tried in this order:
+   *
+   *  - an exact key ("coin", "gameover", "bowser_attack"): used as is;
+   *  - a two-variant per-speaker effect ("jump", "damage"): alternates
+   *    between `<speaker>_<name>1` and `<speaker>_<name>2`;
+   *  - anything else: `<speaker>_<name>`, e.g. "fall" -> "mario_fall".
+   *
+   * The speaker is the voice override first (Yoshi, while he's carrying
+   * the player) and the playable character second, so an effect Yoshi has
+   * no clip for simply comes out in the rider's voice instead of silently
+   * doing nothing.
+   */
+  _resolveSFX(name) {
+    if (this.sounds[name]) return name;
+
+    const speakers = this.voice
+      ? [this.voice, this.currentCharacter]
+      : [this.currentCharacter];
+
+    // Two-variant effects, alternated so doing the same thing twice in a
+    // row doesn't replay the identical clip. Both shapes are handled: the
+    // plain one (peach_talk1/peach_talk2 — nobody's voice but Peach's, so
+    // there's no speaker to prefix) and the per-speaker one
+    // (mario_jump1/mario_jump2). Which shape an effect uses is discovered
+    // from the manifest instead of being declared in a list up here, so
+    // giving something a second take is just a matter of adding the file.
+    const suffix = this.variantToggles[name] ? "2" : "1";
+    for (const stem of [name, ...speakers.map((s) => `${s}_${name}`)]) {
+      if (!this.sounds[`${stem}1`]) continue;
+
+      // The second take is optional: an effect that only ever shipped a
+      // "1" still plays, it simply has nothing to alternate with.
+      const key = this.sounds[`${stem}${suffix}`] ? `${stem}${suffix}` : `${stem}1`;
+      // Flipped only once something is actually going to play: otherwise a
+      // miss would eat a turn and make the next hit repeat the very clip
+      // this one was meant to alternate away from.
+      this.variantToggles[name] = !this.variantToggles[name];
+      return key;
+    }
+
+    // Single-clip and speaker-specific: "fall" -> "mario_fall".
+    for (const speaker of speakers) {
+      const key = `${speaker}_${name}`;
+      if (this.sounds[key]) return key;
+    }
+
+    return null;
+  }
+
+  /**
+   * Plays a sound effect by name — see _resolveSFX for how a generic name
+   * like "jump" is turned into the right clip for whoever is speaking.
    */
   playSFX(name) {
     if (this.isMuted || this.sfxVolume === 0) return;
-    let soundKey = name;
 
-    if (this.sounds[name]) {
-      soundKey = name;
-    } else if (name in this.variantToggles) {
-      // Alternate between the two variants for a less repetitive feel.
-      const suffix = this.variantToggles[name] ? "2" : "1";
-      this.variantToggles[name] = !this.variantToggles[name];
-      soundKey = `${this.currentCharacter}_${name}${suffix}`;
-    } else {
-      // Fall back to a character-specific variant, e.g. "mario_fall".
-      const charSpecificName = `${this.currentCharacter}_${name}`;
-      if (this.sounds[charSpecificName]) {
-        soundKey = charSpecificName;
-      }
-    }
-
-    if (!this.sounds[soundKey]) return;
+    const soundKey = this._resolveSFX(name);
+    if (!soundKey) return;
 
     // Clone the audio element so overlapping plays of the same effect don't
     // cut each other off.

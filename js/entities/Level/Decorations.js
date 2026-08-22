@@ -1268,6 +1268,14 @@ export default class Decorations {
   _updateWarpStars(player) {
     if (!player || !player.body || this.warpStars.length === 0) return;
 
+    // Not while riding Yoshi. Every destination is somewhere Yoshi has no
+    // business being taken — the two boss courses and the sky planets —
+    // and walking into a star by accident on his back would drop the pair
+    // of them into a fight or onto a curved surface neither the mount
+    // logic nor the planet-gravity path was built for. Stepping off him
+    // first is the price of admission; the star is simply inert until then.
+    if (player.mountedOnYoshi) return;
+
     const pos = player.mesh.position;
     const triggerRadius = 2.5;
 

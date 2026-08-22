@@ -40,12 +40,12 @@ export default class QuestManager {
     this.onRewardStar = null;
   }
 
-  // Text shown by the "Premi E ..." prompt while standing near Toad —
+  // Text shown by the "Press E ..." prompt while standing near Toad —
   // read fresh every frame (see InteractionManager), so it always reflects
   // the current quest stage without needing to be pushed manually.
   getToadPrompt() {
-    if (this.stage === "COIN_QUEST_READY") return "Premi E per consegnare le monete";
-    return "Premi E per parlare con Toad";
+    if (this.stage === "COIN_QUEST_READY") return "Press E to hand over the coins";
+    return "Press E to talk to Toad";
   }
 
   // Called by the Toad interactable's onInteract.
@@ -53,13 +53,13 @@ export default class QuestManager {
     switch (this.stage) {
       case "NONE":
         this.stage = "COIN_QUEST";
-        this._showToadDialogue(`Raccogli ${this.coinTarget} monete e portamele!`);
+        this._showToadDialogue(`Bring me ${this.coinTarget} coins and the reward is yours!`);
         this._syncCoinProgress();
         break;
 
       case "COIN_QUEST": {
         const missing = Math.max(0, this.coinTarget - this.ui.coins);
-        this._showToadDialogue(`Te ne mancano ancora ${missing}!`);
+        this._showToadDialogue(`You are still ${missing} short!`);
         break;
       }
 
@@ -69,20 +69,20 @@ export default class QuestManager {
         this.ui.spendCoins(this.coinTarget);
         if (this.onRewardStar) this.onRewardStar();
         this._showToadDialogue(
-          "Grazie! Ecco una Power Star per te! Ora vai a sconfiggere Kamek!",
+          "Thank you! Here is a Power Star for you! Now go and defeat Kamek!",
         );
         break;
 
       case "KAMEK_QUEST":
-        this._showToadDialogue("Sconfiggi Kamek nella sua arena!");
+        this._showToadDialogue("Defeat Kamek in his arena!");
         break;
 
       case "BOWSER_QUEST":
-        this._showToadDialogue("Sconfiggi Bowser nella sua arena!");
+        this._showToadDialogue("Defeat Bowser in his arena!");
         break;
 
       case "ALL_DONE":
-        this._showToadDialogue("Grazie per aver salvato il Regno dei Funghi!");
+        this._showToadDialogue("Thank you for saving the Mushroom Kingdom!");
         break;
     }
   }
@@ -99,11 +99,11 @@ export default class QuestManager {
     if (this.stage !== "COIN_QUEST") return;
 
     const shown = Math.min(this.ui.coins, this.coinTarget);
-    this.ui.showQuestHud(`MONETE: ${shown}/${this.coinTarget}`);
+    this.ui.showQuestHud(`COINS: ${shown}/${this.coinTarget}`);
 
     if (this.ui.coins >= this.coinTarget) {
       this.stage = "COIN_QUEST_READY";
-      this.ui.showToast("Hai raccolto abbastanza monete! Torna da Toad!");
+      this.ui.showToast("You have enough coins! Head back to Toad!");
     }
   }
 
@@ -112,21 +112,21 @@ export default class QuestManager {
   onKamekDefeated() {
     if (this.stage !== "KAMEK_QUEST") return;
     this.stage = "BOWSER_QUEST";
-    this.ui.showToast("Kamek è sconfitto! Ora vai a sconfiggere Bowser!");
+    this.ui.showToast("Kamek is defeated! Now go and defeat Bowser!");
   }
 
   // Called from Bowser's onDefeated (wired in main.js). Same reasoning.
   onBowserDefeated() {
     if (this.stage !== "BOWSER_QUEST") return;
     this.stage = "ALL_DONE";
-    this.ui.showToast("Hai sconfitto Bowser! Sei un vero eroe del Regno dei Funghi!");
+    this.ui.showToast("You defeated Bowser! You are a true hero of the Mushroom Kingdom!");
   }
 
   _showToadDialogue(text) {
     this.dialogueOpen = true;
     this.ui.dialogueActive = true;
     // Always a single line, so it's always "the last line" — the dialogue
-    // hint reads "premi E per concludere" rather than "per continuare".
+    // hint reads "Press E to close" rather than "to continue".
     this.ui.showDialogue("TOAD", text, true);
   }
 

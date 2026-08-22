@@ -2,6 +2,7 @@ import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { enableShadows } from "../../utils/shadows.js";
 import { COLLISION_GROUPS } from "../../physics/PhysicsEngine.js";
+import AnimationController from "../animation/AnimationController.js";
 
 /**
  * Enemy.js — shared base class for every enemy in the game (Goomba, Kamek,
@@ -70,6 +71,11 @@ export default class Enemy {
     this.body = null;
     this._waddlePhase = Math.random() * Math.PI * 2; // desync multiple enemies
 
+    // Skeletal animation, built in spawn() for the enemies whose model
+    // actually has a skeleton (currently only Bowser). Stays null until
+    // then, and stays inert afterwards for the boneless ones.
+    this.animation = null;
+
     // Optional callbacks, set by whoever spawns this enemy (see main.js):
     //   onDamagePlayer(player) — called once per side-contact hit.
     //   onStomped(hitsTaken, hitsToDefeat) — called on every successful stomp.
@@ -128,6 +134,23 @@ export default class Enemy {
     if (this.physicsEngine && this.physicsEngine.world) {
       this.physicsEngine.world.addBody(this.body);
     }
+
+    // Walk cycle, for enemies whose GLB carries a usable skeleton — the
+    // same procedural system the player characters use (see
+    // entities/animation/). Built HERE and not in the constructor because
+    // the clips are derived from the bones' world positions, which only
+    // settle once the height normalization above has been applied.
+    //
+    // A model without bones (Goomba, Kamek) leaves the controller inert
+    // rather than failing — see AnimationController's header — which is
+    // what the waddle fallback in update() keys off.
+    this.animation = new AnimationController(this.mesh, {
+      // Chasing should read as walking whatever the enemy's speed, and
+      // never as the player's flat-out run: that clip belongs to a much
+      // faster speed range than any chase.
+      walkSpeed: this.chaseSpeed * 0.5,
+      runSpeed: this.chaseSpeed * 10,
+    });
   }
 
   // Per-frame tick: ticks timers, runs the chase AI, syncs the mesh to the
@@ -138,6 +161,29 @@ export default class Enemy {
 
     if (this.invulnerableTimer > 0) this.invulnerableTimer -= delta;
     if (this.playerHitCooldown > 0) this.playerHitCooldown -= delta;
+
+    // Animation FIRST, reading the velocity this enemy ended the previous
+    // frame with rather than the one it is about to be given. A boss
+    // freezes itself while charging an attack — Boss._updateAttack zeroes
+    // the chase velocity, and it runs after this class has had its turn —
+    // so sampling later in the same frame showed Bowser walking on the
+    // spot while he stood still puffing up. One frame of lag is invisible;
+    // a walk cycle playing under a motionless boss is not.
+    //
+    // A real walk cycle when the skeleton allows one, the sine-based tilt
+    // otherwise. Never both: the waddle exists precisely to give a
+    // boneless enemy some sign of life.
+    if (this.animation && this.animation.enabled) {
+      // grounded is simply true: these enemies walk, they never jump, and
+      // gravity keeps them on the platform they were spawned on.
+      this.animation.update(delta, {
+        speed: Math.hypot(this.body.velocity.x, this.body.velocity.z),
+        verticalVelocity: 0,
+        grounded: true,
+      });
+    } else {
+      this._updateWaddle(delta);
+    }
 
     if (player && player.mesh) {
       this._updateChase(delta, player);
@@ -151,7 +197,6 @@ export default class Enemy {
     );
 
     this._updateInvulnerabilityFlicker();
-    this._updateWaddle(delta);
 
     if (player && player.mesh) {
       this._checkPlayerContact(player);
@@ -207,9 +252,11 @@ export default class Enemy {
     }
   }
 
-  // Small procedural "waddle" — a sine-based tilt, no skeleton — so an idle
-  // enemy still reads as alive. Deliberately stays out of the character
-  // skeletal-animation system.
+  // Small procedural "waddle" — a sine-based tilt of the whole mesh — so
+  // an enemy whose model has no bones still reads as alive. The fallback
+  // half of the branch in update(): an enemy that does have a skeleton
+  // gets a real walk cycle instead and never tilts, since the two together
+  // would just look like a stagger.
   _updateWaddle(delta) {
     this._waddlePhase += delta * 6;
     this.mesh.rotation.z = Math.sin(this._waddlePhase) * 0.15;
@@ -305,6 +352,11 @@ export default class Enemy {
   // (so update() becomes a no-op from here on), and fires onDefeated().
   _defeat() {
     this.isDefeated = true;
+
+    if (this.animation) {
+      this.animation.dispose();
+      this.animation = null;
+    }
 
     if (this.mesh && this.mesh.parent) {
       this.mesh.parent.remove(this.mesh);

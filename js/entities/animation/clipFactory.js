@@ -48,7 +48,21 @@ export const POSE = {
   jumpBackThigh: -36, // trailing leg, almost extended
   jumpBackKnee: 18,
   jumpLean: -3, // torso tips slightly back, chest out
-  jumpTwist: 12 // torso twists toward the raised arm
+  jumpTwist: 12, // torso twists toward the raised arm
+
+  // Bowser's wind-up before he breathes fire (see Boss/Bowser.js): he rocks
+  // back, chin up, arms swept behind him, knees braced — the shape of
+  // someone taking a huge breath in. Read as a held pose rather than a
+  // cycle: the clip runs once and clamps on its last frame, the way the
+  // jump does.
+  chargeLean: -22, // spine rocks BACK (negative = away from forward)
+  chargeChestLean: -14,
+  chargeHeadLean: -20, // chin lifts
+  chargeArmSwing: -34, // arms swept behind
+  chargeArmSpread: 28, // and held out, away from the shell
+  chargeElbow: 46,
+  chargeKnee: 20, // braced against the recoil
+  chargeHipsDrop: -0.03,
 };
 
 // Which bone each limb "hangs from" — used to know which way it's pointing.
@@ -442,6 +456,51 @@ function buildJump(bm, basis) {
 
 // Falling pose clip: legs paddle loosely, arms flail wide, torso tips back
 // slightly — a simple three-keyframe cycle, no rig-specific tuning needed.
+/**
+ * The fire-breathing wind-up: a one-shot pose, not a cycle. Timed to snap
+ * in quickly and then sit still, because the boss holds it for as long as
+ * its charge lasts (Bowser's is 1.3s) and a slow drift over all of that
+ * would read as the model settling rather than as an effort.
+ *
+ * The middle keyframe overshoots the final one slightly so the pose lands
+ * with a bit of snap instead of easing flatly into place.
+ */
+function buildCharge(bm, basis) {
+  const t = [0, 0.34, 0.55];
+  const P = POSE;
+  const S = POSE.armSpread;
+
+  const tracks = [
+    // Torso and head rock back: the actual "taking a breath in".
+    torsoTrack(bm, "spine", t, [0, P.chargeLean - 4, P.chargeLean], [0, 0, 0], basis),
+    torsoTrack(bm, "chest", t, [0, P.chargeChestLean - 3, P.chargeChestLean], [0, 0, 0], basis),
+    torsoTrack(bm, "head", t, [0, P.chargeHeadLean - 4, P.chargeHeadLean], [0, 0, 0], basis),
+
+    // Arms swept back and out, elbows bent — shoulders opening up to make
+    // room for the chest.
+    limbTrack(bm, "upperArmL", t, [
+      limbDir(basis, -1, S, "L"),
+      limbDir(basis, P.chargeArmSwing - 5, P.chargeArmSpread, "L"),
+      limbDir(basis, P.chargeArmSwing, P.chargeArmSpread, "L"),
+    ]),
+    limbTrack(bm, "upperArmR", t, [
+      limbDir(basis, -1, S, "R"),
+      limbDir(basis, P.chargeArmSwing - 5, P.chargeArmSpread, "R"),
+      limbDir(basis, P.chargeArmSwing, P.chargeArmSpread, "R"),
+    ]),
+    hingeTrack(bm, "foreArmL", t, [-14, -P.chargeElbow, -P.chargeElbow], basis.left),
+    hingeTrack(bm, "foreArmR", t, [-14, -P.chargeElbow, -P.chargeElbow], basis.left),
+
+    // Knees bent and hips dropped: braced, not standing at ease.
+    hingeTrack(bm, "shinL", t, [0, P.chargeKnee, P.chargeKnee], basis.left),
+    hingeTrack(bm, "shinR", t, [0, P.chargeKnee, P.chargeKnee], basis.left),
+    hipsBob(bm, t, [0, P.chargeHipsDrop, P.chargeHipsDrop]),
+  ];
+
+  return new THREE.AnimationClip("charge", 0.55, tracks.filter(Boolean));
+}
+
+
 function buildFall(bm, basis) {
   const t = [0, 0.4, 0.8];
   const S = POSE.armSpread;
@@ -502,5 +561,6 @@ export function buildCharacterClips(boneMap) {
     }),
     jump: buildJump(boneMap, basis),
     fall: buildFall(boneMap, basis),
+    charge: buildCharge(boneMap, basis),
   };
 }

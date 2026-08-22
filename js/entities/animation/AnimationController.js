@@ -29,6 +29,10 @@ export default class AnimationController {
     this.actions = {};
     this.current = null;
 
+    // While locked, update() advances the mixer but stops choosing states
+    // from the character's motion — see lock().
+    this._locked = false;
+
     // See the file header: an unusable skeleton leaves the controller
     // inert rather than throwing.
     this.enabled = this.boneMap.isUsable;
@@ -61,16 +65,18 @@ export default class AnimationController {
   }
 
   // Builds one AnimationMixer action per clip from clipFactory, marking
-  // "jump" as a one-shot that holds its last frame instead of looping.
+  // the held poses as one-shots that stay on their last frame.
   _buildActions() {
     const clips = buildCharacterClips(this.boneMap);
 
     for (const [name, clip] of Object.entries(clips)) {
       const action = this.mixer.clipAction(clip);
 
-      if (name === "jump") {
-        // The takeoff plays once and holds its last frame, otherwise the
-        // character would "bounce" while still airborne.
+      if (name === "jump" || name === "charge") {
+        // Both are held poses rather than cycles: they play once and stay
+        // on their last frame. The takeoff would otherwise "bounce" while
+        // the character is still airborne, and a boss' wind-up has to sit
+        // still for as long as it keeps charging.
         action.setLoop(THREE.LoopOnce, 1);
         action.clampWhenFinished = true;
       }
@@ -109,7 +115,7 @@ export default class AnimationController {
   update(delta, motion) {
     if (!this.enabled) return;
 
-    if (motion) {
+    if (motion && !this._locked) {
       const { speed = 0, verticalVelocity = 0, grounded = true } = motion;
 
       let state;
@@ -131,6 +137,28 @@ export default class AnimationController {
     }
 
     this.mixer.update(delta);
+  }
+
+  /**
+   * Holds one state on screen until unlock(), ignoring whatever the motion
+   * passed to update() would otherwise select.
+   *
+   * For a pose the game logic owns rather than the character's movement:
+   * Bowser's fire-breathing wind-up (see Bowser.js) has to stay put even
+   * though he is standing perfectly still while he charges, which the state
+   * machine would quite reasonably call "idle". Safe to call every frame —
+   * play() ignores a request for the state already running.
+   */
+  lock(name) {
+    if (!this.enabled) return;
+    this.play(name);
+    this._locked = true;
+  }
+
+  // Hands the state back to update()'s motion-driven choice, which
+  // cross-fades out of the held pose on the next frame.
+  unlock() {
+    this._locked = false;
   }
 
   // Resets every bone back to exactly its recorded bind pose.

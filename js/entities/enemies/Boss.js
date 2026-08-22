@@ -9,10 +9,12 @@ import Projectile from "./Projectile.js";
  * here (see Enemy.js — this class never overrides update()'s inherited
  * behavior, only adds to it).
  *
- * Neither boss model has a skeleton (verified by a manual GLB parse: 0
- * skins/animations on both bowser.glb and kamek.glb), so the "charge"
- * telegraph is a whole-mesh transform tween instead of a real skeletal
- * animation — see _updateAttack. Subclasses (Bowser.js/Kamek.js) only
+ * The "charge" telegraph is a whole-mesh transform tween rather than a
+ * skeletal animation — see _updateAttack. That was originally because
+ * neither boss model had a skeleton at all; Bowser has since been re-
+ * exported with a Mixamo rig (Enemy.spawn now gives him a real walk cycle,
+ * see AnimationController), but the tween is kept because it's what still
+ * works for Kamek, who has no bones. Subclasses (Bowser.js/Kamek.js) only
  * supply their own charge visual and where the projectile spawns from and
  * how it looks; the state machine (cooldown -> charge -> fire) and the
  * projectile lifecycle (spawn, fly, hit/expire, cleanup) live here once.
@@ -30,6 +32,18 @@ export default class Boss extends Enemy {
     this.attackCooldown = options.attackCooldown ?? 3.5;
     this.chargeTime = options.chargeTime ?? 1.1;
     this.projectileSpeed = options.projectileSpeed ?? 14;
+    // How many projectiles one attack fires, and the angle between
+    // neighbours in the fan. One straight shot by default (Kamek); Bowser
+    // breathes three at once — see Bowser.js.
+    this.projectileCount = options.projectileCount ?? 1;
+    this.projectileSpread = options.projectileSpread ?? 0;
+
+    // Fired once at the START of each wind-up, alongside onStomped/
+    // onDefeated from Enemy — main.js hangs the boss' attack roar on it.
+    // Deliberately not at the moment the projectile leaves: the wind-up is
+    // the part that's meant to warn the player, and a telegraph nobody can
+    // hear is half a telegraph.
+    this.onAttack = null;
 
     this._cooldownTimer = 0;
     this._chargeTimer = 0;
@@ -94,6 +108,7 @@ export default class Boss extends Enemy {
     if (distSq <= this.attackRange * this.attackRange) {
       this._isCharging = true;
       this._chargeTimer = this.chargeTime;
+      if (this.onAttack) this.onAttack();
     }
   }
 
@@ -107,14 +122,36 @@ export default class Boss extends Enemy {
     const spawnPoint = this._getProjectileSpawnPoint();
     const colors = this._getProjectileColors();
 
-    const projectile = new Projectile(this.scene, {
-      from: spawnPoint,
-      to: player.mesh.position,
-      speed: this.projectileSpeed,
-      colorOuter: colors.outer,
-      colorInner: colors.inner,
-    });
-    this.projectiles.push(projectile);
+    const count = Math.max(1, this.projectileCount);
+    const target = player.mesh.position;
+
+    // The aim line, kept flat: the fan is rotated about the vertical axis
+    // so every projectile in a volley travels at the same height as the
+    // single straight shot would have.
+    const aimX = target.x - spawnPoint.x;
+    const aimZ = target.z - spawnPoint.z;
+
+    for (let i = 0; i < count; i++) {
+      // Symmetrical around the aim line, so an odd count always keeps one
+      // shot pointed straight at the player and an even one straddles them.
+      const angle = (i - (count - 1) / 2) * this.projectileSpread;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+
+      this.projectiles.push(
+        new Projectile(this.scene, {
+          from: spawnPoint,
+          to: {
+            x: spawnPoint.x + aimX * cos - aimZ * sin,
+            y: target.y,
+            z: spawnPoint.z + aimX * sin + aimZ * cos,
+          },
+          speed: this.projectileSpeed,
+          colorOuter: colors.outer,
+          colorInner: colors.inner,
+        }),
+      );
+    }
   }
 
   // Advances every in-flight projectile, resolves player hits (via the

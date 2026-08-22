@@ -45,7 +45,7 @@ export default class UIManager {
     // changed — see showBossHealthBar.
     this.activeBossHpKey = null;
 
-    // Interaction prompt ("Premi E per ..."), quest HUD (Toad's 25-coin
+    // Interaction prompt ("Press E to ..."), quest HUD (Toad's 25-coin
     // quest progress) and toast (brief quest feedback messages) — see
     // js/interactions/. All optional in the DOM: every method below checks
     // its element before touching it, so nothing breaks if index.html is
@@ -328,15 +328,15 @@ export default class UIManager {
 
   // --- PEACH'S DIALOGUE (js/interactions/PeachCutscene.js) ---
 
-  // `isLastLine` swaps the "premi Space/E per continuare" hint for a
-  // clearer "premi Space/E per concludere" on the final line.
+  // `isLastLine` swaps the "Press E to continue" hint for a clearer
+  // "Press E to close" on the final line.
   showDialogue(speaker, text, isLastLine = false) {
     if (this.dialogueSpeakerEl) this.dialogueSpeakerEl.textContent = speaker;
     if (this.dialogueTextEl) this.dialogueTextEl.textContent = text;
     if (this.dialogueHintEl) {
       this.dialogueHintEl.textContent = isLastLine
-        ? "Premi E per concludere"
-        : "Premi E per continuare";
+        ? "Press E to close"
+        : "Press E to continue";
     }
     if (this.dialogueBoxEl) this.dialogueBoxEl.classList.remove("hidden");
 

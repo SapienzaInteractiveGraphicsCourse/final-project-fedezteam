@@ -15,6 +15,7 @@ import Kamek from "./entities/enemies/Kamek.js";
 import Bowser from "./entities/enemies/Bowser.js";
 import ObstacleZone from "./entities/Level/ObstacleZone.js";
 import EndingZone from "./entities/Level/EndingZone.js";
+import { clone as cloneRigged } from "three/addons/utils/SkeletonUtils.js";
 import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
 import InteractionManager from "./interactions/InteractionManager.js";
@@ -458,6 +459,11 @@ let bowser = null;
 // updateGame()'s per-frame loop.
 let yoshiEggMesh = null;
 let yoshiEntity = null;
+// The two "press E" interactions, kept in hand because Yoshi can go back
+// into his egg mid-run (falling into the void while ridden kills him — see
+// EntityManager._loseYoshi) and the pair has to be swapped over each time.
+let yoshiEggInteractable = null;
+let yoshiMountInteractable = null;
 let peachCutscene = null;
 
 const ui = new UIManager();
@@ -602,6 +608,36 @@ function damagePlayer() {
   if (!isGameOver && audio && audio.playSFX) audio.playSFX("damage");
 }
 
+// Which boss course the player was inside on the previous frame, so that
+// ARRIVING in one can be told apart from merely still being there. Null
+// while anywhere else, including the main island.
+let currentBossZone = null;
+
+// Called every frame the player is inside `key`'s obstacle course (see
+// updateGame's zone check): puts that boss' battle theme on — a no-op after
+// the first frame, since playMusic() ignores a request for the track that's
+// already playing — and, only on the frame they actually arrive, plays his
+// greeting.
+//
+// Skipped once he's beaten: coming back to pick up the star he dropped
+// shouldn't be announced by a boss who isn't there anymore. The music still
+// switches either way, so a defeated zone keeps its own atmosphere.
+function enterBossZone(key, track, boss) {
+  audio.playMusic(track);
+
+  if (currentBossZone === key) return;
+  currentBossZone = key;
+
+  // playTrack, not playSFX: the greeting is the one effect in the game big
+  // enough for playSFX's clone-then-play to be a problem (kamek_start is
+  // 1.3 MB — the clone starts its own download of it, and the cue would
+  // arrive late over anything slower than localhost). It can't overlap
+  // itself either, since you only arrive once per visit, so there's nothing
+  // the clone was protecting. Same reasoning as the ending theme — see
+  // AudioManager.playTrack.
+  if (boss && !boss.isDefeated && audio.playTrack) audio.playTrack(`${key}_start`);
+}
+
 // 4. GAME LOOP
 
 function updateGame(delta) {
@@ -677,15 +713,16 @@ function updateGame(delta) {
   if (ui.gameState === "PLAYING") {
     const playerPos = entityManager.player?.mesh?.position;
     if (kamekZone && kamekZone.containsPoint(playerPos)) {
-      audio.playMusic("kamek_battle");
+      enterBossZone("kamek", "kamek_battle", kamek);
     } else if (bowserZone && bowserZone.containsPoint(playerPos)) {
-      audio.playMusic("bowser_battle");
+      enterBossZone("bowser", "bowser_battle", bowser);
     } else {
+      currentBossZone = null;
       audio.playMusic();
     }
   }
 
-  // "Premi E per ..." interactions (Toad's quest, Yoshi's egg/mount,
+  // "Press E to ..." interactions (Toad's quest, Yoshi's egg/mount,
   // Peach's dialogue trigger) — suppressed while a dialogue line is
   // already up, both so the prompt doesn't fight the speech bubble for
   // screen space and so E doesn't simultaneously advance a line AND
@@ -803,43 +840,79 @@ initGameModels(assetLoader)
         });
         renderer.scene.add(yoshiEggMesh);
 
-        const eggInteractable = interactions.register({
+        // Hatching: the egg leaves the scene, Yoshi takes its place, and
+        // the mount prompt replaces the hatch one. The egg MESH is kept
+        // (not disposed) because Yoshi can be lost and end up back inside
+        // it — see layYoshiEgg below — so it gets re-added rather than
+        // reloaded, and the model is fetched exactly once per session.
+        const hatchYoshiEgg = () => {
+          if (!yoshiEggMesh || yoshiEntity) return;
+
+          renderer.scene.remove(yoshiEggMesh);
+          yoshiEggInteractable.enabled = false;
+
+          yoshiEntity = new Yoshi(assets.yoshi, physics);
+          yoshiEntity.spawn(ySpawn.x, ySpawn.y, ySpawn.z);
+          entityManager.setYoshi(yoshiEntity);
+
+          yoshiMountInteractable = interactions.register({
+            // Live reference, not a copy: once mounted, Yoshi.update()
+            // follows the player every frame, so this keeps tracking him
+            // automatically without re-registering.
+            position: yoshiEntity.mesh.position,
+            radius: 3,
+            prompt: () =>
+              yoshiEntity.isRidden ? "Press E to get off Yoshi" : "Press E to ride Yoshi",
+            onInteract: () => {
+              if (yoshiEntity.isRidden) {
+                yoshiEntity.dismount();
+                entityManager.player?.setMountedOnYoshi(false);
+                // The rider gets his own voice back.
+                audio?.setVoice?.(null);
+              } else {
+                yoshiEntity.mount();
+                entityManager.player?.setMountedOnYoshi(true);
+                // From here until dismount, every effect Yoshi has a clip
+                // for is his: jumping and the falling scream. It's Yoshi
+                // doing the jumping now, so hearing Mario grunt over it
+                // read as a leftover. Anything he has no clip for (taking
+                // damage) still comes out in the rider's voice — see
+                // AudioManager.setVoice.
+                audio?.setVoice?.("yoshi");
+                audio?.playSFX?.("yoshi_mounted");
+              }
+            },
+          });
+
+          if (audio && audio.playSFX) audio.playSFX("star");
+        };
+
+        // The reverse: Yoshi went into the void with the player on his back
+        // and didn't come out (EntityManager._loseYoshi has already taken
+        // him out of the scene and the physics world by the time this
+        // runs). He returns to where he came from — inside the egg, at the
+        // spot he first hatched from — so the mechanic can be picked up
+        // again later instead of being gone for the rest of the run.
+        const layYoshiEgg = () => {
+          if (yoshiMountInteractable) {
+            interactions.unregister(yoshiMountInteractable);
+            yoshiMountInteractable = null;
+          }
+          yoshiEntity = null;
+
+          if (!yoshiEggMesh) return;
+          renderer.scene.add(yoshiEggMesh);
+          yoshiEggInteractable.enabled = true;
+        };
+
+        yoshiEggInteractable = interactions.register({
           position: yoshiEggMesh.position,
           radius: 3,
-          prompt: "Premi E per schiudere l'uovo",
-          onInteract: () => {
-            if (!yoshiEggMesh) return;
-
-            renderer.scene.remove(yoshiEggMesh);
-            interactions.unregister(eggInteractable);
-            yoshiEggMesh = null;
-
-            yoshiEntity = new Yoshi(assets.yoshi, physics);
-            yoshiEntity.spawn(ySpawn.x, ySpawn.y, ySpawn.z);
-            entityManager.setYoshi(yoshiEntity);
-
-            interactions.register({
-              // Live reference, not a copy: once mounted, Yoshi.update()
-              // follows the player every frame, so this keeps tracking him
-              // automatically without re-registering.
-              position: yoshiEntity.mesh.position,
-              radius: 3,
-              prompt: () =>
-                yoshiEntity.isRidden ? "Premi E per scendere da Yoshi" : "Premi E per salire su Yoshi",
-              onInteract: () => {
-                if (yoshiEntity.isRidden) {
-                  yoshiEntity.dismount();
-                  entityManager.player?.setMountedOnYoshi(false);
-                } else {
-                  yoshiEntity.mount();
-                  entityManager.player?.setMountedOnYoshi(true);
-                }
-              },
-            });
-
-            if (audio && audio.playSFX) audio.playSFX("star");
-          },
+          prompt: "Press E to hatch the egg",
+          onInteract: hatchYoshiEgg,
         });
+
+        entityManager.onYoshiLost = layYoshiEgg;
       } catch (e) {
         console.warn("[main] Could not load the Yoshi egg model — falling back to spawning Yoshi directly.", e);
         yoshiEntity = new Yoshi(assets.yoshi, physics);
@@ -870,7 +943,15 @@ initGameModels(assetLoader)
     ];
 
     for (const spawn of GOOMBA_SPAWNS) {
-      const goomba = new Goomba(enemyAssets.goomba.clone(), physics);
+      // cloneRigged, not mesh.clone(): Object3D.clone() copies the bones
+      // but leaves every SkinnedMesh in the copy still pointing at the
+      // ORIGINAL's skeleton. Bowser's model has one (see Enemy.spawn's
+      // walk cycle), and with a plain clone his meshes followed bones
+      // nobody was animating while his bounding box was measured off a
+      // skeleton that never gets updated — which came out ~1200 units tall
+      // and shrank him to a speck. Harmless for the boneless enemies, so
+      // all three go through the same call rather than special-casing.
+      const goomba = new Goomba(cloneRigged(enemyAssets.goomba), physics);
       goomba.spawn(spawn.x, spawn.y, spawn.z);
 
       goomba.onStomped = () => {
@@ -897,17 +978,30 @@ initGameModels(assetLoader)
     }
 
     if (kamekZone.bossSpawn) {
-      kamek = new Kamek(enemyAssets.kamek.clone(), physics, renderer.scene);
+      kamek = new Kamek(cloneRigged(enemyAssets.kamek), physics, renderer.scene);
       kamek.spawn(kamekZone.bossSpawn.x, kamekZone.bossSpawn.y, kamekZone.bossSpawn.z);
 
-      kamek.onStomped = () => {
-        if (audio && audio.playSFX) audio.playSFX("jump");
+      kamek.onStomped = (hits, needed) => {
+        if (audio && audio.playSFX) {
+          audio.playSFX("jump"); // the player's own bounce off his head
+          // ...and his yelp — but not on the blow that finishes him, which
+          // gets the death cry from onDefeated below instead of both at
+          // once.
+          if (hits < needed) audio.playSFX("kamek_hit");
+        }
         ui.updateBossHealthBar(kamek.hitsTaken, kamek.hitsToDefeat);
       };
       kamek.onDamagePlayer = () => {
         damagePlayer();
       };
+      // Fired when a ranged attack starts winding up, not when the
+      // projectile leaves — see Boss.onAttack.
+      kamek.onAttack = () => {
+        if (audio && audio.playSFX) audio.playSFX("kamek_attack");
+      };
       kamek.onDefeated = () => {
+        if (audio && audio.playSFX) audio.playSFX("kamek_last_hit");
+
         questManager.onKamekDefeated();
 
         // A real star to walk over and collect (not an instant grant),
@@ -971,17 +1065,30 @@ initGameModels(assetLoader)
     }
 
     if (bowserZone.bossSpawn) {
-      bowser = new Bowser(enemyAssets.bowser.clone(), physics, renderer.scene);
+      bowser = new Bowser(cloneRigged(enemyAssets.bowser), physics, renderer.scene);
       bowser.spawn(bowserZone.bossSpawn.x, bowserZone.bossSpawn.y, bowserZone.bossSpawn.z);
 
-      bowser.onStomped = () => {
-        if (audio && audio.playSFX) audio.playSFX("jump");
+      bowser.onStomped = (hits, needed) => {
+        if (audio && audio.playSFX) {
+          audio.playSFX("jump"); // the player's own bounce off his head
+          // ...and his yelp — but not on the blow that finishes him, which
+          // gets the death cry from onDefeated below instead of both at
+          // once.
+          if (hits < needed) audio.playSFX("bowser_hit");
+        }
         ui.updateBossHealthBar(bowser.hitsTaken, bowser.hitsToDefeat);
       };
       bowser.onDamagePlayer = () => {
         damagePlayer();
       };
+      // Fired when a ranged attack starts winding up, not when the
+      // projectile leaves — see Boss.onAttack.
+      bowser.onAttack = () => {
+        if (audio && audio.playSFX) audio.playSFX("bowser_attack");
+      };
       bowser.onDefeated = () => {
+        if (audio && audio.playSFX) audio.playSFX("bowser_last_hit");
+
         questManager.onBowserDefeated();
 
         // Same "drop a real collectible star + a warp star back to spawn"
@@ -1048,14 +1155,20 @@ initGameModels(assetLoader)
     // (ui.gameState === "ENDING", set by ui.onReachPeach above), and not
     // while a dialogue line is already up.
     if (endingZone.peach) {
-      peachCutscene = new PeachCutscene(ui, renderer.camera, endingZone.peach, endingZone.castle);
+      peachCutscene = new PeachCutscene(
+        ui,
+        renderer.camera,
+        endingZone.peach,
+        endingZone.castle,
+        audio,
+      );
 
       interactions.register({
         position: endingZone.peach.position,
         radius: 4,
-        prompt: "Premi E per parlare con Peach",
+        prompt: "Press E to talk to Peach",
         isAvailable: () => ui.gameState === "ENDING" && !ui.dialogueActive,
-        onInteract: () => peachCutscene.start(ui.heroName || "eroe"),
+        onInteract: () => peachCutscene.start(ui.heroName || "hero"),
       });
     }
 
@@ -1097,4 +1210,4 @@ initGameModels(assetLoader)
     console.error("Error while loading assets:", error);
     const loadingText = document.getElementById("loading-text");
     if (loadingText) loadingText.innerText = "LOADING ERROR";
-  });
+  });
