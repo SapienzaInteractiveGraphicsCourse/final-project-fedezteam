@@ -54,6 +54,11 @@ export default class Decorations {
     this.spawnPoint = null;
     this.kamekZoneEntry = null;
     this.bowserZoneEntry = null;
+    // Optional UIManager reference (see setUI), used only for the "get off
+    // Yoshi to use the Warp Star" warning in _updateWarpStars below. Left
+    // null by default so nothing changes for anyone who never calls setUI.
+    this.ui = null;
+    this._yoshiWarpWarningActive = false;
     // Smoothed 0..1-ish sink depth applied to the player's mesh while
     // standing inside a pond's footprint (see _updateWaterWading).
     this._waterSinkDepth = 0;
@@ -164,7 +169,11 @@ export default class Decorations {
   //   flower/coin from landing inside — or clipping through the edge of —
   //   a platform, which used to be possible since this scatter had no idea
   //   where the level's hills actually sat.
-  async spawnFieldProps(arenaSize, onCoinSpawned, hillFootprints = []) {
+  // @param {{x:number,z:number,radius?:number}[]} [avoidPoints]
+  //   Round exclusion zones (warp stars + their signs — see GameLevel.js's
+  //   `warpAvoidPoints`) a tree/flower/coin also can't land inside — see
+  //   _isNearAnyPoint.
+  async spawnFieldProps(arenaSize, onCoinSpawned, hillFootprints = [], avoidPoints = []) {
     let flowerGlb = null,
       treeGlb = null;
 
@@ -195,6 +204,9 @@ export default class Decorations {
         // (or too close to) any hill's real footprint — see hillFootprints
         // above and _isInsideHillFootprint below.
         if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
+
+        // ...or on top of (or right next to) a warp star/its sign.
+        if (this._isNearAnyPoint(posX, posZ, avoidPoints)) continue;
 
         if (treeGlb && Math.random() > 0.85) {
           const tree = treeGlb.scene.clone();
@@ -441,7 +453,25 @@ export default class Decorations {
     return false;
   }
 
-  spawnRocks(arenaSize, count = 18, hillFootprints = []) {
+  // Same idea as _isInsideHillFootprint above, but for a list of round
+  // exclusion zones instead of rectangular ones — used to keep trees/
+  // flowers/rocks/bushes from spawning on top of (or right next to) a warp
+  // star or its zone sign (see GameLevel.js's `warpAvoidPoints`, passed in
+  // as `avoidPoints` below). `radius` defaults generously enough to cover
+  // both a warp star AND its sign (only ~3 units further out) with a
+  // single point per star, so callers don't need to list the signs
+  // separately.
+  _isNearAnyPoint(x, z, points = [], radius = 6) {
+    for (const p of points) {
+      const r = p.radius ?? radius;
+      const dx = x - p.x;
+      const dz = z - p.z;
+      if (dx * dx + dz * dz <= r * r) return true;
+    }
+    return false;
+  }
+
+  spawnRocks(arenaSize, count = 18, hillFootprints = [], avoidPoints = []) {
     const rockMaterial = new THREE.MeshStandardMaterial({
       color: 0x8a8378,
       roughness: 0.95,
@@ -463,6 +493,9 @@ export default class Decorations {
       // Skip this rock entirely if it would land inside (or clipping
       // through the edge of) a HillBlock platform.
       if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
+
+      // ...or on top of (or right next to) a warp star/its sign.
+      if (this._isNearAnyPoint(posX, posZ, avoidPoints)) continue;
 
       const radius = 0.6 + Math.random() * 1.4;
       const posY = radius * 0.35;
@@ -538,7 +571,7 @@ export default class Decorations {
    * keeping the 5-color variety. Shadows are unaffected: the merged mesh
    * casts/receives exactly as every individual bush did.
    */
-  spawnBushes(arenaSize, count = 26, hillFootprints = []) {
+  spawnBushes(arenaSize, count = 26, hillFootprints = [], avoidPoints = []) {
     const bushColors = [0x3f7d32, 0x4f9b3d, 0x2f6b28, 0x5aa83f, 0x6bb84a];
     const half = arenaSize / 2 - 15;
 
@@ -556,6 +589,9 @@ export default class Decorations {
       // Skip this bush entirely if it would land inside (or clipping
       // through the edge of) a HillBlock platform.
       if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
+
+      // ...or on top of (or right next to) a warp star/its sign.
+      if (this._isNearAnyPoint(posX, posZ, avoidPoints)) continue;
 
       const radius = 0.8 + Math.random() * 0.9;
       const color = bushColors[Math.floor(Math.random() * bushColors.length)];
@@ -1089,6 +1125,14 @@ export default class Decorations {
     this.bowserZoneEntry = point;
   }
 
+  // Optional UIManager hookup (see the `ui` field above) — lets
+  // _updateWarpStars show/hide the "get off Yoshi" warning without this
+  // class needing `ui` passed through its constructor (which every existing
+  // caller would otherwise need updating for).
+  setUI(ui) {
+    this.ui = ui;
+  }
+
   /**
    * Places a small Minecraft "Oak Sign" prop (minecraft_sign.glb, a
    * Mineways export) bearing a logo texture near a warp star that leads to
@@ -1274,7 +1318,16 @@ export default class Decorations {
     // of them into a fight or onto a curved surface neither the mount
     // logic nor the planet-gravity path was built for. Stepping off him
     // first is the price of admission; the star is simply inert until then.
-    if (player.mountedOnYoshi) return;
+    if (player.mountedOnYoshi) {
+      this._updateYoshiWarpWarning(player);
+      return;
+    }
+    // Left Yoshi (or never got on him) since the last frame — clear any
+    // warning that might still be showing.
+    if (this._yoshiWarpWarningActive) {
+      this._yoshiWarpWarningActive = false;
+      if (this.ui) this.ui.hideYoshiWarpWarning();
+    }
 
     const pos = player.mesh.position;
     const triggerRadius = 2.5;
@@ -1293,6 +1346,39 @@ export default class Decorations {
       player.body.position.set(dest.x, dest.y, dest.z);
       player.body.velocity.set(0, 0, 0);
       return; // one warp per frame is enough, even if stars are ever close together
+    }
+  }
+
+  // Companion to _updateWarpStars' early-return above: while the player IS
+  // mounted on Yoshi, shows a warning the moment they get close enough to a
+  // (real, targeted) warp star that they'd otherwise have triggered it — a
+  // slightly bigger radius than the actual warp trigger, so the hint shows
+  // up just before they'd bump into the now-inert star. No-op if setUI was
+  // never called.
+  _updateYoshiWarpWarning(player) {
+    if (!this.ui) return;
+
+    const pos = player.mesh.position;
+    const warningRadius = 4.5;
+    let near = false;
+
+    for (const w of this.warpStars) {
+      if (!w.target) continue;
+      const dx = pos.x - w.mesh.position.x;
+      const dy = pos.y - w.mesh.position.y;
+      const dz = pos.z - w.mesh.position.z;
+      if (dx * dx + dy * dy + dz * dz <= warningRadius * warningRadius) {
+        near = true;
+        break;
+      }
+    }
+
+    if (near && !this._yoshiWarpWarningActive) {
+      this._yoshiWarpWarningActive = true;
+      this.ui.showYoshiWarpWarning();
+    } else if (!near && this._yoshiWarpWarningActive) {
+      this._yoshiWarpWarningActive = false;
+      this.ui.hideYoshiWarpWarning();
     }
   }
 

@@ -55,6 +55,13 @@ export default class UIManager {
     this.toastEl = document.getElementById("toast");
     this._toastTimer = null;
 
+    // Sequential quest objective panel (top-right, under the pause button)
+    // and the "get off Yoshi" warp-star warning — see QuestManager and
+    // Decorations._updateYoshiWarpWarning. Same "optional, checked before
+    // every use" convention as the elements above.
+    this.questObjectiveEl = document.getElementById("quest-objective");
+    this.yoshiWarpWarningEl = document.getElementById("yoshi-warp-warning");
+
     // Peach's ending dialogue (see PeachCutscene.js) and the final victory
     // screen shown once it finishes.
     this.dialogueBoxEl = document.getElementById("dialogue-box");
@@ -310,6 +317,30 @@ export default class UIManager {
     if (this.questHudEl) this.questHudEl.classList.add("hidden");
   }
 
+  // --- QUEST OBJECTIVE PANEL (js/interactions/QuestManager.js) ---
+
+  showQuestObjective(text) {
+    if (!this.questObjectiveEl) return;
+    this.questObjectiveEl.textContent = text;
+    this.questObjectiveEl.classList.remove("hidden");
+  }
+
+  hideQuestObjective() {
+    if (this.questObjectiveEl) this.questObjectiveEl.classList.add("hidden");
+  }
+
+  // --- YOSHI / WARP STAR WARNING (js/entities/Level/Decorations.js) ---
+
+  showYoshiWarpWarning() {
+    if (!this.yoshiWarpWarningEl) return;
+    this.yoshiWarpWarningEl.textContent = "Get off Yoshi to use the Warp Star!";
+    this.yoshiWarpWarningEl.classList.remove("hidden");
+  }
+
+  hideYoshiWarpWarning() {
+    if (this.yoshiWarpWarningEl) this.yoshiWarpWarningEl.classList.add("hidden");
+  }
+
   // Brief feedback message (quest assigned/updated/completed, ...), shown
   // for `duration` ms then auto-hidden. Restarts its own timer on every
   // call, so a second toast while one is already showing just replaces the
@@ -353,6 +384,18 @@ export default class UIManager {
   // separate screen from showWin()'s star-collection win screen: that one
   // leads INTO the ending zone, this one is what closes it out.
   showVictoryFinale() {
+    // A distinct terminal state (not "ENDING" anymore) — this is what
+    // actually stops the player from walking around under the final popup:
+    // EntityManager.update() only keeps updating the player while
+    // gameState is "PLAYING" or "ENDING", so anything else (this included)
+    // freezes movement/physics automatically, and the Escape/P pause
+    // shortcut is gated the same way (see _setupListeners), so the whole
+    // game is inert behind this screen. dialogueActive is already false by
+    // the time this runs (see PeachCutscene.advance), so that alone was NOT
+    // enough to keep the player frozen once the dialogue closed — this is
+    // the actual fix.
+    this.gameState = "VICTORY_FINALE";
+
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "none";
     if (this.victoryFinaleScreen) this.victoryFinaleScreen.classList.remove("hidden");
@@ -474,6 +517,8 @@ export default class UIManager {
     if (this.winScreen) this.winScreen.classList.add("hidden");
     if (this.victoryFinaleScreen) this.victoryFinaleScreen.classList.add("hidden");
     if (this.questHudEl) this.questHudEl.classList.add("hidden");
+    if (this.questObjectiveEl) this.questObjectiveEl.classList.add("hidden");
+    if (this.yoshiWarpWarningEl) this.yoshiWarpWarningEl.classList.add("hidden");
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "block";
 

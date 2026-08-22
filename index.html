@@ -159,7 +159,17 @@
 
         <!-- Toad's 25-coin quest progress (see QuestManager.js) -->
         <div id="quest-hud" class="quest-hud hidden">COINS: 0/25</div>
+
+        <!-- Sequential quest objective indicator, top-right under the
+             pause button (see QuestManager._renderObjective /
+             UIManager.showQuestObjective) -->
+        <div id="quest-objective" class="quest-objective hidden"></div>
       </div>
+
+      <!-- "Get off Yoshi to use the Warp Star" warning — shown while
+           mounted on Yoshi near a warp star (see
+           Decorations._updateYoshiWarpWarning / UIManager.showYoshiWarpWarning) -->
+      <div id="yoshi-warp-warning" class="yoshi-warp-warning hidden"></div>
 
       <!-- "Press E to ..." prompt, shown while near any registered
            interactable (Toad, Yoshi's egg/Yoshi himself, Peach, ...) — see
@@ -276,6 +286,27 @@
                 <span class="key-badge wide">SPACE</span>
               </div>
               <span class="control-label">JUMP</span>
+            </div>
+
+            <!-- Free camera: I/J/K/L -->
+            <div class="control-row">
+              <div class="keys-group">
+                <div class="key-row"><span class="key-badge">I</span></div>
+                <div class="key-row">
+                  <span class="key-badge">J</span>
+                  <span class="key-badge">K</span>
+                  <span class="key-badge">L</span>
+                </div>
+              </div>
+              <span class="control-label">CAMERA</span>
+            </div>
+
+            <!-- Interact: talk / mount & dismount Yoshi / warp -->
+            <div class="control-row">
+              <div class="keys-group">
+                <span class="key-badge wide">E</span>
+              </div>
+              <span class="control-label">INTERACT</span>
             </div>
           </div>
         </div>

@@ -196,6 +196,14 @@ export default class Player {
     this.mesh.rotation.x = 0;
     this.mesh.rotation.z = 0;
 
+    // Off any planet: forget the parallel-transported surface basis and
+    // facing (see _updateOnPlanet). Landing on a planet later should start
+    // its heading fresh from wherever the camera is then, not from a stale
+    // one carried over from the last visit — and CameraManager's planet rig
+    // reads these two fields directly, so it needs the same reset.
+    this._planetBasisForward = null;
+    this._planetFacing = null;
+
     const isSprinting =
       input.isPressed("shift") ||
       input.isPressed("shiftleft") ||
@@ -353,33 +361,105 @@ export default class Player {
         ? camera.userData.cameraAngleX
         : 0;
 
-    const camForward = new THREE.Vector3(-Math.sin(camAngle), 0, -Math.cos(camAngle));
-    const camRight = new THREE.Vector3(Math.cos(camAngle), 0, -Math.sin(camAngle));
+    // ---- Movement basis on the planet's surface -------------------------
+    //
+    // BUG FIX ("Mario fatica ad andare più sotto" / dead band partway down
+    // the planet): this used to rebuild the WASD basis every frame from
+    // scratch by projecting the camera's purely HORIZONTAL forward vector
+    // (derived from cameraAngleX) onto the tangent plane.
+    //
+    // The flat-ground camera orbits strictly around world Y and always
+    // keeps world up, so that camera-forward vector is always horizontal in
+    // world space. Near the planet's top pole `up` is world +Y, perpendicular
+    // to it, and the projection is perfectly conditioned. But walking DOWN
+    // toward the equator rotates `up` into the horizontal plane too, and
+    // once the camera happens to sit roughly along that radial direction —
+    // exactly what happens when it's trailing behind Mario as he walks
+    // downward — camera-forward becomes nearly PARALLEL to `up`. The
+    // projection then collapses toward zero, the old null-fallback swapped
+    // in a 90°-rotated axis instead, and W/S stopped meaning "keep going
+    // down": that dead band, and the direction flipping through it, is why
+    // he only got past it by jumping and jiggling.
+    //
+    // The fix is to stop rebuilding the basis from scratch each frame.
+    // Instead it's PARALLEL-TRANSPORTED: last frame's forward is
+    // re-projected onto this frame's tangent plane, which on a sphere is
+    // exactly "keep heading along the same great circle". That is always
+    // well-defined, has no dead band anywhere on the sphere, and means
+    // holding S walks a clean meridian right around the planet without the
+    // orientation ever resetting under you.
+    //
+    // The camera still steers it, just gradually and only while its own
+    // projection is well conditioned (`camQuality`, the sine of the angle
+    // between the camera direction and `up`) — so turning the camera with
+    // J/L re-aims WASD as before, while the degenerate band simply
+    // contributes nothing instead of injecting a bogus direction.
+    //
+    // The camera direction itself is taken from the real camera position
+    // (camera -> player) rather than from cameraAngleX: it carries the
+    // camera's own height offset, so it stays usable across a much wider
+    // band than the purely horizontal version did.
+    let camDir = null;
+    if (camera && camera.position) {
+      camDir = bodyPos.clone().sub(camera.position);
+      if (camDir.lengthSq() < 0.0001) camDir = null;
+      else camDir.normalize();
+    }
+    if (!camDir) {
+      camDir = new THREE.Vector3(-Math.sin(camAngle), 0, -Math.cos(camAngle));
+    }
 
-    // Flatten the camera-relative axes onto the planet's tangent plane so
-    // walking stays flush with its curved surface instead of world-flat.
-    // Returns null if the camera is looking almost straight along `up`,
-    // where the projection collapses to ~zero length and can't give a
-    // reliable direction.
-    const projectOnPlane = (v) => {
-      const d = v.dot(up);
-      const proj = v.clone().sub(up.clone().multiplyScalar(d));
-      return proj.lengthSq() > 0.0001 ? proj.normalize() : null;
-    };
-    let tangentForward = projectOnPlane(camForward);
-    let tangentRight = projectOnPlane(camRight);
+    const camTangent = camDir.clone().sub(up.clone().multiplyScalar(camDir.dot(up)));
+    const camQuality = camTangent.length(); // 0 = fully radial, 1 = fully tangent
 
-    // BUG FIX (equator launch): camForward and camRight are always exactly
-    // 90° apart, so if one is ~parallel to `up` (projection degenerates),
-    // the other is automatically ~orthogonal to it — derive the missing one
-    // by rotating the valid one 90° around `up` instead of falling back to
-    // the raw, non-tangent camera vector. The old fallback could be up to
-    // 100% radial at certain camera angles near the equator (verified
-    // numerically), injecting a huge outward-velocity component into what
-    // was supposed to be pure surface movement and launching the player
-    // off the planet — this is what "salta all'improvviso" was.
-    if (!tangentForward) tangentForward = up.clone().cross(tangentRight).normalize();
-    if (!tangentRight) tangentRight = tangentForward.clone().cross(up).normalize();
+    // Parallel-transport the remembered basis onto the current tangent plane.
+    let tangentForward = null;
+    if (this._planetBasisForward) {
+      const transported = this._planetBasisForward
+        .clone()
+        .sub(up.clone().multiplyScalar(this._planetBasisForward.dot(up)));
+      if (transported.lengthSq() > 0.000001) tangentForward = transported.normalize();
+    }
+
+    // Steer it toward the camera, proportionally to how trustworthy the
+    // camera's own projection currently is. Frame-rate independent.
+    if (camQuality > 0.25) {
+      const camForwardTangent = camTangent.clone().normalize();
+      if (!tangentForward) {
+        tangentForward = camForwardTangent;
+      } else {
+        const trust = Math.min(1, (camQuality - 0.25) / 0.35);
+        // Rate deliberately kept well BELOW CameraManager's own planet
+        // follow rate — the two form a loop up there (the camera locks
+        // behind the character's heading, and the heading comes from this
+        // basis, which is steered by the camera), so the loop's turn rate
+        // is set by whichever end is slower. Damping this end is what
+        // turns "hold A and spin on the spot" into a gentle curve.
+        const blend = trust * (1 - Math.exp(-3.5 * Math.max(delta, 0)));
+        const steered = tangentForward.clone().lerp(camForwardTangent, blend);
+        // lerp between two nearly opposite vectors can collapse to ~zero —
+        // in that case snap to the camera's direction rather than
+        // normalizing numerical noise into a random heading.
+        tangentForward = steered.lengthSq() > 0.0001
+          ? steered.normalize()
+          : camForwardTangent;
+      }
+    }
+
+    // Very first frame on this planet with a fully degenerate camera: any
+    // vector perpendicular to `up` will do as a starting heading.
+    if (!tangentForward) {
+      const seed = Math.abs(up.y) < 0.9
+        ? new THREE.Vector3(0, 1, 0)
+        : new THREE.Vector3(1, 0, 0);
+      tangentForward = seed.cross(up).normalize();
+    }
+
+    this._planetBasisForward = tangentForward.clone();
+
+    // Same handedness as the old flat-ground pair: on flat ground
+    // (up = world +Y) forward x up reproduces camRight exactly.
+    const tangentRight = tangentForward.clone().cross(up).normalize();
 
     const moveVec = new THREE.Vector3();
     if (input.isPressed("w") || input.isPressed("arrowup")) moveVec.add(tangentForward);
@@ -417,19 +497,60 @@ export default class Player {
     const newVel = radialVel.add(tangentialVel);
     this.body.velocity.set(newVel.x, newVel.y, newVel.z);
 
+    // Orient the mesh so its local +Y matches the planet's local up and it
+    // faces the direction of travel — the spherical-surface equivalent of
+    // the flat-ground `mesh.rotation.y = targetRotation` line, but as a
+    // full quaternion since "up" is no longer always world +Y.
+    //
+    // Two changes over a plain "only rotate while moving, snap instantly"
+    // version:
+    //  - it runs EVERY frame, not only while moving. Re-orienting only on
+    //    input leaves the model frozen at the up-vector of wherever it last
+    //    walked while standing still (or being carried), which on a sphere
+    //    means visibly leaning over. `_planetFacing` remembers the last
+    //    real direction of travel so the facing itself stays put while
+    //    idle — only the up-alignment keeps updating.
+    //  - it SLERPS toward the target instead of snapping to it. The up
+    //    vector rotates continuously as the player walks around the
+    //    sphere, and snapping to it every frame made the model twitch
+    //    along with every small correction the physics step applied to the
+    //    body's position. The smoothing is frame-rate independent
+    //    (exponential) and fast enough (~12/s) to still feel immediate.
     if (moveLen > 0.0001) {
-      // Orient the mesh so its local +Y matches the planet's local up and it
-      // faces the movement direction — the spherical-surface equivalent of
-      // the flat-ground `mesh.rotation.y = targetRotation` line, but as a
-      // full quaternion since "up" is no longer always world +Y. Best
-      // effort: the exact facing/roll may need a small tweak once this is
-      // visually verified in-browser, since it can't be checked from here.
-      const right = new THREE.Vector3().crossVectors(up, moveVec).normalize();
-      const forward = new THREE.Vector3().crossVectors(right, up).normalize();
-      const basis = new THREE.Matrix4().makeBasis(right, up, forward);
-      this.mesh.quaternion.setFromRotationMatrix(basis);
-      this.mesh.rotateY(this.modelOffset || 0);
+      this._planetFacing = moveVec.clone();
     }
+    if (!this._planetFacing) {
+      this._planetFacing = tangentForward.clone();
+    }
+
+    // Re-project the remembered facing onto the CURRENT tangent plane —
+    // after walking a while, the plane has rotated out from under it.
+    let facing = this._planetFacing
+      .clone()
+      .sub(up.clone().multiplyScalar(this._planetFacing.dot(up)));
+    if (facing.lengthSq() < 0.0001) {
+      facing = tangentForward.clone();
+    }
+    facing.normalize();
+    this._planetFacing = facing.clone();
+
+    const right = new THREE.Vector3().crossVectors(up, facing).normalize();
+    const forward = new THREE.Vector3().crossVectors(right, up).normalize();
+    const basis = new THREE.Matrix4().makeBasis(right, up, forward);
+
+    const targetQuat = new THREE.Quaternion().setFromRotationMatrix(basis);
+    // Same model-forward correction as the flat-ground `modelOffset`,
+    // expressed as a rotation about the model's OWN up axis so it composes
+    // correctly with an arbitrary planet orientation.
+    targetQuat.multiply(
+      new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        this.modelOffset || 0,
+      ),
+    );
+
+    const smoothing = 1 - Math.exp(-12 * Math.max(delta, 0));
+    this.mesh.quaternion.slerp(targetQuat, smoothing);
 
     // BUG FIX (double jump SFX on the red planet), take 2: `grounded` above
     // stays true for a frame or more after a jump starts (it's a
