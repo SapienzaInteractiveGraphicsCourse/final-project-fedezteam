@@ -14,6 +14,12 @@ export default class EntityManager {
     this.spaceWasPressed = false;
     this.isFallingScreamPlaying = false;
 
+    // Optional hook, set from main.js (see QuestManager.onCoinCollected) —
+    // called every time ANY coin is picked up anywhere in the level, on top
+    // of the existing ui.addCoin()/SFX handling below. Left null by default
+    // so nothing changes for anyone who never sets it.
+    this.onCoinCollected = null;
+
     // Classic void-fall respawn point (see setSpawnPoint) — defaults to the
     // old hardcoded value so nothing changes for anyone who never calls it.
     this.spawnPoint = { x: 0, y: 2, z: 0 };
@@ -32,12 +38,11 @@ export default class EntityManager {
   }
 
   // Registers extra void-fall respawn zones: an array of
-  // { zone, respawn, music }, where `zone` exposes containsPoint(pos) (an
-  // ObstacleZone instance already does — see there), `respawn` is the
-  // {x,y,z} to send the player back to, and `music` (optional) is the
-  // looping track that belongs to that zone. Checked in order, first match
-  // wins; falls back to spawnPoint and the overworld theme if nothing
-  // matches. Called from main.js once the Kamek/Bowser zones have loaded.
+  // { zone, respawn }, where `zone` exposes containsPoint(pos) (an
+  // ObstacleZone instance already does — see there) and `respawn` is the
+  // {x,y,z} to send the player back to. Checked in order, first match wins;
+  // falls back to spawnPoint if nothing matches. Called from main.js once
+  // the Kamek/Bowser zones have finished loading.
   setVoidFallZones(zones) {
     this.voidFallZones = zones || [];
   }
@@ -72,11 +77,14 @@ export default class EntityManager {
       }
     }
 
-    // Per-character stats: Luigi is faster/higher-jumping but slippery,
-    // Mario is precise and stops/turns quickly.
+    // Per-character stats: kept nearly identical between the two on purpose
+    // (max ~10% delta on moveSpeed/jumpVelocity) so picking a character is
+    // a cosmetic choice, not a gameplay advantage — Luigi is only slightly
+    // faster/higher-jumping than Mario, still noticeably more slippery
+    // (lower `control`) as his one distinguishing trait.
     let stats = {};
     if (characterName === "luigi") {
-      stats = { moveSpeed: 20, jumpVelocity: 22, control: 0.1 };
+      stats = { moveSpeed: 12, jumpVelocity: 19.5, control: 0.1 };
     } else {
       stats = { moveSpeed: 11, jumpVelocity: 18, control: 0.6 };
     }
@@ -109,6 +117,11 @@ export default class EntityManager {
     // like PLAYING — everything else (menus, pause, the win/game-over
     // screens themselves) stays frozen as before.
     if (ui && ui.gameState !== "PLAYING" && ui.gameState !== "ENDING") return;
+
+    // Frozen during Peach's cutscene dialogue (see PeachCutscene.js /
+    // main.js): gameState stays "ENDING" throughout it, so this extra check
+    // is what actually stops the player from walking around mid-dialogue.
+    if (ui && ui.dialogueActive) return;
 
     if (this.physicsEngine) {
       this.physicsEngine.update(delta);
@@ -157,25 +170,15 @@ export default class EntityManager {
         // is read here BEFORE it's overwritten below, so it still reflects
         // where the player actually fell from.
         let target = this.spawnPoint;
-        let music; // left undefined = whatever plays outside the zones
         for (const entry of this.voidFallZones) {
           if (entry.zone && entry.zone.containsPoint(this.player.position)) {
             target = entry.respawn;
-            music = entry.music;
             break;
           }
         }
 
         this.player.body.position.set(target.x, target.y, target.z);
         this.player.body.velocity.set(0, 0, 0);
-
-        // The music follows wherever the respawn actually left the player.
-        // Falling inside a boss zone keeps them in it (see above), so its
-        // battle theme keeps playing; a fall anywhere else lands back on
-        // the island, and playMusic() with no track named goes to the
-        // overworld theme. Every other way in or out of a zone is a warp
-        // star, handled by Decorations.onWarp (wired up in main.js).
-        if (audio && audio.playMusic) audio.playMusic(music);
       });
     }
 
@@ -186,6 +189,7 @@ export default class EntityManager {
         () => {
           if (audio && audio.playSFX) audio.playSFX("coin");
           if (ui && ui.addCoin) ui.addCoin();
+          if (this.onCoinCollected) this.onCoinCollected();
         },
         () => {
           if (audio && audio.playSFX) audio.playSFX("star");

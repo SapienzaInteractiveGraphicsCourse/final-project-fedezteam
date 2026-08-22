@@ -45,10 +45,41 @@ export default class UIManager {
     // changed — see showBossHealthBar.
     this.activeBossHpKey = null;
 
+    // Interaction prompt ("Premi E per ..."), quest HUD (Toad's 25-coin
+    // quest progress) and toast (brief quest feedback messages) — see
+    // js/interactions/. All optional in the DOM: every method below checks
+    // its element before touching it, so nothing breaks if index.html is
+    // ever loaded without these.
+    this.interactionPromptEl = document.getElementById("interaction-prompt");
+    this.questHudEl = document.getElementById("quest-hud");
+    this.toastEl = document.getElementById("toast");
+    this._toastTimer = null;
+
+    // Peach's ending dialogue (see PeachCutscene.js) and the final victory
+    // screen shown once it finishes.
+    this.dialogueBoxEl = document.getElementById("dialogue-box");
+    this.dialogueSpeakerEl = document.getElementById("dialogue-speaker");
+    this.dialogueTextEl = document.getElementById("dialogue-text");
+    this.dialogueHintEl = document.getElementById("dialogue-hint");
+    this.victoryFinaleScreen = document.getElementById("victory-finale-screen");
+    this.victoryFinaleMenuBtn = document.getElementById("victory-finale-menu-btn");
+    // True for the whole span of Peach's cutscene (from the E press that
+    // starts it to the last dialogue line) — EntityManager checks this to
+    // freeze the player, and main.js checks it to hand the camera over to
+    // PeachCutscene.updateCamera() instead of the normal follow-cam.
+    this.dialogueActive = false;
+
+    if (this.victoryFinaleMenuBtn) {
+      this.victoryFinaleMenuBtn.addEventListener("click", () => this.returnToMainMenu());
+    }
+
     this.gameState = "MENU_WELCOME";
     this.selectedCharacter = "mario";
     this.isPaused = false;
     this.audio = null;
+    // The name entered on the character-select screen (see _triggerStart)
+    // — reused by PeachCutscene to address the player by name.
+    this.heroName = "";
 
     this.coins = 0;
     this.lives = 4;
@@ -190,6 +221,14 @@ export default class UIManager {
     if (this.coinsCountEl) this.coinsCountEl.textContent = this.coins;
   }
 
+  // Deducts coins (used by Toad's quest turn-in: the 25 coins the player
+  // hands over are actually spent, not just "checked off" — see
+  // QuestManager.onToadInteract). Never goes below 0.
+  spendCoins(amount) {
+    this.coins = Math.max(0, this.coins - amount);
+    if (this.coinsCountEl) this.coinsCountEl.textContent = this.coins;
+  }
+
   /**
    * Shows the boss health bar for `key` (a stable id like "bowser"/"kamek",
    * used only to detect "is this already the active boss" — never shown to
@@ -242,6 +281,81 @@ export default class UIManager {
   // arena via showBossHealthBar doesn't need to rebuild them.
   hideBossHealthBar() {
     if (this.bossHpBar) this.bossHpBar.classList.add("hidden");
+  }
+
+  // --- INTERACTIONS (js/interactions/InteractionManager.js) ---
+
+  showInteractionPrompt(text) {
+    if (!this.interactionPromptEl) return;
+    this.interactionPromptEl.textContent = "";
+    const label = document.createElement("span");
+    label.textContent = text;
+    this.interactionPromptEl.appendChild(label);
+    this.interactionPromptEl.classList.remove("hidden");
+  }
+
+  hideInteractionPrompt() {
+    if (this.interactionPromptEl) this.interactionPromptEl.classList.add("hidden");
+  }
+
+  // --- QUEST HUD (js/interactions/QuestManager.js) ---
+
+  showQuestHud(text) {
+    if (!this.questHudEl) return;
+    this.questHudEl.textContent = text;
+    this.questHudEl.classList.remove("hidden");
+  }
+
+  hideQuestHud() {
+    if (this.questHudEl) this.questHudEl.classList.add("hidden");
+  }
+
+  // Brief feedback message (quest assigned/updated/completed, ...), shown
+  // for `duration` ms then auto-hidden. Restarts its own timer on every
+  // call, so a second toast while one is already showing just replaces the
+  // text and keeps the clock from there instead of stacking/flickering.
+  showToast(text, duration = 3200) {
+    if (!this.toastEl) return;
+    this.toastEl.textContent = text;
+    this.toastEl.classList.remove("hidden");
+
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      this.toastEl.classList.add("hidden");
+      this._toastTimer = null;
+    }, duration);
+  }
+
+  // --- PEACH'S DIALOGUE (js/interactions/PeachCutscene.js) ---
+
+  // `isLastLine` swaps the "premi Space/E per continuare" hint for a
+  // clearer "premi Space/E per concludere" on the final line.
+  showDialogue(speaker, text, isLastLine = false) {
+    if (this.dialogueSpeakerEl) this.dialogueSpeakerEl.textContent = speaker;
+    if (this.dialogueTextEl) this.dialogueTextEl.textContent = text;
+    if (this.dialogueHintEl) {
+      this.dialogueHintEl.textContent = isLastLine
+        ? "Premi E per concludere"
+        : "Premi E per continuare";
+    }
+    if (this.dialogueBoxEl) this.dialogueBoxEl.classList.remove("hidden");
+
+    // Movement/jump would otherwise fight for the same keys while a
+    // dialogue line is up.
+    this.hideInteractionPrompt();
+  }
+
+  hideDialogue() {
+    if (this.dialogueBoxEl) this.dialogueBoxEl.classList.add("hidden");
+  }
+
+  // The final "you win" screen shown once Peach's dialogue finishes — a
+  // separate screen from showWin()'s star-collection win screen: that one
+  // leads INTO the ending zone, this one is what closes it out.
+  showVictoryFinale() {
+    if (this.hud) this.hud.style.display = "none";
+    if (this.pauseBtn) this.pauseBtn.style.display = "none";
+    if (this.victoryFinaleScreen) this.victoryFinaleScreen.classList.remove("hidden");
   }
 
   addStar(amount = 1, audio = null) {
@@ -358,6 +472,8 @@ export default class UIManager {
     // Reset the UI screens.
     if (this.gameOverScreen) this.gameOverScreen.classList.add("hidden");
     if (this.winScreen) this.winScreen.classList.add("hidden");
+    if (this.victoryFinaleScreen) this.victoryFinaleScreen.classList.add("hidden");
+    if (this.questHudEl) this.questHudEl.classList.add("hidden");
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "block";
 
@@ -404,6 +520,7 @@ export default class UIManager {
     const defaultName = this.selectedCharacter === "mario" ? "MARIO" : "LUIGI";
     const finalName = enteredName !== "" ? enteredName : defaultName;
 
+    this.heroName = finalName;
     this.hudHeroName.textContent = finalName;
     if (this.hudCharIcon) {
       this.hudCharIcon.src =

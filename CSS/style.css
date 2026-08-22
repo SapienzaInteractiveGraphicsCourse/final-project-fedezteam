@@ -297,18 +297,18 @@ html, body {
    UIManager.showBossHealthBar/hideBossHealthBar, pilotate da main.js). */
 .boss-hp-bar {
   position: absolute;
-  top: 20px;
+  top: 24px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   background: rgba(0, 0, 0, 0.75);
-  padding: 10px 20px;
-  border-radius: 10px;
-  border: 3px solid #fff;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  padding: 16px 32px;
+  border-radius: 14px;
+  border: 4px solid #fff;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
   z-index: 90;
   pointer-events: none;
 }
@@ -319,23 +319,23 @@ html, body {
 
 .boss-hp-name {
   color: #fff;
-  font-size: 0.85rem;
-  letter-spacing: 1px;
-  text-shadow: 2px 2px 0px #000;
+  font-size: 1.3rem;
+  letter-spacing: 2px;
+  text-shadow: 3px 3px 0px #000;
 }
 
 .boss-hp-blocks {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .boss-hp-block {
-  width: 22px;
-  height: 16px;
+  width: 40px;
+  height: 28px;
   background: #fbd000;
-  border: 2px solid #000;
-  border-radius: 2px;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+  border: 3px solid #000;
+  border-radius: 3px;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25);
   transition: background 0.15s ease;
 }
 
@@ -815,4 +815,120 @@ position: absolute;
   margin-top: 15px;
   font-size: 0.8rem;
   text-shadow: 2px 2px 0 #000;
+}
+
+/* --- INTERACTIONS (js/interactions/) --- */
+
+/* Toad's 25-coin quest progress, docked under the boss HP bar's spot at
+   top-center so it never overlaps the star/coin counters at the corners. */
+.quest-hud {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: #fbd000;
+  padding: 10px 22px;
+  border-radius: 12px;
+  border: 3px solid #fff;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0 #000;
+  z-index: 88;
+  pointer-events: none;
+}
+
+.quest-hud.hidden {
+  display: none !important;
+}
+
+/* "Premi E per ..." prompt, bottom-center — out of the way of the
+   bottom-left/bottom-right HUD stat boxes. */
+.interaction-prompt {
+  position: absolute;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 3px solid #fbd000;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0 #000;
+  z-index: 95;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.interaction-prompt.hidden {
+  display: none !important;
+}
+
+/* Brief quest feedback toast, top-center — sits below the quest HUD/boss
+   HP bar rather than on top of them. */
+.toast {
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: #43b047;
+  padding: 12px 26px;
+  border-radius: 12px;
+  border: 3px solid #43b047;
+  font-size: 0.7rem;
+  letter-spacing: 0.5px;
+  text-shadow: 2px 2px 0 #000;
+  max-width: 70vw;
+  text-align: center;
+  z-index: 96;
+  pointer-events: none;
+}
+
+.toast.hidden {
+  display: none !important;
+}
+
+/* Peach's ending speech bubble, anchored to the left side of the frame per
+   spec (the fixed cinematic camera keeps Peach herself off to the right). */
+.dialogue-box {
+  position: absolute;
+  left: 5vw;
+  bottom: 12vh;
+  width: min(480px, 42vw);
+  background: rgba(0, 0, 0, 0.85);
+  border: 4px solid #fbd000;
+  border-radius: 16px;
+  padding: 22px 26px;
+  color: #fff;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.dialogue-box.hidden {
+  display: none !important;
+}
+
+.dialogue-speaker {
+  color: #ff6fae;
+  font-size: 0.9rem;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.dialogue-text {
+  font-size: 0.75rem;
+  line-height: 1.7;
+  letter-spacing: 0.5px;
+}
+
+.dialogue-hint {
+  margin-top: 16px;
+  font-size: 0.55rem;
+  color: #fbd000;
+  opacity: 0.85;
 }

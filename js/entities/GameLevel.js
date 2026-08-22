@@ -36,6 +36,7 @@ export default class GameLevel {
 
     this.playerSpawn = null;
     this.yoshiSpawn = null;
+    this.npcs = [];
 
     this.levelLoader = new LevelLoader(this.scene, this.physicsWorld, this.loader);
     this.collectibles = new Collectibles(this.scene, this.physicsWorld, this.loader);
@@ -60,28 +61,67 @@ export default class GameLevel {
 
     const mainIslandSize = platformsData[0]?.size.x || 60;
 
-    await this.decorations.spawnFieldProps(mainIslandSize, (coinMesh) =>
-      this.collectibles.registerCoin(coinMesh),
+    // Horizontal footprint of every HillBlock platform (block_grass_large/
+    // hill/hill_step — see HillBlock.js), computed with the exact same
+    // half-extent formula HillBlock uses for its own collider. Read
+    // straight from the raw level JSON here (available immediately after
+    // loadLevelData above) rather than waiting for buildBuildingsAndNPCs,
+    // which doesn't actually build them until further down — passed to
+    // spawnFieldProps so its random tree/flower/coin scatter can avoid
+    // landing inside one.
+    const hillFootprints = (levelData?.hills || []).map((h) => {
+      const sX = h.scaleX !== undefined ? h.scaleX : (h.scale ?? 1);
+      const sZ = h.scaleZ !== undefined ? h.scaleZ : (h.scale ?? 1);
+      return { x: h.x || 0, z: h.z || 0, halfX: 0.98 * sX, halfZ: 0.98 * sZ };
+    });
+
+    await this.decorations.spawnFieldProps(
+      mainIslandSize,
+      (coinMesh) => this.collectibles.registerCoin(coinMesh),
+      hillFootprints,
     );
 
-    // Curated coin trail guiding the player up the hill staircase in
-    // level1.json ("Scalino 1/2/3", around x=30..50, z=20). Hand-placed to
-    // match that specific level layout, on top of the random field scatter.
+    // Final HillClimb layout: exactly 3 three-platform staircases
+    // (level1.json's "hills"). "Scalino" is HillClimb Standard, "Passerella
+    // Est" is HillClimb Yoshi, "Passerella Ovest" is coin-trail-only. The
+    // old 2-platform staircases ("Base Bassa"/"Cima Alta",
+    // "Gradino Nord"/"Altopiano Gigante Nord") and "Passerella Sud" were
+    // removed entirely, along with their coin trails, below.
+    //
+    // STAR REBALANCE: ui.maxStars (5, the win condition) is made up of
+    // exactly 2 HillClimb stars (one here, one on Passerella Est below) +
+    // Toad's quest reward + Kamek's + Bowser's (all three spawned
+    // dynamically — see main.js). Passerella Est's old second/lower star
+    // and every OTHER star that used to be scattered around the map were
+    // removed from level1.json's "stars" array — except the red planet's
+    // own star (see below), kept as a findable bonus beyond the 5 needed
+    // to win, same as the extra ones the boss zones drop.
+
+    // "Scalino 1/2/3" (level1.json, x=30..50, z=20) — HillClimb Standard,
+    // the "usual" platform, ends at the normal-height Power Star (50, 8, 20).
+    //
+    // BUG FIX (last coin overlapping the star): the trail used to end
+    // exactly at (50, 7.5, 20), which is basically on top of the star at
+    // (50, 8, 20) in level1.json — pulled back to (47, 6.8, 20), a step
+    // short of the star instead of coinciding with it.
     await this.decorations.spawnCoinTrail(
       [
         { x: 25, y: 2.5, z: 20 },
         { x: 30, y: 3.5, z: 20 },
         { x: 40, y: 5.0, z: 20 },
-        { x: 50, y: 7.5, z: 20 },
+        { x: 47, y: 6.8, z: 20 },
       ],
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
       { spacing: 2, arcHeight: 0.4 },
     );
 
-    // Same idea as above, one coin trail per new hill staircase added for
-    // the "big package" map pass (see level1.json: "Passerella Est/Ovest/
-    // Sud"). Heights are hand-tuned to roughly follow each staircase's
-    // step tops, ending near that staircase's star.
+    // "Passerella Est 1/2/3" (level1.json, x=70..96, z=70) — HillClimb
+    // Yoshi: a single Power Star at (96, 15, 70), ~7.5 units above the top
+    // platform (y≈7.5) — out of reach of a normal jump for either
+    // character, only reachable via Yoshi's boosted jump (see
+    // Player.YOSHI_JUMP_BOOST). Originally at y=20 with a second, lower
+    // duplicate star also on this platform; per the star-count rebalance
+    // both were replaced by this single star, lowered by 5 units.
     await this.decorations.spawnCoinTrail(
       [
         { x: 60, y: 2.3, z: 70 },
@@ -92,6 +132,9 @@ export default class GameLevel {
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
       { spacing: 2, arcHeight: 0.4 },
     );
+
+    // "Passerella Ovest 1/2/3" (level1.json, x=-70..-96, z=45) — plain
+    // coin-trail-only staircase, no star.
     await this.decorations.spawnCoinTrail(
       [
         { x: -60, y: 2.3, z: 45 },
@@ -102,21 +145,15 @@ export default class GameLevel {
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
       { spacing: 2, arcHeight: 0.4 },
     );
-    await this.decorations.spawnCoinTrail(
-      [
-        { x: -15, y: 2.3, z: 80 },
-        { x: -15, y: 3.5, z: 90 },
-        { x: -15, y: 4.9, z: 103 },
-        { x: -15, y: 7.5, z: 116 },
-      ],
-      (coinMesh) => this.collectibles.registerCoin(coinMesh),
-      { spacing: 2, arcHeight: 0.4 },
-    );
 
     await this.collectibles.spawnStars(levelData?.stars);
     await this.collectibles.spawnMushrooms(levelData?.mushrooms);
     await this.collectibles.spawnQuestionMarkBlocks(levelData?.questionMarkBlocks);
-    await this.levelLoader.buildBuildingsAndNPCs(
+
+    // Kept on the instance (not just awaited-and-discarded) so main.js can
+    // look up NPCs by type and register their interactions — e.g. Toad's
+    // quest dialogue (see js/interactions/QuestManager.js).
+    this.npcs = await this.levelLoader.buildBuildingsAndNPCs(
       levelData?.buildings,
       levelData?.npcs,
       levelData?.hills,
@@ -124,8 +161,8 @@ export default class GameLevel {
     this.decorations.decorateStructures(levelData?.buildings);
 
     await this.decorations.spawnGrassField(mainIslandSize);
-    this.decorations.spawnRocks(mainIslandSize);
-    this.decorations.spawnBushes(mainIslandSize);
+    this.decorations.spawnRocks(mainIslandSize, undefined, hillFootprints);
+    this.decorations.spawnBushes(mainIslandSize, undefined, hillFootprints);
 
     // Small decorative ponds, hand-placed to stay clear of buildings, hills
     // and staircases. Purely visual (flat water disc, no collider/depth).
@@ -153,8 +190,11 @@ export default class GameLevel {
       (coinMesh) => this.collectibles.registerCoin(coinMesh),
     );
 
-    // One collectible star on the red planet too, a short walk from where
-    // the "sky" warp star lands the player (see spawnWarpStars below).
+    // One extra collectible star on the red planet, a short walk from
+    // where the "sky" warp star lands the player (see spawnWarpStars
+    // below) — a bonus findable star on top of the 5 that make up
+    // ui.maxStars (2 HillClimb + Toad's quest reward + Kamek + Bowser),
+    // same as the extra ones the boss zones drop.
     await this.collectibles.spawnStars([{ x: -254, y: 214, z: 10 }]);
 
     // Mario Galaxy-style warp stars. "sky" sends the player to the red

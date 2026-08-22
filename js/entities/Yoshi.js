@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { enableShadows } from "../utils/shadows.js";
+import { COLLISION_GROUPS } from "../physics/PhysicsEngine.js";
 
 export default class Yoshi {
   constructor(mesh = null, physicsEngine = null) {
@@ -10,6 +11,12 @@ export default class Yoshi {
     this.body = null;
     this.radius = 1; // Radius of the spherical collision body.
 
+    // Correction if Yoshi's own model turns out to face a different
+    // "forward" than the rider once mounted rotation-following is actually
+    // seen running (see update()'s isRidden branch) — 0 (no correction)
+    // until tuned.
+    this.modelOffset = 0;
+
     if (this.mesh) {
       enableShadows(this.mesh);
     }
@@ -18,6 +25,26 @@ export default class Yoshi {
   setMesh(mesh) {
     this.mesh = mesh;
     enableShadows(this.mesh);
+  }
+
+  // Mount/dismount, driven by the "Premi E" interaction registered in
+  // main.js (see js/interactions/InteractionManager.js). update() above
+  // already knows how to follow the player while `isRidden` is true —
+  // these just flip that flag; Player.js's own mountedOnYoshi flag (set
+  // alongside these, from main.js) is what actually applies the boosted
+  // jump while riding.
+  //
+  // Yoshi's body STAYS a normal DYNAMIC body across mount/dismount (see
+  // update()'s isRidden branch): ground contact while ridden is meant to
+  // be Yoshi's own real collision with the terrain, not a value copied
+  // from the player, so there's no special physics mode to switch into
+  // here anymore — mount()/dismount() are just the isRidden flag flip.
+  mount() {
+    this.isRidden = true;
+  }
+
+  dismount() {
+    this.isRidden = false;
   }
 
   spawn(x, y, z) {
@@ -40,6 +67,14 @@ export default class Yoshi {
         fixedRotation: true
       });
 
+      // BUG FIX (instant fall on mount): excludes the player from Yoshi's
+      // own body — see COLLISION_GROUPS.YOSHI's comment in PhysicsEngine.js.
+      // Applies whether ridden or not: even standing next to the player
+      // un-mounted, there's no gameplay reason for the two to physically
+      // push each other around.
+      this.body.collisionFilterGroup = COLLISION_GROUPS.YOSHI;
+      this.body.collisionFilterMask = -1 & ~COLLISION_GROUPS.PLAYER;
+
       this.physicsEngine.world.addBody(this.body);
     }
   }
@@ -50,14 +85,60 @@ export default class Yoshi {
     const player = playerRef || (inputOrPlayer && inputOrPlayer.mesh ? inputOrPlayer : null);
 
     if (this.isRidden && player) {
-      // While being ridden, Yoshi is attached directly to the player.
-      this.mesh.position.copy(player.position);
-      if (this.body) {
-        this.body.position.set(
-          player.position.x,
-          player.position.y + this.radius, // Small offset to avoid sinking into the ground.
-          player.position.z
+      // While being ridden, ground contact is YOSHI's, for real — his own
+      // DYNAMIC body keeps falling under normal gravity and colliding with
+      // the actual terrain every physics step, exactly like when he's not
+      // ridden. Only X/Z are force-followed onto the player's own position
+      // here (so he goes where the player steers); Y is left alone for
+      // cannon-es itself to resolve via that real collision, so if the
+      // player's own visual offset (Player.MOUNT_RIDE_HEIGHT) is ever
+      // changed, Yoshi simply doesn't move — he's anchored to the ground he
+      // is actually standing on, not derived from the player at all.
+      //
+      // The player's own jump (Player.js sets his body.velocity.y, boosted
+      // by YOSHI_JUMP_BOOST while mounted) is mirrored onto Yoshi's
+      // velocity.y here so that jump impulse actually launches Yoshi
+      // himself under real physics — otherwise pressing Space while
+      // mounted would do nothing visible, since it's Yoshi's own height
+      // that ends up on screen.
+      if (player.body && this.body) {
+        this.body.position.x = player.body.position.x;
+        this.body.position.z = player.body.position.z;
+        this.body.velocity.y = player.body.velocity.y;
+
+        this.mesh.position.set(
+          this.body.position.x,
+          this.body.position.y - this.radius,
+          this.body.position.z,
         );
+      } else if (this.body) {
+        // Fallback if the player has no physics body yet for some reason.
+        this.mesh.position.set(
+          this.body.position.x,
+          this.body.position.y - this.radius,
+          this.body.position.z,
+        );
+      }
+
+      // The RIDER's mesh, in turn, follows YOSHI's resulting height (plus
+      // the fixed "seat" offset) instead of the other way around — see
+      // Player.js's MOUNT_RIDE_HEIGHT. Overwritten here, after
+      // Player.update() already ran this frame (see EntityManager.update's
+      // call order), so this is the one place that actually decides where
+      // the rider is drawn while mounted.
+      if (player.mesh) {
+        player.mesh.position.x = this.mesh.position.x;
+        player.mesh.position.z = this.mesh.position.z;
+        player.mesh.position.y = this.mesh.position.y + (player.MOUNT_RIDE_HEIGHT || 0);
+      }
+
+      // Follow the rider's facing so Yoshi turns together with the player
+      // instead of staying frozen at whatever angle he hatched facing.
+      // this.modelOffset lets that be corrected in one place if Yoshi's own
+      // model turns out to face a different "forward" than Mario/Luigi's
+      // once this is actually seen running (can't be verified from here).
+      if (player.mesh) {
+        this.mesh.rotation.y = player.mesh.rotation.y + (this.modelOffset || 0);
       }
     } else if (this.body) {
       // Sync the mesh to the physics body, subtracting the radius so the

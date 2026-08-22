@@ -26,6 +26,16 @@ export const COLLISION_GROUPS = {
   GROUND: 1,
   PLAYER: 2,
   ENEMY: 4,
+  // BUG FIX (instant fall the moment Yoshi is mounted): while ridden,
+  // Yoshi.js repositions his own physics body to sit right on top of the
+  // player's every single frame (see Yoshi.update()'s isRidden branch) —
+  // with no filter, that's two same-size dynamic/kinematic spheres forced
+  // into deep, persistent overlap, and cannon-es' contact solver reacted by
+  // shoving the player's body away (through the floor, off the map, ...)
+  // to resolve it. Excluding this group from PLAYER's mask (see
+  // Player.js's collisionFilterMask) makes that pair never produce a real
+  // physics collision at all, exactly like PLAYER/ENEMY above.
+  YOSHI: 8,
 };
 
 /**

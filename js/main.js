@@ -6,7 +6,7 @@ import GameLoop from "./core/GameLoop.js";
 import InputManager from "./core/InputManager.js";
 import UIManager from "./ui/UIManager.js";
 import PhysicsEngine from "./physics/PhysicsEngine.js";
-import AudioManager, { OVERWORLD_MUSIC } from "./core/Audio/AudioManager.js";
+import AudioManager from "./core/Audio/AudioManager.js";
 import { initGameAudio } from "./core/Audio/soundConfig.js";
 import { getStoredMuteState } from "./utils/storage.js";
 import Yoshi from "./entities/Yoshi.js";
@@ -17,6 +17,10 @@ import ObstacleZone from "./entities/Level/ObstacleZone.js";
 import EndingZone from "./entities/Level/EndingZone.js";
 import GameLevel from "./entities/GameLevel.js";
 import EntityManager from "./entities/EntityManager.js";
+import InteractionManager from "./interactions/InteractionManager.js";
+import QuestManager from "./interactions/QuestManager.js";
+import PeachCutscene from "./interactions/PeachCutscene.js";
+import { MAP_MODELS } from "./core/Assets/manifest.js";
 import * as THREE from "three";
 import CannonDebugger from "https://cdn.jsdelivr.net/npm/cannon-es-debugger@1.0.0/+esm";
 import Stats from "three/addons/libs/stats.module.js";
@@ -432,6 +436,11 @@ const entityManager = new EntityManager(
   physics,
   renderer.dirLight,
 );
+
+// Toad's 25-coin quest listens on every coin pickup, whichever quest stage
+// it's actually in — see QuestManager.onCoinCollected for the no-op guard.
+entityManager.onCoinCollected = () => questManager.onCoinCollected();
+
 let mapEntity = null;
 let kamekZone = null;
 let bowserZone = null;
@@ -443,10 +452,24 @@ let endingZone = null;
 let kamek = null;
 let bowser = null;
 
+// Yoshi's egg -> mount mechanic (see js/interactions/) — hoisted the same
+// way as kamek/bowser above, since they're actually created inside the
+// async asset-loading callback further down but need to be reachable from
+// updateGame()'s per-frame loop.
+let yoshiEggMesh = null;
+let yoshiEntity = null;
+let peachCutscene = null;
+
 const ui = new UIManager();
 const audio = new AudioManager();
 initGameAudio(audio);
 ui.setAudio(audio);
+
+// Owns every "walk up and press E" interaction in the game: Toad's quest
+// dialogue, hatching Yoshi's egg, mounting/dismounting Yoshi, and talking
+// to Peach at the end — see js/interactions/.
+const interactions = new InteractionManager(ui);
+const questManager = new QuestManager(ui);
 
 // Restore the mute state saved from a previous session, if any.
 audio.setMute(getStoredMuteState());
@@ -458,17 +481,6 @@ let menuCameraAngle = 0;
 
 // Raw GLTF models, loaded once and reused whenever a character is spawned.
 const rawModels = { mario: null, luigi: null };
-
-// Which looping track belongs to which place. Keyed by the warp stars'
-// `target` (see Decorations.spawnWarpStars) because those stars are the only
-// way into or out of a boss zone, which makes stepping on one exactly the
-// moment the player changes place. Anything not listed here — going back to
-// spawn, hopping to the sky planet — is "not in a boss zone", i.e. the
-// overworld theme.
-const ZONE_MUSIC = {
-  kamek_zone: "kamek_battle",
-  bowser_zone: "bowser_battle",
-};
 
 // 3. UI EVENT WIRING
 
@@ -590,85 +602,6 @@ function damagePlayer() {
   if (!isGameOver && audio && audio.playSFX) audio.playSFX("damage");
 }
 
-/**
- * Lays out what a defeated boss leaves behind: the collectible star, and the
- * warp star that takes the player home.
- *
- * Deliberately NOT on the spot where the boss died. The player is standing
- * right there at that moment, and a star is picked up from 2.8 units away,
- * so the reward was being swept up in the same instant the fight ended —
- * no pause, no walk over to it, half the time without even seeing it.
- *
- * Both pieces are positioned relative to the ARENA rather than to the body,
- * which is what keeps them on solid floor however the fight ended, and puts
- * them on opposite sides of it, far enough apart that collecting the star
- * can't also trip the warp star's teleport trigger.
- */
-function dropBossReward(zone, boss) {
-  const death = boss.mesh ? boss.mesh.position : null;
-  const center = zone?.arenaCenter;
-
-  // Height comes from the level file, not from wherever the boss happened
-  // to be on its last frame: a boss that dies in mid-air would otherwise
-  // leave its star floating out of reach.
-  const floorY = zone?.bossSpawn?.y ?? (death ? death.y : 10);
-  const dropX = death ? death.x : (zone?.bossSpawn?.x ?? 0);
-  const dropZ = death ? death.z : (zone?.bossSpawn?.z ?? 0);
-
-  // Everything is measured FROM the body, along the line back toward the
-  // middle of the arena. Toward the middle is the one direction that can't
-  // run out of floor — the arena is a disc and the boss died somewhere
-  // inside it — so both rewards are guaranteed to land on solid ground
-  // however close to the rim the fight ended.
-  //
-  // (Laying them out around the arena's centre instead was the obvious
-  // first idea and it's wrong: a boss that dies at roughly the distance
-  // the star is placed at leaves the star right on top of the body, which
-  // is the exact thing this is meant to avoid.)
-  let ux = 1;
-  let uz = 0;
-  if (center && death) {
-    const dx = center.x - death.x;
-    const dz = center.z - death.z;
-    const len = Math.hypot(dx, dz);
-    if (len > 0.001) {
-      ux = dx / len;
-      uz = dz / len;
-    }
-  }
-
-  // Fixed distances, so the layout is the same every fight: the star a
-  // short walk in from the body, the warp star off to one side of it.
-  // STAR_STEP is comfortably past the 2.8-unit pickup radius (the reward
-  // used to be collected the instant the boss died, without the player
-  // even seeing it), and WARP_SIDE keeps the way home clear of both the
-  // body and the star, so walking over to collect it can't also trip the
-  // warp's 2.5-unit teleport trigger.
-  const STAR_STEP = 9;
-  const WARP_SIDE = 11;
-
-  const starX = dropX + ux * STAR_STEP;
-  const starZ = dropZ + uz * STAR_STEP;
-
-  if (mapEntity?.collectibles) {
-    mapEntity.collectibles.spawnStars([{ x: starX, y: floorY + 3, z: starZ }]);
-  }
-  if (mapEntity?.decorations) {
-    // Bright yellow (was plain white) so a boss-reward warp star reads as
-    // distinct from the decorative ones placed at level load.
-    mapEntity.decorations.spawnWarpStars([
-      {
-        // Perpendicular to the line above: (-uz, ux).
-        x: starX - uz * WARP_SIDE,
-        y: floorY + 5,
-        z: starZ + ux * WARP_SIDE,
-        color: 0xffee00,
-        target: "spawn",
-      },
-    ]);
-  }
-}
-
 // 4. GAME LOOP
 
 function updateGame(delta) {
@@ -733,7 +666,55 @@ function updateGame(delta) {
     }
   }
 
-  cameraManager.update(entityManager.player, input, delta);
+  // Boss zone music: kamek_battle/bowser_battle take over the BGM for the
+  // WHOLE obstacle course (ObstacleZone.containsPoint — approach platforms
+  // included, not just the arena itself, unlike the health bar above), back
+  // to the overworld theme as soon as the player leaves either. Gated on
+  // gameState === "PLAYING" so it can't fight the game-over/win jingle —
+  // updateGame() itself isn't guarded on that (unlike the MENU_* early
+  // return above), so without this a still-running per-frame call would
+  // restart the zone track right after showGameOver()/showWin() stopped it.
+  if (ui.gameState === "PLAYING") {
+    const playerPos = entityManager.player?.mesh?.position;
+    if (kamekZone && kamekZone.containsPoint(playerPos)) {
+      audio.playMusic("kamek_battle");
+    } else if (bowserZone && bowserZone.containsPoint(playerPos)) {
+      audio.playMusic("bowser_battle");
+    } else {
+      audio.playMusic();
+    }
+  }
+
+  // "Premi E per ..." interactions (Toad's quest, Yoshi's egg/mount,
+  // Peach's dialogue trigger) — suppressed while a dialogue line is
+  // already up, both so the prompt doesn't fight the speech bubble for
+  // screen space and so E doesn't simultaneously advance a line AND
+  // re-trigger whatever's underneath it.
+  if (!ui.dialogueActive) {
+    interactions.update(entityManager.player.mesh.position, input);
+  } else {
+    ui.hideInteractionPrompt();
+  }
+
+  // Dialogue advance (Peach's cutscene or Toad's quest lines): E ONLY, per
+  // spec — Space is deliberately not read here at all, so it stays free
+  // for jumping the instant a dialogue box closes. While Peach's cutscene
+  // is active the camera is also a fixed cinematic shot on her
+  // (PeachCutscene.updateCamera) instead of the normal follow-cam.
+  if (ui.dialogueActive && input.consumeJustPressed("e")) {
+    if (peachCutscene && peachCutscene.active) {
+      peachCutscene.advance();
+    } else if (questManager.dialogueOpen) {
+      questManager.closeToadDialogue();
+    }
+  }
+
+  if (peachCutscene && peachCutscene.active) {
+    peachCutscene.updateCamera();
+  } else {
+    cameraManager.update(entityManager.player, input, delta);
+  }
+
   if (showColliders) cannonDebugger.update();
 }
 
@@ -764,28 +745,115 @@ initGameModels(assetLoader)
 
     entityManager.setMap(mapEntity);
 
+    // Toad's quest dialogue: looked up by type from the NPCs GameLevel just
+    // spawned (see LevelLoader.buildBuildingsAndNPCs / NPC.js — this is
+    // also where Toad's previously-missing collision comes from). Skipped
+    // gracefully (console warning only) if level1.json ever stops defining
+    // a "toad" NPC.
+    const toadNpc = mapEntity.npcs?.find((n) => n.type === "toad");
+    if (toadNpc) {
+      questManager.onRewardStar = () => {
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([
+            { x: toadNpc.position.x + 3, y: toadNpc.position.y + 2, z: toadNpc.position.z },
+          ]);
+        }
+      };
+
+      interactions.register({
+        position: toadNpc.position,
+        radius: 3.5,
+        prompt: () => questManager.getToadPrompt(),
+        onInteract: () => questManager.onToadInteract(),
+      });
+    } else {
+      console.warn('[main] No "toad" NPC found in level1.json — Toad\'s quest is not registered.');
+    }
+
+    // Yoshi's egg -> mount mechanic: Yoshi starts hatched inside an egg at
+    // the level's yoshiSpawn point. Pressing E hatches it (no animation, per
+    // spec) into the rideable Yoshi from before; pressing E on Yoshi
+    // himself afterward mounts/dismounts (see Yoshi.mount()/dismount() and
+    // Player.setMountedOnYoshi for the boosted jump while riding).
+    if (mapEntity.yoshiSpawn && assets.yoshi) {
+      const ySpawn = mapEntity.yoshiSpawn;
+
+      try {
+        const eggGltf = await new GLTFLoader().loadAsync(MAP_MODELS.yoshiEgg);
+        yoshiEggMesh = eggGltf.scene;
+
+        // Measure-then-scale to a sensible in-world size, same recipe used
+        // throughout the level (see EndingZone._placeModel) rather than
+        // trusting a hardcoded scale on a model whose native size is
+        // unknown here.
+        yoshiEggMesh.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(yoshiEggMesh);
+        const height = box.max.y - box.min.y || 1;
+        const targetHeight = 2.2;
+        yoshiEggMesh.scale.setScalar(targetHeight / height);
+        yoshiEggMesh.updateMatrixWorld(true);
+        const scaledBox = new THREE.Box3().setFromObject(yoshiEggMesh);
+
+        yoshiEggMesh.position.set(ySpawn.x, ySpawn.y - scaledBox.min.y, ySpawn.z);
+        yoshiEggMesh.traverse((c) => {
+          if (c.isMesh) {
+            c.castShadow = true;
+            c.receiveShadow = true;
+          }
+        });
+        renderer.scene.add(yoshiEggMesh);
+
+        const eggInteractable = interactions.register({
+          position: yoshiEggMesh.position,
+          radius: 3,
+          prompt: "Premi E per schiudere l'uovo",
+          onInteract: () => {
+            if (!yoshiEggMesh) return;
+
+            renderer.scene.remove(yoshiEggMesh);
+            interactions.unregister(eggInteractable);
+            yoshiEggMesh = null;
+
+            yoshiEntity = new Yoshi(assets.yoshi, physics);
+            yoshiEntity.spawn(ySpawn.x, ySpawn.y, ySpawn.z);
+            entityManager.setYoshi(yoshiEntity);
+
+            interactions.register({
+              // Live reference, not a copy: once mounted, Yoshi.update()
+              // follows the player every frame, so this keeps tracking him
+              // automatically without re-registering.
+              position: yoshiEntity.mesh.position,
+              radius: 3,
+              prompt: () =>
+                yoshiEntity.isRidden ? "Premi E per scendere da Yoshi" : "Premi E per salire su Yoshi",
+              onInteract: () => {
+                if (yoshiEntity.isRidden) {
+                  yoshiEntity.dismount();
+                  entityManager.player?.setMountedOnYoshi(false);
+                } else {
+                  yoshiEntity.mount();
+                  entityManager.player?.setMountedOnYoshi(true);
+                }
+              },
+            });
+
+            if (audio && audio.playSFX) audio.playSFX("star");
+          },
+        });
+      } catch (e) {
+        console.warn("[main] Could not load the Yoshi egg model — falling back to spawning Yoshi directly.", e);
+        yoshiEntity = new Yoshi(assets.yoshi, physics);
+        yoshiEntity.spawn(ySpawn.x, ySpawn.y, ySpawn.z);
+        entityManager.setYoshi(yoshiEntity);
+      }
+    }
+
     // Classic void-fall respawn point for the main map (level1.json): if
     // this is the only match (see setVoidFallZones below, for the two boss
     // zones), falling into the void anywhere on the main island sends the
     // player back to the game's actual starting point instead of a
     // hardcoded (0,2,0) that could drift out of sync with the level file.
     entityManager.setSpawnPoint(mapEntity.playerSpawn);
-
-    // Swap the background music whenever a warp star moves the player.
-    if (mapEntity.decorations) {
-      mapEntity.decorations.onWarp = (target) => {
-        if (audio && audio.playMusic) {
-          audio.playMusic(ZONE_MUSIC[target] || OVERWORLD_MUSIC);
-        }
-      };
-    }
-
-    if (mapEntity.yoshiSpawn) {
-      const ySpawn = mapEntity.yoshiSpawn;
-      const yoshiEntity = new Yoshi(assets.yoshi, physics);
-      yoshiEntity.spawn(ySpawn.x, ySpawn.y, ySpawn.z);
-      entityManager.setYoshi(yoshiEntity);
-    }
 
     // Enemies. Loaded separately from the character models (see
     // assetConfig.initEnemyModels) since they aren't part of CHARACTER_MODELS;
@@ -840,14 +908,52 @@ initGameModels(assetLoader)
         damagePlayer();
       };
       kamek.onDefeated = () => {
-        // A real star to walk over and collect (not an instant grant), plus
-        // a warp star to head back to spawn — same "poke the level's
-        // existing systems from outside, after the event" pattern used
-        // everywhere else for this kind of thing (EntityManager's void-fall
-        // respawn, Enemy's stomp bounce). kamek.mesh stays valid after
-        // _defeat() (only removed from the scene graph, never nulled out),
-        // so its last position is still readable inside dropBossReward.
-        dropBossReward(kamekZone, kamek);
+        questManager.onKamekDefeated();
+
+        // A real star to walk over and collect (not an instant grant),
+        // plus a warp star right next to it to head back to spawn — same
+        // "poke the level's existing systems from outside, after the
+        // event" pattern used everywhere else for this kind of thing
+        // (EntityManager's void-fall respawn, Enemy's stomp bounce).
+        //
+        // BUG FIX (instant/accidental pickup): the drop point used to be
+        // wherever kamek.mesh last stood at the moment of the final stomp —
+        // which, since a stomp only lands at close range, could be right
+        // under (or one step from) the player, granting the star/warp
+        // instantly instead of as something to walk over. Anchored to the
+        // arena's own fixed center instead (kamekZone.arenaCenter — see
+        // ObstacleZone.load), independent of where the fight happened to
+        // end, with a fallback to bossSpawn only if the zone had no arena.
+        const center = kamekZone.arenaCenter;
+        let dropX = center ? center.x : (kamekZone.bossSpawn?.x ?? 320);
+        let dropY = (center ? center.y : (kamekZone.bossSpawn?.y ?? 10)) + 1;
+        let dropZ = center ? center.z : (kamekZone.bossSpawn?.z ?? 260);
+
+        // Extra safety net on top of the fixed arena-center anchor above:
+        // nudge the drop point away if it still ends up suspiciously close
+        // to the player (who may well be standing near the arena's middle
+        // right after winning) or to kamek's last position, so the reward
+        // can never spawn exactly on top of either.
+        const tooClose = (px, pz) => Math.hypot(dropX - px, dropZ - pz) < 4;
+        const playerPos = entityManager.player?.mesh?.position;
+        if (
+          (playerPos && tooClose(playerPos.x, playerPos.z)) ||
+          (kamek.mesh && tooClose(kamek.mesh.position.x, kamek.mesh.position.z))
+        ) {
+          dropX += 6;
+          dropZ += 6;
+        }
+
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY +2, z: dropZ }]);
+        }
+        if (mapEntity?.decorations) {
+          // Bright yellow (was plain white) so a boss-reward warp star
+          // reads as distinct from the decorative ones at level load.
+          mapEntity.decorations.spawnWarpStars([
+            { x: dropX + +5, y: dropY + 4, z: dropZ+5, color: 0xffee00, target: "spawn" },
+          ]);
+        }
       };
 
       entityManager.addEntity(kamek);
@@ -876,8 +982,38 @@ initGameModels(assetLoader)
         damagePlayer();
       };
       bowser.onDefeated = () => {
-        // Same reward drop as Kamek's onDefeated above.
-        dropBossReward(bowserZone, bowser);
+        questManager.onBowserDefeated();
+
+        // Same "drop a real collectible star + a warp star back to spawn"
+        // pattern as Kamek's onDefeated above — including the same fix:
+        // anchored to the arena's fixed center (bowserZone.arenaCenter)
+        // instead of wherever bowser.mesh last stood, plus the same
+        // too-close-to-player/boss safety nudge.
+        const center = bowserZone.arenaCenter;
+        let dropX = center ? center.x : (bowserZone.bossSpawn?.x ?? -230);
+        let dropY = (center ? center.y : (bowserZone.bossSpawn?.y ?? 10)) + 1;
+        let dropZ = center ? center.z : (bowserZone.bossSpawn?.z ?? 300);
+
+        const tooClose = (px, pz) => Math.hypot(dropX - px, dropZ - pz) < 4;
+        const playerPos = entityManager.player?.mesh?.position;
+        if (
+          (playerPos && tooClose(playerPos.x, playerPos.z)) ||
+          (bowser.mesh && tooClose(bowser.mesh.position.x, bowser.mesh.position.z))
+        ) {
+          dropX += 6;
+          dropZ += 6;
+        }
+
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([{ x: dropX, y: dropY + 2, z: dropZ }]);
+        }
+        if (mapEntity?.decorations) {
+          // Bright yellow (was plain white) — same reasoning as Kamek's
+          // onDefeated above.
+          mapEntity.decorations.spawnWarpStars([
+            { x: dropX + 5, y: dropY + 4, z: dropZ + 5, color: 0xffee00, target: "spawn" },
+          ]);
+        }
       };
 
       entityManager.addEntity(bowser);
@@ -893,10 +1029,8 @@ initGameModels(assetLoader)
     // through to the classic spawn-point respawn set above.
     entityManager.setVoidFallZones(
       [
-        // `music` keeps the battle theme running when a fall respawns the
-        // player inside the zone rather than back on the island.
-        { zone: kamekZone, respawn: kamekZone?.entryPoint, music: ZONE_MUSIC.kamek_zone },
-        { zone: bowserZone, respawn: bowserZone?.entryPoint, music: ZONE_MUSIC.bowser_zone },
+        { zone: kamekZone, respawn: kamekZone?.entryPoint },
+        { zone: bowserZone, respawn: bowserZone?.entryPoint },
       ].filter((entry) => entry.zone && entry.zone.bounds && entry.respawn),
     );
 
@@ -908,6 +1042,22 @@ initGameModels(assetLoader)
     // ui.onReachPeach handler below.
     endingZone = new EndingZone(renderer.scene, physics);
     await endingZone.load("./assets/levels/peach_castle.json");
+
+    // Peach's ending dialogue: walk up to her at the castle and press E —
+    // only available once the player has actually been teleported there
+    // (ui.gameState === "ENDING", set by ui.onReachPeach above), and not
+    // while a dialogue line is already up.
+    if (endingZone.peach) {
+      peachCutscene = new PeachCutscene(ui, renderer.camera, endingZone.peach, endingZone.castle);
+
+      interactions.register({
+        position: endingZone.peach.position,
+        radius: 4,
+        prompt: "Premi E per parlare con Peach",
+        isAvailable: () => ui.gameState === "ENDING" && !ui.dialogueActive,
+        onInteract: () => peachCutscene.start(ui.heroName || "eroe"),
+      });
+    }
 
     rawModels.mario = assets.mario;
     rawModels.luigi = assets.luigi;
@@ -947,4 +1097,4 @@ initGameModels(assetLoader)
     console.error("Error while loading assets:", error);
     const loadingText = document.getElementById("loading-text");
     if (loadingText) loadingText.innerText = "LOADING ERROR";
-  });
+  });
