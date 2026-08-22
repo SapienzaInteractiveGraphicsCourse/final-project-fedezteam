@@ -14,6 +14,22 @@ export default class UIManager {
     this.winPeachBtn = document.getElementById("win-peach-btn");
 
     this.heroNameInput = document.getElementById("hero-name-input");
+    // Two ways of finding the same <h1>, because losing it is silent: the
+    // title has a hardcoded "THANK YOU, HERO!" in the markup, so if the
+    // lookup comes back null showVictoryFinale simply leaves that in place
+    // and the screen looks fine while quietly not greeting anyone by name.
+    // That already happened once when an editor round-trip dropped the id
+    // from index.html. The fallback keys off the screen's own id plus the
+    // title class instead, so both would have to go for it to break.
+    this.victoryFinaleTitle =
+      document.getElementById("victory-finale-title") ||
+      document.querySelector("#victory-finale-screen .win-title");
+    if (!this.victoryFinaleTitle) {
+      console.warn(
+        "[UIManager] Victory-finale title not found — the ending screen will " +
+          "keep its placeholder text instead of greeting the player by name.",
+      );
+    }
     this.hudHeroName = document.getElementById("hud-hero-name");
     this.hudCharIcon = document.getElementById("hud-char-icon");
 
@@ -398,6 +414,17 @@ export default class UIManager {
 
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "none";
+
+    // Addressed to the player by the name they typed at the character
+    // select screen, the same one Peach uses in her dialogue and the HUD
+    // shows all game (see _triggerStart, which already uppercases it and
+    // falls back to MARIO/LUIGI when the field is left blank). "HERO" is
+    // only reached if this screen is somehow shown without a game having
+    // been started. textContent, not innerHTML: the name is player input.
+    if (this.victoryFinaleTitle) {
+      this.victoryFinaleTitle.textContent = `THANK YOU, ${this.heroName || "HERO"}!`;
+    }
+
     if (this.victoryFinaleScreen) this.victoryFinaleScreen.classList.remove("hidden");
   }
 

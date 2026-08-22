@@ -47,6 +47,10 @@ export const SOUND_MANIFEST = [
   { key: 'yoshi_jump2', path: 'assets/audio/Yoshi/yoshi_jump2.wav' },
   { key: 'yoshi_fall', path: 'assets/audio/Yoshi/yoshi_fall.wav' },
   { key: 'yoshi_mounted', path: 'assets/audio/Yoshi/yoshi_mounted.wav' },
+  // His own cry as he comes out of the egg. Looked up by its exact key,
+  // not through the speaker mechanism above: this one plays at hatching
+  // time, before anyone is riding him.
+  { key: 'yoshi_spawn', path: 'assets/audio/Yoshi/yoshi_spawn.wav' },
 
   // Peach's ending dialogue (see interactions/PeachCutscene.js). Her
   // greeting differs per character, so its keys are spelled the way

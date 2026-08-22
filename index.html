@@ -350,12 +350,14 @@
     <!-- 5c. FINAL VICTORY SCREEN (Peach's ending dialogue, see PeachCutscene.js) -->
     <div id="victory-finale-screen" class="win-overlay hidden">
       <div class="menu-card win-card">
-        <h1 class="win-title">THANK YOU, HERO!</h1>
+        <!-- "HERO" is replaced at runtime with the name entered at the
+             character-select screen — see UIManager.showVictoryFinale. -->
+        <h1 class="win-title" id="victory-finale-title">THANK YOU, HERO!</h1>
         <p>THE MUSHROOM KINGDOM IS SAFE ONCE MORE.</p>
         <img
           id="victory-finale-img"
-          src="assets/images/peach_logo.png"
-          alt="Princess Peach"
+          src="assets/images/the_end.png"
+          alt="Mario and Luigi celebrating"
           onerror="this.style.display = 'none'"
         />
 
