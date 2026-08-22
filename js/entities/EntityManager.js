@@ -20,10 +20,12 @@ export default class EntityManager {
     // so nothing changes for anyone who never sets it.
     this.onCoinCollected = null;
 
-    // Optional hook, set from main.js — called when Yoshi is lost to the
-    // void while being ridden (see _loseYoshi), so the level can put him
-    // back inside his egg. Same "left null by default" rule as above.
-    this.onYoshiLost = null;
+    // Same idea, for stars (see QuestManager.onStarCollected) — called with
+    // the star record that was just picked up (see Collectibles.spawnStars/
+    // update), so a caller can tell WHICH star it was via its optional
+    // `id`. Left null by default so nothing changes for anyone who never
+    // sets it.
+    this.onStarCollected = null;
 
     // Classic void-fall respawn point (see setSpawnPoint) — defaults to the
     // old hardcoded value so nothing changes for anyone who never calls it.
@@ -66,9 +68,6 @@ export default class EntityManager {
     }
   }
 
-  // `characterName` no longer picks movement stats (the two characters
-  // share one set — see below); it's kept because callers pass it and it
-  // documents which model is being spawned.
   spawnPlayer(model, startX, startY, startZ, characterName = "mario") {
     if (this.player && this.player.mesh) {
       this.player.disposeAnimation();
@@ -85,21 +84,17 @@ export default class EntityManager {
       }
     }
 
-    // Both characters handle IDENTICALLY: same speed, same jump, same grip.
-    // Picking one is a purely visual choice — the difference is the model,
-    // Luigi being the taller and thinner of the two (1.771 against Mario's
-    // 1.639 units, set at export time in tools/fix_character_export.py).
-    //
-    // Luigi used to carry his own numbers, and the one that mattered was
-    // `control` at 0.1 against Mario's 0.6: that value is how sharply the
-    // velocity eases toward the target each frame (see Player._updateFlat),
-    // so at 0.1 he took roughly six times as long to get up to speed and
-    // kept sliding for as long after letting go. It was meant to read as
-    // "slippery", but what it actually read as was Luigi struggling to
-    // walk. His slightly higher jump (19.5) also cleared scenery Mario
-    // can't, the castle fence included — one more reason for the two to
-    // share a single set of numbers rather than drift apart.
-    const stats = { moveSpeed: 11, jumpVelocity: 18, control: 0.6 };
+    // Per-character stats: kept nearly identical between the two on purpose
+    // (max ~10% delta on moveSpeed/jumpVelocity) so picking a character is
+    // a cosmetic choice, not a gameplay advantage — Luigi is only slightly
+    // faster/higher-jumping than Mario, still noticeably more slippery
+    // (lower `control`) as his one distinguishing trait.
+    let stats = {};
+    if (characterName === "luigi") {
+      stats = { moveSpeed: 12, jumpVelocity: 19.5, control: 0.1 };
+    } else {
+      stats = { moveSpeed: 11, jumpVelocity: 18, control: 0.6 };
+    }
 
     this.player = new Player(model, this.physicsEngine, stats);
     this.player.spawn(startX, startY, startZ);
@@ -112,38 +107,6 @@ export default class EntityManager {
     if (this.physicsEngine.registerGravityBody) {
       this.physicsEngine.registerGravityBody(this.player.body);
     }
-  }
-
-  /**
-   * Yoshi falls into the void with the player on his back: he's taken out
-   * of the world for good and the level puts him back inside his egg, at
-   * the spot he originally hatched from (main.js wires that up through
-   * onYoshiLost). The RIDER is untouched here — he goes on to respawn
-   * through the ordinary void-fall path, exactly as if he'd fallen on foot.
-   *
-   * A no-op unless Yoshi was actually being ridden: a player who walks off
-   * the edge alone leaves Yoshi standing wherever they left him.
-   */
-  _loseYoshi(audio) {
-    if (!this.yoshi || !this.yoshi.isRidden) return;
-
-    this.yoshi.despawn();
-    if (this.player && this.player.setMountedOnYoshi) {
-      this.player.setMountedOnYoshi(false);
-    }
-    // The falling scream that just played was Yoshi's, which is right — he
-    // was the one carrying them off the edge. From here on the voice is
-    // the rider's again (see AudioManager.setVoice).
-    if (audio && audio.setVoice) audio.setVoice(null);
-
-    // setYoshi() added the mesh, so this is the one place that takes it
-    // back out (see Yoshi.despawn's note on the split).
-    if (this.yoshi.mesh && this.yoshi.mesh.parent) {
-      this.yoshi.mesh.parent.remove(this.yoshi.mesh);
-    }
-    this.yoshi = null;
-
-    if (this.onYoshiLost) this.onYoshiLost();
   }
 
   addEntity(entity) {
@@ -201,14 +164,6 @@ export default class EntityManager {
 
       this.physicsEngine.checkVoidFall(this.player.position, () => {
         this.isFallingScreamPlaying = false;
-
-        // Yoshi does not survive the fall he was carrying the player into.
-        // Run BEFORE the life check below so the outcome is the same
-        // whether or not this was the player's last life — a game over
-        // that left Yoshi alive and still flagged as ridden would be a
-        // state nothing else knows how to undo.
-        this._loseYoshi(audio);
-
         const isGameOver =
           ui && ui.removeLife ? ui.removeLife(1, audio) : false;
         if (isGameOver) return;
@@ -243,12 +198,13 @@ export default class EntityManager {
           if (ui && ui.addCoin) ui.addCoin();
           if (this.onCoinCollected) this.onCoinCollected();
         },
-        () => {
+        (star) => {
           if (audio && audio.playSFX) audio.playSFX("star");
           // Passing audio through lets addStar() stop the BGM itself if
           // this pickup happens to be the one that reaches maxStars and
           // triggers the win screen (see UIManager.addStar/showWin).
           if (ui && ui.addStar) ui.addStar(1, audio);
+          if (this.onStarCollected) this.onStarCollected(star);
         },
         () => {
           if (audio && audio.playSFX) audio.playSFX("mushroom");

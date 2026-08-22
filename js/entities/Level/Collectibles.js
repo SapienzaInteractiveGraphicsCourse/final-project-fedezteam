@@ -141,6 +141,13 @@ export default class Collectibles {
         mesh: starMesh,
         position: starMesh.position,
         collected: false,
+        // Optional identifier (see QuestManager.onStarCollected) — lets a
+        // caller recognize a *specific* star among however many are in the
+        // level, without having to compare positions. Only set for the
+        // handful of spots that matter to the quest HUD; every other star
+        // (the level defaults, boss/Toad rewards, ...) is left id: null and
+        // behaves exactly as before.
+        id: pos.id || null,
       });
     });
   }
@@ -334,7 +341,10 @@ export default class Collectibles {
       if (distance <= this.starCollectRadius) {
         star.collected = true;
         this.scene.remove(star.mesh);
-        if (onStarCollected) onStarCollected();
+        // Pass the star record through (id included) — existing callers
+        // that take no arguments are unaffected, since JS just ignores an
+        // extra argument they never declared a parameter for.
+        if (onStarCollected) onStarCollected(star);
       }
     }
 

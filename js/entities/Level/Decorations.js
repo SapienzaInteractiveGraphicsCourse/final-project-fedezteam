@@ -54,6 +54,11 @@ export default class Decorations {
     this.spawnPoint = null;
     this.kamekZoneEntry = null;
     this.bowserZoneEntry = null;
+    // Optional UIManager reference (see setUI), used only for the "get off
+    // Yoshi to use the Warp Star" warning in _updateWarpStars below. Left
+    // null by default so nothing changes for anyone who never calls setUI.
+    this.ui = null;
+    this._yoshiWarpWarningActive = false;
     // Smoothed 0..1-ish sink depth applied to the player's mesh while
     // standing inside a pond's footprint (see _updateWaterWading).
     this._waterSinkDepth = 0;
@@ -1089,6 +1094,14 @@ export default class Decorations {
     this.bowserZoneEntry = point;
   }
 
+  // Optional UIManager hookup (see the `ui` field above) — lets
+  // _updateWarpStars show/hide the "get off Yoshi" warning without this
+  // class needing `ui` passed through its constructor (which every existing
+  // caller would otherwise need updating for).
+  setUI(ui) {
+    this.ui = ui;
+  }
+
   /**
    * Places a small Minecraft "Oak Sign" prop (minecraft_sign.glb, a
    * Mineways export) bearing a logo texture near a warp star that leads to
@@ -1274,7 +1287,16 @@ export default class Decorations {
     // of them into a fight or onto a curved surface neither the mount
     // logic nor the planet-gravity path was built for. Stepping off him
     // first is the price of admission; the star is simply inert until then.
-    if (player.mountedOnYoshi) return;
+    if (player.mountedOnYoshi) {
+      this._updateYoshiWarpWarning(player);
+      return;
+    }
+    // Left Yoshi (or never got on him) since the last frame — clear any
+    // warning that might still be showing.
+    if (this._yoshiWarpWarningActive) {
+      this._yoshiWarpWarningActive = false;
+      if (this.ui) this.ui.hideYoshiWarpWarning();
+    }
 
     const pos = player.mesh.position;
     const triggerRadius = 2.5;
@@ -1293,6 +1315,39 @@ export default class Decorations {
       player.body.position.set(dest.x, dest.y, dest.z);
       player.body.velocity.set(0, 0, 0);
       return; // one warp per frame is enough, even if stars are ever close together
+    }
+  }
+
+  // Companion to _updateWarpStars' early-return above: while the player IS
+  // mounted on Yoshi, shows a warning the moment they get close enough to a
+  // (real, targeted) warp star that they'd otherwise have triggered it — a
+  // slightly bigger radius than the actual warp trigger, so the hint shows
+  // up just before they'd bump into the now-inert star. No-op if setUI was
+  // never called.
+  _updateYoshiWarpWarning(player) {
+    if (!this.ui) return;
+
+    const pos = player.mesh.position;
+    const warningRadius = 4.5;
+    let near = false;
+
+    for (const w of this.warpStars) {
+      if (!w.target) continue;
+      const dx = pos.x - w.mesh.position.x;
+      const dy = pos.y - w.mesh.position.y;
+      const dz = pos.z - w.mesh.position.z;
+      if (dx * dx + dy * dy + dz * dz <= warningRadius * warningRadius) {
+        near = true;
+        break;
+      }
+    }
+
+    if (near && !this._yoshiWarpWarningActive) {
+      this._yoshiWarpWarningActive = true;
+      this.ui.showYoshiWarpWarning();
+    } else if (!near && this._yoshiWarpWarningActive) {
+      this._yoshiWarpWarningActive = false;
+      this.ui.hideYoshiWarpWarning();
     }
   }
 

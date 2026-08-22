@@ -441,6 +441,10 @@ const entityManager = new EntityManager(
 // Toad's 25-coin quest listens on every coin pickup, whichever quest stage
 // it's actually in — see QuestManager.onCoinCollected for the no-op guard.
 entityManager.onCoinCollected = () => questManager.onCoinCollected();
+// Same idea, for stars — see QuestManager.onStarCollected (a no-op unless
+// the star's own `id` is one the quest HUD is watching for, e.g. the Red
+// Planet's bonus star — see GameLevel.js).
+entityManager.onStarCollected = (star) => questManager.onStarCollected(star?.id);
 
 let mapEntity = null;
 let kamekZone = null;
@@ -782,6 +786,11 @@ initGameModels(assetLoader)
 
     entityManager.setMap(mapEntity);
 
+    // Lets Decorations show/hide the "get off Yoshi" warp-star warning
+    // (see Decorations._updateYoshiWarpWarning) without needing `ui` added
+    // to its constructor.
+    if (mapEntity?.decorations) mapEntity.decorations.setUI(ui);
+
     // Toad's quest dialogue: looked up by type from the NPCs GameLevel just
     // spawned (see LevelLoader.buildBuildingsAndNPCs / NPC.js — this is
     // also where Toad's previously-missing collision comes from). Skipped
@@ -793,6 +802,17 @@ initGameModels(assetLoader)
         if (mapEntity?.collectibles) {
           mapEntity.collectibles.spawnStars([
             { x: toadNpc.position.x + 3, y: toadNpc.position.y + 2, z: toadNpc.position.z },
+          ]);
+        }
+      };
+
+      // Same reward pattern, for reporting Kamek's defeat back to Toad
+      // (Fase 3 of the quest HUD — see QuestManager) — offset to the other
+      // side of him so the two reward stars never spawn on top of each other.
+      questManager.onKamekReturnReward = () => {
+        if (mapEntity?.collectibles) {
+          mapEntity.collectibles.spawnStars([
+            { x: toadNpc.position.x - 3, y: toadNpc.position.y + 2, z: toadNpc.position.z },
           ]);
         }
       };
@@ -850,6 +870,11 @@ initGameModels(assetLoader)
 
           renderer.scene.remove(yoshiEggMesh);
           yoshiEggInteractable.enabled = false;
+
+          // Fase 2 of the quest HUD (see QuestManager) — the egg hatching
+          // IS the objective, so this fires right here rather than being
+          // tied to any star pickup.
+          questManager.markYoshiHatched();
 
           yoshiEntity = new Yoshi(assets.yoshi, physics);
           yoshiEntity.spawn(ySpawn.x, ySpawn.y, ySpawn.z);

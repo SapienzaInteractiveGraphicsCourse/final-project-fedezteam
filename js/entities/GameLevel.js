@@ -195,7 +195,12 @@ export default class GameLevel {
     // below) — a bonus findable star on top of the 5 that make up
     // ui.maxStars (2 HillClimb + Toad's quest reward + Kamek + Bowser),
     // same as the extra ones the boss zones drop.
-    await this.collectibles.spawnStars([{ x: -254, y: 214, z: 10 }]);
+    // id: "redPlanetStar" — lets QuestManager recognize THIS specific star
+    // being picked up (see Collectibles.update -> onStarCollected(star) and
+    // EntityManager.onStarCollected), which is how Fase 1 of the quest HUD
+    // detects "reached the Red Planet and collected its star" without
+    // touching main.js.
+    await this.collectibles.spawnStars([{ x: -254, y: 214, z: 10, id: "redPlanetStar" }]);
 
     // Mario Galaxy-style warp stars. "sky" sends the player to the red
     // planet; the white star waiting right where they land sends them back
@@ -206,7 +211,13 @@ export default class GameLevel {
     // entities/Level/ObstacleZone.js, wired up from main.js).
     await this.decorations.spawnWarpStars([
       { x: 118, y: 4, z: -30, color: 0xffd54f, target: "sky" }, // -> the red planet
-      { x: -260, y: 220, z: 0, color: 0xffffff, target: "spawn" }, // next to the red planet's landing spot -> back to spawn
+      // Yellow (#FFFF00) instead of white: it's the only warp star that
+      // actually sits ON the red planet's surface, and white read as
+      // washed-out against it. Only this one warp star's color is
+      // changing — the collectible star nearby keeps its own texture (see
+      // Collectibles.spawnStars), and every other warp star below is
+      // untouched.
+      { x: -260, y: 220, z: 0, color: 0xffff00, target: "spawn" }, // next to the red planet's landing spot -> back to spawn
       // { x: -118, y: 4, z: -80, color: 0xff5722, target: "kamek_zone" }, // -> Kamek's obstacle course
       { x: 60, y: 4, z: 115, color: 0xff5722, target: "kamek_zone" }, // -> Kamek's obstacle course
       { x: -60, y: 4, z: 115, color: 0xb71c1c, target: "bowser_zone" }, // -> Bowser's obstacle course
