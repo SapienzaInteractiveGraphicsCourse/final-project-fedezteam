@@ -106,7 +106,7 @@ export default class UIManager {
     this.heroName = "";
 
     this.coins = 0;
-    this.lives = 4;
+    this.lives = 10;
     this.stars = 0;
     this.maxStars = 5;
 
