@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { DRACO_DECODER_PATH, TEXTURES } from "../core/Assets/manifest.js";
+import { assetUrl } from "../core/Assets/basePath.js";
 import LevelLoader from "./Level/LevelLoader.js";
 import Collectibles from "./Level/Collectibles.js";
 import Decorations from "./Level/Decorations.js";
@@ -32,7 +33,11 @@ export default class GameLevel {
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
     this.loader.setDRACOLoader(dracoLoader);
-    this.loader.setResourcePath("assets/");
+    // Resolved rather than left document-relative, same reason as every
+    // other asset URL (see Assets/basePath.js). Only affects .gltf files
+    // with external buffers/textures; the level's own models are all
+    // self-contained .glb, so this is here for the day one isn't.
+    this.loader.setResourcePath(assetUrl("assets/"));
 
     this.playerSpawn = null;
     this.yoshiSpawn = null;
@@ -143,7 +148,7 @@ export default class GameLevel {
     // both were replaced by this single star, lowered by 5 units.
     //
     // id: "yoshiHighStar" — lets QuestManager recognize THIS star being
-    // collected as Fase 2 of the quest HUD ("hatch Yoshi's egg, then use
+    // collected as the Yoshi quest's second step ("hatch Yoshi's egg, then use
     // his jump to reach the high star" — see QuestManager.onStarCollected).
     await this.decorations.spawnCoinTrail(
       [
@@ -223,7 +228,7 @@ export default class GameLevel {
     // 1 of the 5 that make up ui.maxStars (see STAR REBALANCE above).
     // id: "redPlanetStar" — lets QuestManager recognize THIS specific star
     // being picked up (see Collectibles.update -> onStarCollected(star) and
-    // EntityManager.onStarCollected), which is how Fase 1 of the quest HUD
+    // EntityManager.onStarCollected), which is how the Red Planet quest
     // detects "reached the Red Planet and collected its star" without
     // touching main.js.
     await this.collectibles.spawnStars([{ x: -254, y: 214, z: 10, id: "redPlanetStar" }]);

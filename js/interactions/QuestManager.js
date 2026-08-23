@@ -1,234 +1,442 @@
 /**
- * QuestManager.js — drives the top-right "quest objective" HUD panel
- * through 5 sequential phases (see UIManager.showQuestObjective, wired from
- * _renderObjective below), each one named after one of the 5 stars that
- * make up ui.maxStars (see GameLevel.js's "STAR REBALANCE" comment):
+ * QuestManager.js — the game's progression: ONE ordered chain of quests,
+ * handed out by Toad and tracked on the top-right objective panel (see
+ * UIManager.showQuestObjective, driven by _renderObjective).
  *
- *   Phase 1 (Stella 1 - Pianeta Rosso): use the yellow Warp Star to reach the
- *     Red Planet and collect its star. Detected via onStarCollected(id) —
- *     see EntityManager.onStarCollected / Collectibles' star `id` field.
- *   Phase 2 (Stella 2 - Yoshi & Stella Alta): hatch Yoshi's egg, then use
- *     his boosted jump to reach and collect the high star on Passerella
- *     Est (HillClimb Yoshi). Detected via markYoshiHatched() (called once
- *     from main.js's hatchYoshiEgg) followed by onStarCollected("yoshiHighStar").
- *   Phase 3 (Stella 3 - Kamek): talk to Toad to get the Kamek quest, defeat
- *     Kamek — his arena drops both the star AND the return Warp Star (see
- *     main.js's kamek.onDefeated) — then talk to Toad again to report back
- *     and unlock the next quest.
- *   Phase 4 (Stella 4 - Monete): talk to Toad to get the 25-coin quest,
- *     collect the coins, then talk to Toad again to turn them in and claim
- *     Toad's own reward star (there's no arena for this one to drop a star
- *     at, unlike Phases 3 and 5).
- *   Phase 5 (Stella 5 - Bowser): defeat Bowser — same as Kamek, his arena
- *     drops both the star and the return Warp Star — then talk to Toad one
- *     last time to report back and finish the game.
+ * The chain (QUESTS below, in order):
  *
- * Phase 1 and 2 are free-standing (the player can do them in any order,
- * whenever they like) — only Toad's own chain (Fasi 3 -> 4 -> 5) is a
- * strict sequence, tracked by `stage`. The HUD panel always shows the
- * FIRST incomplete phase in 1..5 order, which is a pure display choice: it
- * never blocks or gates anything already in the game (the Red Planet, the
- * Yoshi egg and both boss zones stay reachable exactly as before, in any
- * order) — see _renderObjective.
+ *   1. Red Planet — ride the yellow Warp Star up to the red planet and
+ *      collect its star (see GameLevel's `id: "redPlanetStar"`).
+ *   2. Yoshi — hatch his egg, then use his boosted jump to reach the high
+ *      star on Passerella Est (`id: "yoshiHighStar"`).
+ *   3. Kamek — beat him in his arena; the star drops right there (see
+ *      main.js's kamek.onDefeated).
+ *   4. Coins — collect 25 coins and hand them to Toad, who gives this
+ *      star himself: it's the only one with no arena to drop it at.
+ *   5. Bowser — same as Kamek, at the other arena.
  *
- * Toad's OWN quest chain keeps the state-machine shape it always had (a
- * `stage` string + a switch): it's still strictly linear —
- * NONE -> KAMEK_QUEST -> KAMEK_RETURN -> COIN_QUEST -> COIN_QUEST_READY ->
- * BOWSER_QUEST -> BOWSER_RETURN -> ALL_DONE. Reporting back to Toad after
- * Kamek/Bowser (the two *_RETURN stages) is what UNLOCKS the next quest —
- * it does NOT hand over a star, since Kamek and Bowser each already
- * dropped their own at their arena (see main.js's onDefeated handlers).
- * The coin quest is the odd one out: there's no arena for it, so Toad
- * hands over its Power Star himself, right on turn-in (onRewardStar).
+ * HOW A QUEST ARRIVES. Only ever from Toad, face to face. The player
+ * starts with "Talk to Toad" on the panel; that conversation opens quest 1.
+ * Finishing a quest does NOT reveal the next one — it flips the panel to
+ * "return to Toad", and the next quest is only named once the player is
+ * standing in front of him again (reportPending / _handOverNext). One
+ * conversation moves the chain forward exactly one step.
  *
- * Coin counting: the quest tracks the player's TOTAL coin wallet
- * (ui.coins), not a separate "collected since accepting" counter — a
- * player who already has 25+ coins when they accept the quest can turn it
- * in immediately, and handing the coins over on turn-in actually SPENDS 25
- * of them (see ui.spendCoins), rather than just checking a box.
+ * Reporting back is a CONVERSATION, not a collection trip: Kamek's and
+ * Bowser's stars are waiting out at their arenas and are picked up there,
+ * and quest 4 is the only one whose star Toad hands over — it has no arena
+ * to drop one at, so turning the coins in and being given the next quest
+ * happen in the same breath.
  *
- * Toad's own lines (assigned/reminder/reward/...) are shown as a proper
- * speech-bubble dialogue (ui.showDialogue/hideDialogue, same widget Peach's
- * cutscene uses) rather than a toast, and — per spec — closed with E only
- * (see main.js's updateGame, which no longer accepts Space for this).
- * Ambient, non-interaction-triggered notices (Kamek/Bowser defeated, the
- * Red Planet/high stars) stay as toasts: there's no "E press" moment to
- * gate a blocking dialogue on for those.
+ * WHAT A QUEST DOES NOT DO. Assignment is bookkeeping, not gating: every
+ * warp star, egg and boss arena in the level stays reachable from the first
+ * frame. A player who beats Kamek before Toad has even mentioned him is not
+ * punished for it — the world flags below are recorded whenever they
+ * happen, so a quest handed over for something already done reads as
+ * finished the moment it is assigned, and the next conversation moves on
+ * from it. Toad's lines cover that case explicitly rather than pretending
+ * it didn't happen (see each quest's assignLine).
+ *
+ * Toad's lines are shown as a proper speech-bubble dialogue
+ * (ui.showDialogue/hideDialogue, the same widget Peach's cutscene uses) and
+ * closed with E only — see main.js's updateGame. Progress that happens out
+ * in the world (a quest finished, the egg hatching, enough coins) is a
+ * toast instead: there's no "E press" moment to hang a blocking dialogue on
+ * for those.
+ *
+ * Every line is also SPOKEN when an AudioManager is passed in (see
+ * _showToadDialogue): the welcome clip the first time the player ever talks
+ * to him, a dedicated clip for the scripted beats ("go and deal with
+ * Kamek", "go and deal with Bowser", "here's your star"), and the generic
+ * two-take blip — toad_1/toad_2, alternated by AudioManager — otherwise.
  */
+
+// How many coins quest 4 asks for. They are really SPENT on turn-in (see
+// ui.spendCoins), not just checked off, and what's counted is the player's
+// whole wallet rather than "coins collected since the quest opened" — so
+// someone who already had 25 in the bank can hand them over right away.
+const COIN_TARGET = 25;
+
+/**
+ * The chain itself. Each entry is data + small functions taking the manager
+ * (`qm`), so the class below stays a generic runner and adding or
+ * reordering a quest never means touching its logic:
+ *
+ *   objective(qm)   -> the panel's text while this quest is being worked
+ *                      on (the "Quest n/N:" prefix comes from
+ *                      _renderObjective).
+ *   isDone(qm)      -> finished, read off qm.flags. Checked whenever a flag
+ *                      changes AND right after the quest is handed over.
+ *   assignLine(qm)  -> what Toad SAYS when he hands it over, and which
+ *   assignVoice(qm)    clips go with it. Every quest is assigned in person,
+ *                      so every quest has these.
+ *   reminder(qm)    -> what he says if you talk to him while it's active.
+ *   reminderVoice(qm)
+ *   doneToast(qm)   -> the "you did it" toast, out in the world, at the
+ *                      moment it's finished. Never names what comes next:
+ *                      that's Toad's to tell.
+ *   reportLine(qm)  -> how he opens the conversation where it's reported,
+ *                      immediately followed by the next quest's assignLine.
+ *
+ * Quest 4 additionally uses the turn-in fields (needsTurnIn, isReady,
+ * onProgress, turnInLine/turnInVoice, onTurnIn) — see onToadInteract.
+ */
+const QUESTS = [
+  {
+    id: "redPlanet",
+    objective: () => "reach the Red Planet on the yellow Warp Star and collect its star!",
+    isDone: (qm) => qm.flags.redPlanetStar,
+    assignLine: (qm) =>
+      qm.flags.redPlanetStar
+        ? "You have already been up to that red planet and brought its Power Star back — impressive!"
+        : "See that red planet up in the sky? The yellow Warp Star over there will take you to it — bring back its Power Star!",
+    assignVoice: () => [],
+    reminder: () => "The yellow Warp Star is your ride to the red planet — its Power Star is still up there!",
+    doneToast: () => "Red Planet star collected!",
+    reportLine: () => "You made it to the red planet and back — wonderful!",
+  },
+  {
+    id: "yoshi",
+    // Two steps in one quest: the egg has to hatch before the star is even
+    // reachable, so the panel says which of the two is outstanding.
+    objective: (qm) =>
+      qm.flags.yoshiEggHatched
+        ? "use Yoshi's jump to reach the high star on Passerella Est!"
+        : "find Yoshi's egg and hatch it, then use his jump to reach the high star!",
+    isDone: (qm) => qm.flags.yoshiHighStar,
+    assignLine: (qm) =>
+      qm.flags.yoshiHighStar
+        ? "And that star high above Passerella Est? Already yours, I see — nothing gets past you!"
+        : "There is an egg waiting to hatch nearby. Hatch it, and Yoshi's jump will carry you to the star high above Passerella Est!",
+    assignVoice: () => [],
+    reminder: (qm) =>
+      qm.flags.yoshiEggHatched
+        ? "Yoshi is out of his egg! Climb on — his jump reaches that high star easily."
+        : "There is an egg waiting to hatch nearby. Yoshi's jump can reach a star none of us can!",
+    doneToast: () => "High star collected!",
+    reportLine: () => "You and Yoshi make quite the team!",
+  },
+  {
+    id: "kamek",
+    objective: () => "defeat Kamek in his arena and collect the star he drops!",
+    isDone: (qm) => qm.flags.kamekDefeated,
+    assignLine: (qm) =>
+      qm.flags.kamekDefeated
+        ? "And Kamek? Already dealt with, I hear — the whole kingdom is talking about it!"
+        : "Kamek is causing trouble nearby — go defeat him in his arena! The star he is guarding drops right where he falls.",
+    assignVoice: (qm) => (qm.flags.kamekDefeated ? [] : ["toad_kamek"]),
+    reminder: () => "Kamek is causing trouble nearby — go defeat him in his arena!",
+    reminderVoice: () => ["toad_kamek"],
+    doneToast: () => "Kamek is defeated — his star is waiting at the arena!",
+    reportLine: () => "Well done defeating Kamek!",
+  },
+  {
+    id: "coins",
+    // The one quest that ends at Toad rather than out in the world: no
+    // arena drops this star, he hands it over himself. So it never goes
+    // through the report-back path — handing the coins over IS the report,
+    // and it comes with the next quest attached (see _handOverNext).
+    needsTurnIn: true,
+    objective: (qm) =>
+      qm.isCoinQuestReady()
+        ? `bring your ${COIN_TARGET} coins back to Toad!`
+        : `collect ${COIN_TARGET} coins for Toad.`,
+    // Never true: only the turn-in below closes this one, so isDone (and
+    // with it reportLine) is never what moves the chain on from here.
+    isDone: () => false,
+    isReady: (qm) => qm.ui.coins >= COIN_TARGET,
+    assignLine: () => `Now, bring me ${COIN_TARGET} coins and a reward is yours!`,
+    assignVoice: () => [],
+    reminder: (qm) => `You are still ${Math.max(0, COIN_TARGET - qm.ui.coins)} short!`,
+    // Runs when the quest is handed over and on every coin picked up
+    // afterwards: keeps the separate COINS n/25 counter (ui.showQuestHud)
+    // in step.
+    onProgress: (qm) => qm._syncCoinHud(),
+    turnInLine: () => "Thank you! Here is a Power Star for you!",
+    turnInVoice: () => ["toad_give_star"],
+    onTurnIn: (qm) => {
+      qm.ui.hideQuestHud();
+      qm.ui.spendCoins(COIN_TARGET);
+      if (qm.onRewardStar) qm.onRewardStar();
+    },
+  },
+  {
+    id: "bowser",
+    objective: () => "defeat Bowser in his arena and collect the star he drops!",
+    isDone: (qm) => qm.flags.bowserDefeated,
+    assignLine: (qm) =>
+      qm.flags.bowserDefeated
+        ? "And Bowser is already beaten! The Mushroom Kingdom owes you everything."
+        : "Now go and defeat Bowser! His star drops at his arena, just like Kamek's did.",
+    assignVoice: (qm) => (qm.flags.bowserDefeated ? [] : ["toad_bowser"]),
+    reminder: () => "Defeat Bowser in his arena!",
+    reminderVoice: () => ["toad_bowser"],
+    doneToast: () => "Bowser is defeated — his star is waiting at the arena!",
+    reportLine: () =>
+      "Congratulations, hero! You defeated Bowser — the Mushroom Kingdom is safe once more!",
+  },
+];
+
 export default class QuestManager {
-  constructor(ui) {
+  constructor(ui, audio = null) {
     this.ui = ui;
+    // Optional: without it every line still shows, it just goes unspoken.
+    this.audio = audio;
 
-    // Toad's own chain: NONE -> KAMEK_QUEST -> KAMEK_RETURN -> COIN_QUEST
-    // -> COIN_QUEST_READY -> BOWSER_QUEST -> BOWSER_RETURN -> ALL_DONE.
-    this.stage = "NONE";
-    this.coinTarget = 25;
+    // Position in QUESTS. -1 is the opening state, before Toad has been
+    // spoken to at all (the panel says so); QUESTS.length means the whole
+    // chain is done.
+    this.questIndex = -1;
 
-    // Phase 1 — independent of Toad's chain, see class comment above.
-    this.redPlanetStarDone = false;
+    // The active quest is finished but Toad hasn't heard about it yet. The
+    // panel points back at him and the next quest stays unnamed until he
+    // hands it over — see _handOverNext.
+    this.reportPending = false;
 
-    // Phase 2 — two sub-steps, both independent of Toad's chain: the egg
-    // has to be hatched before the high star is even reachable, so the HUD
-    // text can tell the two apart (see _renderObjective).
-    this.yoshiEggHatched = false;
-    this.yoshiStarDone = false;
+    // What the world has seen happen, recorded whether or not the matching
+    // quest is the active one — see the "not gating" note in the class
+    // comment. Everything a quest's isDone() reads lives here.
+    this.flags = {
+      redPlanetStar: false,
+      yoshiEggHatched: false,
+      yoshiHighStar: false,
+      kamekDefeated: false,
+      bowserDefeated: false,
+    };
 
-    // True while a Toad dialogue line is up (ui.dialogueActive mirrors
-    // this, but main.js needs to tell Toad's single-line "close" apart
-    // from Peach's multi-line "advance" — see closeToadDialogue).
+    // False until the player's very first conversation with Toad, which is
+    // the only one that opens with his welcome clip.
+    this.hasMetToad = false;
+
+    // Latches the "you have enough coins" toast to once (see _syncCoinHud).
+    this.coinsReadyAnnounced = false;
+
+    // True while a Toad line is up (ui.dialogueActive mirrors this, but
+    // main.js needs to tell Toad's single-line "close" apart from Peach's
+    // multi-line "advance" — see closeToadDialogue).
     this.dialogueOpen = false;
 
-    // Set from main.js once Toad's position is known — spawns a Power Star
-    // reward next to him on the coin quest's turn-in ONLY. Kamek and
-    // Bowser each drop their own star at their arena instead (see main.js's
-    // onDefeated handlers) — reporting back to Toad for those two just
-    // advances the quest chain, see onToadInteract's KAMEK_RETURN/
-    // BOWSER_RETURN cases.
+    // Set from main.js once Toad's position is known: spawns the coin
+    // quest's Power Star next to him on turn-in. It is the only star this
+    // class ever hands out — the other four are picked up out in the level.
     this.onRewardStar = null;
 
     this._renderObjective();
   }
 
-  // Text shown by the "Press E ..." prompt while standing near Toad —
-  // read fresh every frame (see InteractionManager), so it always reflects
-  // the current quest stage without needing to be pushed manually.
+  // The quest currently being worked on (or waiting to be reported), null
+  // before the first one is assigned and again once the chain is finished.
+  get activeQuest() {
+    return this.questIndex >= 0 ? QUESTS[this.questIndex] || null : null;
+  }
+
+  // True once the coin quest can actually be turned in — used by the panel
+  // text, the interaction prompt and the turn-in itself.
+  isCoinQuestReady() {
+    const quest = this.activeQuest;
+    return !!(quest && quest.needsTurnIn && quest.isReady(this));
+  }
+
+  // Text for the "Press E ..." prompt while standing near Toad — read
+  // fresh every frame (see InteractionManager), so it always matches the
+  // current state without needing to be pushed.
   getToadPrompt() {
-    if (this.stage === "KAMEK_RETURN") return "Press E to report Kamek's defeat";
-    if (this.stage === "COIN_QUEST_READY") return "Press E to hand over the coins";
-    if (this.stage === "BOWSER_RETURN") return "Press E to report Bowser's defeat";
+    if (this.questIndex < 0) return "Press E to get your first quest";
+    if (this.reportPending) return "Press E to report back to Toad";
+    if (this.isCoinQuestReady()) return "Press E to hand over the coins";
     return "Press E to talk to Toad";
   }
 
-  // Called by the Toad interactable's onInteract.
+  // Called by the Toad interactable's onInteract (see main.js). Every
+  // branch here moves the chain AT MOST one step.
   onToadInteract() {
-    switch (this.stage) {
-      case "NONE":
-        this.stage = "KAMEK_QUEST";
-        this._showToadDialogue("Kamek is causing trouble nearby — go defeat him in his arena!");
-        this._renderObjective();
-        break;
-
-      case "KAMEK_QUEST":
-        this._showToadDialogue("Have you dealt with Kamek yet? Go find him in his arena!");
-        break;
-
-      case "KAMEK_RETURN":
-        // No reward star here — Kamek already dropped one at his arena;
-        // this just unlocks the coin quest.
-        this.stage = "COIN_QUEST";
-        this._showToadDialogue(
-          `Well done defeating Kamek! Now, bring me ${this.coinTarget} coins and a reward is yours!`,
-        );
-        this._syncCoinProgress();
-        this._renderObjective();
-        break;
-
-      case "COIN_QUEST": {
-        const missing = Math.max(0, this.coinTarget - this.ui.coins);
-        this._showToadDialogue(`You are still ${missing} short!`);
-        break;
-      }
-
-      case "COIN_QUEST_READY":
-        this.stage = "BOWSER_QUEST";
-        this.ui.hideQuestHud();
-        this.ui.spendCoins(this.coinTarget);
-        if (this.onRewardStar) this.onRewardStar();
-        this._showToadDialogue(
-          "Thank you! Here is a Power Star for you! Now go and defeat Bowser!",
-        );
-        this._renderObjective();
-        break;
-
-      case "BOWSER_QUEST":
-        this._showToadDialogue("Defeat Bowser in his arena!");
-        break;
-
-      case "BOWSER_RETURN":
-        // Same as Kamek's return above — no reward star here either,
-        // Bowser already dropped his at the arena.
-        this.stage = "ALL_DONE";
-        this._showToadDialogue(
-          "Congratulations, hero! You defeated Bowser — the Mushroom Kingdom is safe once more!",
-        );
-        this._renderObjective();
-        break;
-
-      case "ALL_DONE":
-        this._showToadDialogue("Thank you for saving the Mushroom Kingdom!");
-        break;
+    // First conversation ever: this is where the chain starts.
+    if (this.questIndex < 0) {
+      const first = QUESTS[0];
+      this._showToadDialogue(first.assignLine(this), ...first.assignVoice(this));
+      this._setQuest(0);
+      return;
     }
-  }
 
-  // Called from EntityManager.onCoinCollected (wired in main.js) every time
-  // ANY coin is picked up anywhere in the level — a no-op unless the coin
-  // quest is currently active. Also called right when the quest is first
-  // assigned, in case the player already had 25+ coins in their wallet.
-  onCoinCollected() {
-    this._syncCoinProgress();
-  }
-
-  _syncCoinProgress() {
-    if (this.stage !== "COIN_QUEST") return;
-
-    const shown = Math.min(this.ui.coins, this.coinTarget);
-    this.ui.showQuestHud(`COINS: ${shown}/${this.coinTarget}`);
-
-    if (this.ui.coins >= this.coinTarget) {
-      this.stage = "COIN_QUEST_READY";
-      this.ui.showToast("You have enough coins! Head back to Toad!");
-      this._renderObjective();
+    const quest = this.activeQuest;
+    if (!quest) {
+      this._showToadDialogue("Thank you for saving the Mushroom Kingdom!");
+      return;
     }
+
+    // Reporting a finished quest: he acknowledges it and names the next
+    // one in the same line. This is the ONLY way a quest is discovered.
+    if (this.reportPending) {
+      this.reportPending = false;
+      this._handOverNext(quest.reportLine(this), []);
+      return;
+    }
+
+    // Quest 4's turn-in — the report and the reward in one go.
+    if (this.isCoinQuestReady()) {
+      quest.onTurnIn(this);
+      this._handOverNext(quest.turnInLine(this), quest.turnInVoice(this));
+      return;
+    }
+
+    this._showToadDialogue(
+      quest.reminder(this),
+      ...(quest.reminderVoice ? quest.reminderVoice(this) : []),
+    );
   }
 
-  // Called from Kamek's onDefeated (wired in main.js). Ambient notice, not
-  // an E-press interaction, so this stays a toast rather than a dialogue.
-  onKamekDefeated() {
-    if (this.stage !== "KAMEK_QUEST") return;
-    this.stage = "KAMEK_RETURN";
-    this.ui.showToast("Kamek is defeated! Grab the star, then report back to Toad!");
-    this._renderObjective();
-  }
+  // --- WORLD EVENTS (all wired from main.js / EntityManager) -------------
+  //
+  // Each one records a flag and then asks the active quest whether that
+  // finished it. Recording happens even when the matching quest hasn't been
+  // assigned yet, which is what makes playing out of order work.
 
-  // Called from Bowser's onDefeated (wired in main.js). Same reasoning.
-  onBowserDefeated() {
-    if (this.stage !== "BOWSER_QUEST") return;
-    this.stage = "BOWSER_RETURN";
-    this.ui.showToast("Bowser is defeated! Grab the star, then report back to Toad!");
-    this._renderObjective();
-  }
-
-  // Called from EntityManager.onStarCollected (see Collectibles' star `id`
-  // field) every time ANY star is picked up anywhere in the level — a no-op
-  // unless `id` matches one this quest cares about.
+  // Every star picked up anywhere in the level (see
+  // EntityManager.onStarCollected / Collectibles' star `id`); stars with no
+  // id — the level defaults, the boss and Toad rewards — are ignored here.
   onStarCollected(id) {
-    if (id === "redPlanetStar" && !this.redPlanetStarDone) {
-      this.redPlanetStarDone = true;
-      this.ui.showToast("Red Planet star collected!");
-      this._renderObjective();
-    } else if (id === "yoshiHighStar" && !this.yoshiStarDone) {
-      this.yoshiStarDone = true;
-      this.ui.showToast("High star collected!");
-      this._renderObjective();
-    }
+    if (id === "redPlanetStar") this.flags.redPlanetStar = true;
+    else if (id === "yoshiHighStar") this.flags.yoshiHighStar = true;
+    else return;
+
+    this._checkActiveQuest();
   }
 
-  // Called once from main.js's hatchYoshiEgg, right when the egg actually
-  // hatches — only unlocks the SECOND half of Phase 2 (reaching the high
-  // star with Yoshi's jump); see onStarCollected("yoshiHighStar") above.
+  // Called once from main.js's hatchYoshiEgg. Only the first half of quest
+  // 2 — the star still has to be collected (see the quest's objective).
   markYoshiHatched() {
-    if (this.yoshiEggHatched) return;
-    this.yoshiEggHatched = true;
+    if (this.flags.yoshiEggHatched) return;
+    this.flags.yoshiEggHatched = true;
     this.ui.showToast("Yoshi hatched!");
+    this._checkActiveQuest();
+  }
+
+  onKamekDefeated() {
+    if (this.flags.kamekDefeated) return;
+    this.flags.kamekDefeated = true;
+    this._checkActiveQuest();
+  }
+
+  onBowserDefeated() {
+    if (this.flags.bowserDefeated) return;
+    this.flags.bowserDefeated = true;
+    this._checkActiveQuest();
+  }
+
+  // Every coin picked up anywhere in the level (EntityManager.onCoinCollected)
+  // — a no-op unless the coin quest is the active one.
+  onCoinCollected() {
+    this._checkActiveQuest();
+  }
+
+  // --- CHAIN MACHINERY ---------------------------------------------------
+
+  /**
+   * Closes the current quest inside a conversation and hands over the next
+   * one in the same line: `closing` is Toad acknowledging what was just
+   * done (a report, or the coin turn-in), immediately followed by the next
+   * quest's own assignLine, so one E press = one step of the chain.
+   *
+   * On the last quest there is nothing to append and the acknowledgement
+   * stands alone as the ending line.
+   */
+  _handOverNext(closing, closingVoice = []) {
+    const next = QUESTS[this.questIndex + 1];
+
+    if (!next) {
+      this._showToadDialogue(closing, ...closingVoice);
+      this._setQuest(this.questIndex + 1);
+      return;
+    }
+
+    this._showToadDialogue(
+      `${closing} ${next.assignLine(this)}`,
+      ...closingVoice,
+      ...next.assignVoice(this),
+    );
+    this._setQuest(this.questIndex + 1);
+  }
+
+  /**
+   * Makes QUESTS[index] the active quest (or ends the chain when past the
+   * last one), refreshes the panel, and re-checks it straight away: it may
+   * ALREADY be satisfied — a boss beaten before Toad ever mentioned him —
+   * in which case it lands on "return to Toad" immediately and the NEXT
+   * conversation moves past it. Deliberately one step at a time: the chain
+   * never runs several quests forward while the player stands there.
+   */
+  _setQuest(index) {
+    this.questIndex = Math.min(index, QUESTS.length);
+    this.reportPending = false;
+
+    const quest = this.activeQuest;
+    if (!quest) {
+      this._renderObjective();
+      return;
+    }
+
+    if (quest.onProgress) quest.onProgress(this);
+    this._renderObjective();
+    this._checkActiveQuest();
+  }
+
+  // Re-evaluates the active quest against the world flags: keeps its
+  // progress display current and, the moment its condition holds, flips to
+  // "report back to Toad" — WITHOUT revealing what comes next.
+  _checkActiveQuest() {
+    const quest = this.activeQuest;
+    if (!quest || this.reportPending) return;
+
+    if (quest.onProgress) quest.onProgress(this);
+
+    if (quest.isDone(this)) {
+      this.reportPending = true;
+      const done = quest.doneToast ? quest.doneToast(this) : "";
+      // The toast says what was achieved and where to go — never what the
+      // next quest is, which is Toad's to tell.
+      this.ui.showToast([done, "Report back to Toad!"].filter(Boolean).join(" "));
+    }
+
     this._renderObjective();
   }
 
-  _showToadDialogue(text) {
+  // Keeps the separate COINS n/25 counter (a different widget from the
+  // objective panel — see UIManager.showQuestHud) in step with the wallet,
+  // and says so once when the target is reached.
+  _syncCoinHud() {
+    const shown = Math.min(this.ui.coins, COIN_TARGET);
+    this.ui.showQuestHud(`COINS: ${shown}/${COIN_TARGET}`);
+
+    if (!this.coinsReadyAnnounced && this.ui.coins >= COIN_TARGET) {
+      this.coinsReadyAnnounced = true;
+      this.ui.showToast("You have enough coins! Head back to Toad!");
+    }
+  }
+
+  /**
+   * Puts one of Toad's lines on screen and gives it a voice.
+   *
+   * `cues` are AudioManager sound names for THIS line, played in order (see
+   * AudioManager.playSFXSequence): most lines pass none and fall back to
+   * the generic two-take blip, while the scripted beats name their own clip
+   * — and a line that both closes one quest and opens the next ("here's
+   * your star, now go and get Bowser") names both, one after the other. The
+   * welcome clip is prepended to whichever line the player hears first, so
+   * meeting Toad always opens with a greeting.
+   */
+  _showToadDialogue(text, ...cues) {
     this.dialogueOpen = true;
     this.ui.dialogueActive = true;
     // Always a single line, so it's always "the last line" — the dialogue
     // hint reads "Press E to close" rather than "to continue".
     this.ui.showDialogue("TOAD", text, true);
+
+    const voice = cues.length ? [...cues] : ["toad_talk"];
+    if (!this.hasMetToad) {
+      this.hasMetToad = true;
+      voice.unshift("toad_welcome");
+    }
+    if (this.audio?.playSFXSequence) this.audio.playSFXSequence(voice);
   }
 
   // Called from main.js when E is pressed while a Toad line is up (see
@@ -240,46 +448,21 @@ export default class QuestManager {
     this.ui.dialogueActive = false;
   }
 
-  // Picks the first incomplete phase (1..5) and shows it on the top-right
-  // HUD panel (see UIManager.showQuestObjective) — a pure display choice,
-  // see class comment: it never gates anything in the level itself.
+  // Top-right panel: where the player is in the chain. Shown from the very
+  // first frame — before quest 1 exists it's what points at Toad, and
+  // between quests it points back at him again.
   _renderObjective() {
+    const total = QUESTS.length;
     let text;
 
-    if (!this.redPlanetStarDone) {
-      text = "Phase 1: use the yellow Warp Star to reach the Red Planet and collect its star!";
-    } else if (!this.yoshiEggHatched) {
-      text = "Phase 2: find Yoshi's egg and hatch it, then use his jump to reach the high star!";
-    } else if (!this.yoshiStarDone) {
-      text = "Phase 2: use Yoshi's jump to reach and collect the high star!";
+    if (this.questIndex < 0) {
+      text = "Talk to Toad to get your first quest!";
+    } else if (!this.activeQuest) {
+      text = "All quests complete — the Mushroom Kingdom is safe!";
+    } else if (this.reportPending) {
+      text = `Quest ${this.questIndex + 1}/${total} complete — return to Toad for the next one!`;
     } else {
-      switch (this.stage) {
-        case "NONE":
-          text = "Phase 3: talk to Toad to start Kamek's quest.";
-          break;
-        case "KAMEK_QUEST":
-          text = "Phase 3: defeat Kamek and collect his star!";
-          break;
-        case "KAMEK_RETURN":
-          text = "Phase 3: report back to Toad.";
-          break;
-        case "COIN_QUEST":
-          text = `Phase 4: bring Toad ${this.coinTarget} coins.`;
-          break;
-        case "COIN_QUEST_READY":
-          text = "Phase 4: return to Toad to claim your star.";
-          break;
-        case "BOWSER_QUEST":
-          text = "Phase 5: defeat Bowser and collect his star!";
-          break;
-        case "BOWSER_RETURN":
-          text = "Phase 5: report back to Toad.";
-          break;
-        case "ALL_DONE":
-        default:
-          text = "All quests complete — the Mushroom Kingdom is safe!";
-          break;
-      }
+      text = `Quest ${this.questIndex + 1}/${total}: ${this.activeQuest.objective(this)}`;
     }
 
     if (this.ui.showQuestObjective) this.ui.showQuestObjective(text);

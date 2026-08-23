@@ -68,6 +68,9 @@ export default class EntityManager {
     }
   }
 
+  // `characterName` no longer picks movement stats (the two characters
+  // share one set — see below); it's kept because callers pass it and it
+  // documents which model is being spawned.
   spawnPlayer(model, startX, startY, startZ, characterName = "mario") {
     if (this.player && this.player.mesh) {
       this.player.disposeAnimation();
@@ -84,17 +87,22 @@ export default class EntityManager {
       }
     }
 
-    // Per-character stats: kept nearly identical between the two on purpose
-    // (max ~10% delta on moveSpeed/jumpVelocity) so picking a character is
-    // a cosmetic choice, not a gameplay advantage — Luigi is only slightly
-    // faster/higher-jumping than Mario, still noticeably more slippery
-    // (lower `control`) as his one distinguishing trait.
-    let stats = {};
-    if (characterName === "luigi") {
-      stats = { moveSpeed: 12, jumpVelocity: 19.5, control: 0.1 };
-    } else {
-      stats = { moveSpeed: 11, jumpVelocity: 18, control: 0.6 };
-    }
+    // Both characters handle IDENTICALLY: same speed, same jump, same grip.
+    // Picking one is a purely visual choice — the difference is the model,
+    // Luigi being the taller and thinner of the two (1.771 against Mario's
+    // 1.639 units, set at export time in tools/fix_character_export.py).
+    //
+    // Luigi used to carry his own numbers, and the one that mattered was
+    // `control` at 0.1 against Mario's 0.6: that value is how sharply the
+    // velocity eases toward the target each frame (see Player._updateFlat),
+    // so at 0.1 he took roughly six times as long to get up to speed and
+    // kept sliding for as long after letting go. It was meant to read as
+    // "slippery", but what it actually read as was Luigi struggling to
+    // walk. His higher jump (19.5 against 18) also cleared scenery Mario
+    // can't, the castle fence included (see EndingZone's FENCE) — one more
+    // reason for the two to share a single set of numbers rather than
+    // drift apart.
+    const stats = { moveSpeed: 11, jumpVelocity: 18, control: 0.6 };
 
     this.player = new Player(model, this.physicsEngine, stats);
     this.player.spawn(startX, startY, startZ);

@@ -9,10 +9,14 @@ import * as THREE from "three";
 export default class GameLoop {
   // Wires up the clock and stores the renderer/update callback; nothing
   // runs until start() is called.
-  constructor(rendererManager, updateCallback) {
+  // `frameObserver` (opzionale) riceve ogni delta, comprese le pause e i
+  // menu in cui updateCallback esce subito: serve a QualityManager, che
+  // deve misurare gli fps sempre, non solo mentre si gioca.
+  constructor(rendererManager, updateCallback, frameObserver = null) {
     this.clock = new THREE.Clock();
     this.rendererManager = rendererManager;
     this.updateCallback = updateCallback;
+    this.frameObserver = frameObserver;
     this.isRunning = false;
   }
 
@@ -31,6 +35,10 @@ export default class GameLoop {
       if (!this.isRunning) return;
 
       const delta = Math.min(this.clock.getDelta(), 0.1);
+
+      if (this.frameObserver) {
+        this.frameObserver.sample(delta);
+      }
 
       if (this.updateCallback) {
         this.updateCallback(delta);

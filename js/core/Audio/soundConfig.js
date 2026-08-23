@@ -1,3 +1,5 @@
+import { assetUrl } from "../Assets/basePath.js";
+
 // Manifest of every sound effect and music track used by the game, keyed by
 // the name AudioManager will use to reference it.
 //
@@ -64,6 +66,22 @@ export const SOUND_MANIFEST = [
   { key: 'peach_talk1', path: 'assets/audio/Peach/peach_talk.wav' },
   { key: 'peach_talk2', path: 'assets/audio/Peach/peach_talk2.wav' },
 
+  // Toad's quest dialogue (see interactions/QuestManager.js). His generic
+  // per-line blip has two takes alternated by playSFX, so its keys are
+  // spelled the way _resolveSFX finds them — "toad_talk" ->
+  // toad_talk1/toad_talk2 — even though the files themselves are named
+  // toad_1/toad_2, the same spelling-vs-filename split Peach's greetings
+  // above already use. The other four are looked up by their exact key,
+  // one per scripted moment: the first time the player ever talks to him,
+  // the two "go and deal with him" quest lines, and the Power Star he
+  // hands over for the 25 coins.
+  { key: 'toad_talk1', path: 'assets/audio/Toad/toad_1.wav' },
+  { key: 'toad_talk2', path: 'assets/audio/Toad/toad_2.wav' },
+  { key: 'toad_welcome', path: 'assets/audio/Toad/toad_welcome.wav' },
+  { key: 'toad_kamek', path: 'assets/audio/Toad/toad_kamek.wav' },
+  { key: 'toad_bowser', path: 'assets/audio/Toad/toad_bowser.wav' },
+  { key: 'toad_give_star', path: 'assets/audio/Toad/toad_give_star.wav' },
+
   // The two bosses, all looked up by their exact key (see main.js): the
   // greeting on arriving in their zone, the roar that opens each ranged
   // attack's wind-up, the yelp on a non-fatal stomp and the death cry.
@@ -78,8 +96,13 @@ export const SOUND_MANIFEST = [
 ];
 
 // Preloads every entry of SOUND_MANIFEST into the given AudioManager.
+//
+// The paths above are written relative to the project root and turned into
+// real URLs here, the one place they reach the browser (AudioManager.load
+// hands them straight to `new Audio`) — see Assets/basePath.js for why
+// that matters once the game is served from a sub-path.
 export function initGameAudio(audioManager) {
   SOUND_MANIFEST.forEach(({ key, path, loop }) => {
-    audioManager.load(key, path, loop || false);
+    audioManager.load(key, assetUrl(path), loop || false);
   });
 }

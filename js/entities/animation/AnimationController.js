@@ -23,6 +23,12 @@ export default class AnimationController {
   // @param {number} [opts.runSpeed] - speed above which the state becomes "run"
   constructor(root, opts = {}) {
     this.root = root;
+
+    // Which clip set to build. Defaults to the full character one
+    // (idle/walk/run/jump/fall/...); Yoshi passes buildYoshiClips, which
+    // animates his legs and leaves the rest of him alone. Anything with the
+    // same shape — boneMap in, {name: AnimationClip} out — works here.
+    this._buildClips = opts.buildClips || buildCharacterClips;
     this.mixer = new THREE.AnimationMixer(root);
     this.boneMap = new BoneMap(root);
 
@@ -67,7 +73,7 @@ export default class AnimationController {
   // Builds one AnimationMixer action per clip from clipFactory, marking
   // the held poses as one-shots that stay on their last frame.
   _buildActions() {
-    const clips = buildCharacterClips(this.boneMap);
+    const clips = this._buildClips(this.boneMap);
 
     for (const [name, clip] of Object.entries(clips)) {
       const action = this.mixer.clipAction(clip);

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { ENDING_MODELS, TEXTURES } from "../../core/Assets/manifest.js";
+import { assetUrl } from "../../core/Assets/basePath.js";
 import { enableShadows } from "../../utils/shadows.js";
 import { normalizeMaterials } from "../../utils/materials.js";
 
@@ -34,18 +35,18 @@ import { normalizeMaterials } from "../../utils/materials.js";
  * would silently break the moment either file is re-exported.
  */
 /**
- * Dimensions of the perimeter fence. Its height is set against MARIO's jump
- * and nothing else: he leaves the ground at 18 u/s against a gravity of 30
- * (see EntityManager's per-character stats and PhysicsEngine), so he peaks
+ * Dimensions of the perimeter fence. Its height is set against the jump
+ * both characters share: they leave the ground at 18 u/s against a gravity
+ * of 30 (see EntityManager.spawnPlayer and PhysicsEngine), so they peak
  * 18^2 / (2 * 30) = 5.4 units up. The railing tops out at 6.35 and the
  * stone pillars at 7.45 — over it, but only just, which is the point: a
  * fence sized to be un-hoppable rather than sized to loom.
  *
- * Luigi jumps far higher (22 u/s, 8.07 units) and does clear the railing
- * for now. He still can't get out: _buildBoundaryWalls puts an invisible
- * wall on the same line that is several times this tall, so what he hits
- * mid-air is that instead. Whether that's fixed by raising the fence or by
- * bringing his jump back in line is a decision about him, not about here.
+ * Luigi used to jump higher than Mario and clear this railing; he doesn't
+ * anymore, the two now share one set of movement stats. The invisible wall
+ * _buildBoundaryWalls puts on the same line, several times this tall, stays
+ * regardless — it's what makes falling out of the epilogue impossible
+ * rather than merely unlikely.
  */
 const FENCE = {
   depth: 0.8, // thickness of the low wall the railing stands on
@@ -88,7 +89,7 @@ export default class EndingZone {
   async load(jsonPath = "./assets/levels/peach_castle.json") {
     let data;
     try {
-      const res = await fetch(jsonPath);
+      const res = await fetch(assetUrl(jsonPath));
       data = await res.json();
     } catch (e) {
       console.warn(`[EndingZone] Failed to load ${jsonPath}:`, e);

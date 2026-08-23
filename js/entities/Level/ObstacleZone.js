@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import BossArena from "./BossArena.js";
+import { assetUrl } from "../../core/Assets/basePath.js";
 
 /**
  * ObstacleZone.js — a small, self-contained bonus zone far from the main
@@ -71,7 +72,7 @@ export default class ObstacleZone {
   async load(jsonPath = "./assets/levels/kamek_zone.json") {
     let data;
     try {
-      const res = await fetch(jsonPath);
+      const res = await fetch(assetUrl(jsonPath));
       data = await res.json();
     } catch (e) {
       console.warn(`[ObstacleZone] Failed to load ${jsonPath}:`, e);

@@ -8,6 +8,8 @@ import UIManager from "./ui/UIManager.js";
 import PhysicsEngine from "./physics/PhysicsEngine.js";
 import AudioManager from "./core/Audio/AudioManager.js";
 import { initGameAudio } from "./core/Audio/soundConfig.js";
+import { assetUrl } from "./core/Assets/basePath.js";
+import QualityManager from "./core/Render/QualityManager.js";
 import { getStoredMuteState } from "./utils/storage.js";
 import Yoshi from "./entities/Yoshi.js";
 import Goomba from "./entities/enemies/Goomba.js";
@@ -93,7 +95,7 @@ window.POSE = POSE;
 
 window.testRig = async function (path, state = "walk", scaleTo = 2.2) {
   try {
-    const gltf = await new GLTFLoader().loadAsync(path);
+    const gltf = await new GLTFLoader().loadAsync(assetUrl(path));
     const model = gltf.scene;
 
     const boneMap = new BoneMap(model);
@@ -438,12 +440,13 @@ const entityManager = new EntityManager(
   renderer.dirLight,
 );
 
-// Toad's 25-coin quest listens on every coin pickup, whichever quest stage
-// it's actually in — see QuestManager.onCoinCollected for the no-op guard.
+// The 25-coin quest listens on every coin pickup, whatever point the
+// chain is actually at — see QuestManager.onCoinCollected for the no-op
+// guard.
 entityManager.onCoinCollected = () => questManager.onCoinCollected();
 // Same idea, for stars — see QuestManager.onStarCollected (a no-op unless
-// the star's own `id` is one the quest HUD is watching for, e.g. the Red
-// Planet's bonus star — see GameLevel.js).
+// the star's own `id` is one a quest is watching for, e.g. the Red
+// Planet's — see GameLevel.js).
 entityManager.onStarCollected = (star) => questManager.onStarCollected(star?.id);
 
 let mapEntity = null;
@@ -471,6 +474,13 @@ let yoshiMountInteractable = null;
 let peachCutscene = null;
 
 const ui = new UIManager();
+
+// Regola da sola risoluzione, ombre e distanza del prato in base agli fps
+// misurati, cosi' lo stesso gioco resta fluido sia sul fisso che sul
+// portatile — vedi core/Render/QualityManager.js.
+const quality = new QualityManager(renderer);
+window.quality = quality; // per provare i livelli a mano: quality.setLevel(3)
+
 const audio = new AudioManager();
 initGameAudio(audio);
 ui.setAudio(audio);
@@ -479,7 +489,10 @@ ui.setAudio(audio);
 // dialogue, hatching Yoshi's egg, mounting/dismounting Yoshi, and talking
 // to Peach at the end — see js/interactions/.
 const interactions = new InteractionManager(ui);
-const questManager = new QuestManager(ui);
+// `audio` as well as `ui`: every one of Toad's lines is spoken (his welcome
+// greeting, the per-quest clips, the generic blip) — see
+// QuestManager._showToadDialogue.
+const questManager = new QuestManager(ui, audio);
 
 // Restore the mute state saved from a previous session, if any.
 audio.setMute(getStoredMuteState());
@@ -790,7 +803,7 @@ initGameModels(assetLoader)
     mapEntity = new GameLevel(physics);
 
     // Blocks until every platform, building, and collectible is in the scene.
-    await mapEntity.loadLevel("./assets/levels/level1.json");
+    await mapEntity.loadLevel(assetUrl("assets/levels/level1.json"));
 
     entityManager.setMap(mapEntity);
 
@@ -798,6 +811,11 @@ initGameModels(assetLoader)
     // (see Decorations._updateYoshiWarpWarning) without needing `ui` added
     // to its constructor.
     if (mapEntity?.decorations) mapEntity.decorations.setUI(ui);
+
+    // Il prato e' la voce piu' pesante della scena: da qui in poi
+    // QualityManager puo' regolarne la distanza di vista insieme a
+    // risoluzione e ombre (vedi core/Render/QualityManager.js).
+    if (mapEntity?.decorations) quality.setDecorations(mapEntity.decorations);
 
     // Toad's quest dialogue: looked up by type from the NPCs GameLevel just
     // spawned (see LevelLoader.buildBuildingsAndNPCs / NPC.js — this is
@@ -814,15 +832,12 @@ initGameModels(assetLoader)
         }
       };
 
-      // Same reward pattern, for reporting Kamek's defeat back to Toad
-      // (Fase 3 of the quest HUD — see QuestManager) — offset to the other
-      // side of him so the two reward stars never spawn on top of each other.
-      // NOTE: no onKamekReturnReward / onBowserReturnReward here anymore —
-      // Kamek and Bowser each drop their own star at their arena again (see
-      // their onDefeated below), so reporting back to Toad now only
-      // advances the quest chain (assigns the next quest / unlocks Bowser),
-      // it doesn't hand over a star. Only the coin quest still does that
-      // (onRewardStar above), since there's no arena for it to drop one at.
+      // That is the ONLY star Toad hands over: Kamek and Bowser each drop
+      // their own at the arena where they die (see their onDefeated below),
+      // and beating them advances the quest chain by itself — there's no
+      // "report back to Toad" step for either of them to claim a star at.
+      // The coin quest is the exception because it has no arena to drop
+      // one at.
 
       interactions.register({
         position: toadNpc.position,
@@ -878,9 +893,9 @@ initGameModels(assetLoader)
           renderer.scene.remove(yoshiEggMesh);
           yoshiEggInteractable.enabled = false;
 
-          // Fase 2 of the quest HUD (see QuestManager) — the egg hatching
-          // IS the objective, so this fires right here rather than being
-          // tied to any star pickup.
+          // First half of the Yoshi quest (see QuestManager's QUESTS) —
+          // the egg hatching is a step of its own, so this fires right
+          // here rather than being tied to any star pickup.
           questManager.markYoshiHatched();
 
           yoshiEntity = new Yoshi(assets.yoshi, physics);
@@ -1006,7 +1021,7 @@ initGameModels(assetLoader)
     // GameLevel.js — see entities/Level/ObstacleZone.js for why this is a
     // teleport within the same world rather than a real level switch.
     kamekZone = new ObstacleZone(renderer.scene, physics);
-    await kamekZone.load("./assets/levels/kamek_zone.json");
+    await kamekZone.load(assetUrl("assets/levels/kamek_zone.json"));
 
     if (mapEntity?.decorations && kamekZone.entryPoint) {
       mapEntity.decorations.setKamekZoneEntry(kamekZone.entryPoint);
@@ -1093,7 +1108,7 @@ initGameModels(assetLoader)
     // instead of Kamek. Reached via the single "bowser_zone" warp star
     // placed in GameLevel.js.
     bowserZone = new ObstacleZone(renderer.scene, physics);
-    await bowserZone.load("./assets/levels/bowser_zone.json");
+    await bowserZone.load(assetUrl("assets/levels/bowser_zone.json"));
 
     if (mapEntity?.decorations && bowserZone.entryPoint) {
       mapEntity.decorations.setBowserZoneEntry(bowserZone.entryPoint);
@@ -1183,7 +1198,7 @@ initGameModels(assetLoader)
     // left to load — see entities/Level/EndingZone.js and the
     // ui.onReachPeach handler below.
     endingZone = new EndingZone(renderer.scene, physics);
-    await endingZone.load("./assets/levels/peach_castle.json");
+    await endingZone.load(assetUrl("assets/levels/peach_castle.json"));
 
     // Peach's ending dialogue: walk up to her at the castle and press E —
     // only available once the player has actually been teleported there
@@ -1237,7 +1252,7 @@ initGameModels(assetLoader)
       }, 500);
     }
 
-    const gameLoop = new GameLoop(renderer, updateGame);
+    const gameLoop = new GameLoop(renderer, updateGame, quality);
     gameLoop.start();
 
   })

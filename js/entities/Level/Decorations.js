@@ -47,6 +47,11 @@ export default class Decorations {
     this.satellites = [];
     this.ponds = [];
     this.warpStars = [];
+
+    // Blocchi del prato + distanza di vista corrente — vedi
+    // spawnGrassField/_updateGrassChunks. Ogni voce e' { mesh, x, z }.
+    this.grassChunks = [];
+    this.grassViewDistance = Decorations.GRASS_VIEW_DISTANCE;
     // Filled in from outside (see setSpawnPoint/setKamekZoneEntry/
     // setBowserZoneEntry, called from GameLevel.js/main.js once those
     // points are known) so warp stars targeting "spawn", "kamek_zone" or
@@ -340,19 +345,82 @@ export default class Decorations {
       }
     }
 
-    const instancedGrass = new THREE.InstancedMesh(
-      grassGeometry,
-      grassMaterial,
-      matrices.length,
-    );
-    instancedGrass.receiveShadow = true;
-    instancedGrass.castShadow = false;
+    // PERFORMANCE: a griglia, non in un blocco solo.
+    //
+    // Questo prato e' ~45.000 ciuffi da 280 triangoli l'uno: 12,7 milioni di
+    // triangoli. In un unico InstancedMesh sono anche 12,7 milioni disegnati
+    // OGNI FRAME, sempre, perche' il frustum culling lavora per oggetto e
+    // quella sfera di contenimento copre l'isola intera — la telecamera ne
+    // inquadra un ventesimo ma la GPU li processa tutti. Su un fisso non si
+    // nota, su un portatile e' la voce di spesa principale.
+    //
+    // Spezzando il prato in blocchi di GRASS_CHUNK_SIZE unita' ogni blocco
+    // ha la sua sfera: three.js scarta da solo quelli fuori inquadratura, e
+    // _updateGrassChunks() spegne anche quelli troppo lontani per essere
+    // visti (la nebbia comincia comunque a 120 unita'). Il risultato a video
+    // e' identico: stessi ciuffi, stesse matrici, stesso materiale — cambia
+    // solo quanti se ne disegnano.
+    const chunks = new Map();
+    for (const matrix of matrices) {
+      const cx = Math.floor(matrix.elements[12] / Decorations.GRASS_CHUNK_SIZE);
+      const cz = Math.floor(matrix.elements[14] / Decorations.GRASS_CHUNK_SIZE);
+      const key = `${cx},${cz}`;
+      let bucket = chunks.get(key);
+      if (!bucket) chunks.set(key, (bucket = []));
+      bucket.push(matrix);
+    }
 
-    matrices.forEach((matrix, i) => {
-      instancedGrass.setMatrixAt(i, matrix);
-    });
+    for (const [key, bucket] of chunks) {
+      const chunk = new THREE.InstancedMesh(grassGeometry, grassMaterial, bucket.length);
+      chunk.receiveShadow = true;
+      chunk.castShadow = false;
 
-    this.scene.add(instancedGrass);
+      bucket.forEach((matrix, i) => chunk.setMatrixAt(i, matrix));
+      // Calcolata subito: three.js la calcolerebbe comunque al primo frame,
+      // ma farlo qui tiene quel costo dentro la schermata di caricamento.
+      chunk.computeBoundingSphere();
+
+      const [cx, cz] = key.split(",").map(Number);
+      this.grassChunks.push({
+        mesh: chunk,
+        x: (cx + 0.5) * Decorations.GRASS_CHUNK_SIZE,
+        z: (cz + 0.5) * Decorations.GRASS_CHUNK_SIZE,
+      });
+
+      this.scene.add(chunk);
+    }
+  }
+
+  /**
+   * Spegne i blocchi d'erba oltre la distanza di vista corrente. Il frustum
+   * culling di three.js pensa gia' a quelli fuori inquadratura; questo
+   * toglie anche quelli dietro le spalle e all'altro capo dell'isola.
+   *
+   * Chiamato da update() con la posizione del giocatore: la telecamera lo
+   * insegue a pochi metri, quindi la differenza non e' percepibile e non
+   * serve passare qui anche la camera.
+   */
+  _updateGrassChunks(player) {
+    if (!this.grassChunks.length) return;
+
+    const pos = player?.mesh?.position || player?.position;
+    if (!pos) return;
+
+    const limit = this.grassViewDistance * this.grassViewDistance;
+    for (const chunk of this.grassChunks) {
+      const dx = chunk.x - pos.x;
+      const dz = chunk.z - pos.z;
+      chunk.mesh.visible = dx * dx + dz * dz <= limit;
+    }
+  }
+
+  /**
+   * Distanza oltre la quale il prato non viene piu' disegnato, in unita'
+   * di mondo. La usa QualityManager per alleggerire la scena quando gli
+   * fps calano (vedi core/Render/QualityManager.js).
+   */
+  setGrassViewDistance(distance) {
+    this.grassViewDistance = Math.max(10, distance);
   }
 
   /**
@@ -754,6 +822,20 @@ export default class Decorations {
    * to the (recompile-triggering) exhausted-pool path.
    */
   static WARP_LIGHT_POOL_SIZE = 8;
+
+  // Lato in unita' di mondo di un blocco d'erba (vedi spawnGrassField): piu'
+  // piccolo = culling piu' preciso ma piu' blocchi da disegnare. Misurato
+  // sull'isola da 250 con la telecamera di gioco: a 24 unita' si disegna il
+  // 30% dei ciuffi, a 16 il 26% con 46 draw call, a 12 si scende appena piu'
+  // (25%) ma le draw call diventano 81. 16 e' il punto in cui la curva si
+  // appiattisce.
+  static GRASS_CHUNK_SIZE = 16;
+
+  // Distanza di vista iniziale del prato. La nebbia comincia a 120 unita'
+  // (vedi Renderer.setupFog) e la telecamera sta ~12 unita' dietro il
+  // giocatore, quindi a 90 il confine del prato non si vede. QualityManager
+  // la abbassa se la macchina non tiene il passo (vedi setGrassViewDistance).
+  static GRASS_VIEW_DISTANCE = 90;
 
   // Adds a small decorated area (fence ring + a couple of lamp posts) around
   // every house-type building in the level, using the same building JSON
@@ -1495,5 +1577,6 @@ export default class Decorations {
 
     this._updateWaterWading(player, delta);
     this._updateWarpStars(player);
+    this._updateGrassChunks(player);
   }
 }

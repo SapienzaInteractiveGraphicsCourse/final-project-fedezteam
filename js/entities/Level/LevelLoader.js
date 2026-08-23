@@ -4,6 +4,7 @@ import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 // import also resolves on case-sensitive hosts such as GitHub Pages.
 import BuildingFactory from "../Buildings/BuildingFactory.js";
 import { BUILDING_MODEL_DIR, NPC_MODEL_DIR, MAP_MODELS, TEXTURES } from "../../core/Assets/manifest.js";
+import { assetUrl } from "../../core/Assets/basePath.js";
 import { normalizeMaterials } from "../../utils/materials.js";
 import NPC from "../NPC.js";
 
@@ -30,7 +31,7 @@ export default class LevelLoader {
    */
   async loadLevelData(levelJsonPath) {
     try {
-      const response = await fetch(levelJsonPath);
+      const response = await fetch(assetUrl(levelJsonPath));
       return await response.json();
     } catch (e) {
       console.warn("[LevelLoader] Could not load level JSON:", levelJsonPath);

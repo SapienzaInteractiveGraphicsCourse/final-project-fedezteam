@@ -19,6 +19,14 @@ import * as THREE from "three";
  * inside) depending on the two colors passed in.
  */
 export default class Projectile {
+  // Quante forme diverse preparare per ogni livello di dettaglio.
+  static VARIANTS = 4;
+
+  // Geometrie (per livello di dettaglio) e materiali (per coppia di colori)
+  // condivisi da tutti i proiettili — vedi _flameGeometry/_materials.
+  static _geoPool = new Map();
+  static _matCache = new Map();
+
   // Builds the projectile's mesh (two nested jittered-icosahedron shells)
   // and its flight parameters. `from`/`to` are plain {x,y,z} points — `to`
   // is captured once here (not re-read every frame), so the projectile
@@ -40,25 +48,19 @@ export default class Projectile {
     this.mesh = new THREE.Group();
     this.mesh.position.set(from.x, from.y, from.z);
 
-    const outerGeo = Projectile._createFlameGeometry(radius, 0);
-    const outerMat = new THREE.MeshStandardMaterial({
-      color: colorOuter,
-      emissive: colorOuter,
-      emissiveIntensity: 0.9,
-      roughness: 0.5,
-      flatShading: true,
-    });
-    this.mesh.add(new THREE.Mesh(outerGeo, outerMat));
+    // Geometrie e materiali sono CONDIVISI (vedi _flameGeometry/_materials):
+    // ogni colpo aggiunge solo due Mesh, che sono oggetti leggeri di scena.
+    const look = Projectile._materials(colorOuter, colorInner);
 
-    const innerGeo = Projectile._createFlameGeometry(radius * 0.55, 1);
-    const innerMat = new THREE.MeshStandardMaterial({
-      color: colorInner,
-      emissive: colorInner,
-      emissiveIntensity: 1.6,
-      roughness: 0.3,
-      flatShading: true,
-    });
-    this._innerMesh = new THREE.Mesh(innerGeo, innerMat);
+    const outer = new THREE.Mesh(Projectile._flameGeometry(0), look.outer);
+    outer.scale.setScalar(radius);
+    this.mesh.add(outer);
+
+    // La scala della sfera interna serve anche al battito in update(), che
+    // altrimenti la riporterebbe a raggio 1 al primo frame.
+    this._innerBaseScale = radius * 0.55;
+    this._innerMesh = new THREE.Mesh(Projectile._flameGeometry(1), look.inner);
+    this._innerMesh.scale.setScalar(this._innerBaseScale);
     this.mesh.add(this._innerMesh);
 
     this.mesh.castShadow = false;
@@ -68,6 +70,64 @@ export default class Projectile {
     // Per-instance random spin so a volley of projectiles doesn't read as
     // identical clones rotating in lockstep.
     this._spinSpeed = 3 + Math.random() * 2;
+  }
+
+  /**
+   * Una delle geometrie condivise, a raggio 1 (chi la usa la scala).
+   *
+   * PERCHE' UN INSIEME FISSO E NON UNA PER COLPO. Costruire una geometria
+   * significa allocarla, riempirla e caricarla sulla GPU: farlo a ogni
+   * proiettile, in mezzo a un combattimento, e' esattamente il momento
+   * peggiore. Qui se ne preparano VARIANTS diverse la prima volta che
+   * servono e poi si pescano a caso: la varieta' che serviva — due palle di
+   * fuoco vicine non devono sembrare cloni — resta, il costo per colpo no.
+   * Con la rotazione casuale gia' presente, quattro forme bastano.
+   */
+  static _flameGeometry(detail) {
+    let pool = Projectile._geoPool.get(detail);
+    if (!pool) {
+      pool = [];
+      for (let i = 0; i < Projectile.VARIANTS; i++) {
+        pool.push(Projectile._createFlameGeometry(1, detail));
+      }
+      Projectile._geoPool.set(detail, pool);
+    }
+    return pool[(Math.random() * pool.length) | 0];
+  }
+
+  /**
+   * La coppia di materiali per una data combinazione di colori (fuoco di
+   * Bowser, magia di Kamek), creata una volta sola.
+   *
+   * Condividerli non e' solo un risparmio di memoria: un materiale nuovo
+   * costringe WebGL a cercare (e alla prima volta a COMPILARE) il suo
+   * programma shader, e distruggerlo lo butta via — cosi' il colpo
+   * successivo lo ricompilava da capo. E' quello lo scatto che si sentiva
+   * durante le due boss fight.
+   */
+  static _materials(colorOuter, colorInner) {
+    const key = `${colorOuter}-${colorInner}`;
+    let look = Projectile._matCache.get(key);
+    if (!look) {
+      look = {
+        outer: new THREE.MeshStandardMaterial({
+          color: colorOuter,
+          emissive: colorOuter,
+          emissiveIntensity: 0.9,
+          roughness: 0.5,
+          flatShading: true,
+        }),
+        inner: new THREE.MeshStandardMaterial({
+          color: colorInner,
+          emissive: colorInner,
+          emissiveIntensity: 1.6,
+          roughness: 0.3,
+          flatShading: true,
+        }),
+      };
+      Projectile._matCache.set(key, look);
+    }
+    return look;
   }
 
   // Same jittered-icosahedron "low-poly rock/bush" technique as
@@ -101,7 +161,7 @@ export default class Projectile {
     this.mesh.rotation.x += delta * this._spinSpeed * 0.6;
     // Small pulsing scale on the inner core for a "flickering" hot center.
     const pulse = 1 + Math.sin(this.age * 18) * 0.12;
-    this._innerMesh.scale.setScalar(pulse);
+    this._innerMesh.scale.setScalar(this._innerBaseScale * pulse);
 
     this.age += delta;
     if (this.age >= this.lifetime) this.isExpired = true;
@@ -118,31 +178,23 @@ export default class Projectile {
     return dx * dx + dy * dy + dz * dz <= this.hitRadius * this.hitRadius;
   }
 
-  // Removes the projectile's mesh from the scene AND frees its GPU-side
-  // geometry/material buffers. Safe to call once; the owning Boss drops its
-  // reference right after calling this.
-  //
-  // BUG FIX (boss-defeat lag, worse on Bowser than Kamek): each projectile
-  // builds its own unique geometries in the constructor (the per-vertex
-  // jitter means they can't be shared/cached like a static prop's could
-  // be) — removing the mesh from the scene graph alone does NOT free that
-  // GPU memory, three.js requires an explicit .dispose() call on every
-  // geometry/material or it leaks for the rest of the session. Every
-  // fireball/orb fired was leaking 2 geometries + 2 materials this way.
-  // Bowser's fight runs longer (5 stomps vs Kamek's 3, with a longer
-  // cooldown+charge cycle in between), so more projectiles get fired
-  // before he's defeated — more leaked GPU objects piling up by the time
-  // _defeat() disposes everything at once, which is why the stutter was
-  // more noticeable on Bowser specifically.
+  /**
+   * Toglie il proiettile dalla scena. Chiamabile una volta sola; il Boss
+   * che lo possiede lascia cadere il riferimento subito dopo.
+   *
+   * NON libera geometrie e materiali, e non e' una dimenticanza: da quando
+   * sono condivisi (vedi _flameGeometry/_materials) non appartengono piu' al
+   * singolo colpo — sono una manciata di oggetti creati una volta per
+   * sessione, e distruggerli qui li farebbe ricreare al colpo dopo.
+   *
+   * Prima ogni proiettile costruiva i propri e questo metodo li distruggeva:
+   * niente perdite di memoria, ma un ciclo completo alloca / carica sulla
+   * GPU / cerca il programma shader / butta via, a ogni colpo e nel bel
+   * mezzo del combattimento. Era quello a far scattare le boss fight.
+   */
   dispose() {
-    if (this.mesh) {
-      this.mesh.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
-      });
-      if (this.mesh.parent) {
-        this.mesh.parent.remove(this.mesh);
-      }
+    if (this.mesh && this.mesh.parent) {
+      this.mesh.parent.remove(this.mesh);
     }
   }
 }

@@ -1,4 +1,5 @@
 import { getStoredMuteState, setStoredMuteState } from "../utils/storage.js";
+import { assetUrl } from "../core/Assets/basePath.js";
 
 export default class UIManager {
   constructor() {
@@ -597,8 +598,8 @@ export default class UIManager {
     if (this.hudCharIcon) {
       this.hudCharIcon.src =
         this.selectedCharacter === "mario"
-          ? "assets/images/mario-icon.png"
-          : "assets/images/luigi-icon.png";
+          ? assetUrl("assets/images/mario-icon.png")
+          : assetUrl("assets/images/luigi-icon.png");
     }
     this.hudHeroName.style.color =
       this.selectedCharacter === "mario" ? "#e52521" : "#43b047";

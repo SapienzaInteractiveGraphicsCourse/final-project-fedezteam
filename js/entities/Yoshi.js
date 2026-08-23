@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
 import { enableShadows } from "../utils/shadows.js";
 import { COLLISION_GROUPS } from "../physics/PhysicsEngine.js";
+import AnimationController from "./animation/AnimationController.js";
+import { buildYoshiClips } from "./animation/clipFactory.js";
 
 export default class Yoshi {
   constructor(mesh = null, physicsEngine = null) {
@@ -17,14 +19,47 @@ export default class Yoshi {
     // until tuned.
     this.modelOffset = 0;
 
+    // Walk/run for his legs — see clipFactory's buildYoshiClips. Stays
+    // inert (BoneMap.isUsable === false) on a model without a usable
+    // skeleton, which is what the old static Yoshi was.
+    this.animation = null;
+
     if (this.mesh) {
       enableShadows(this.mesh);
+      this._buildAnimation();
     }
   }
 
   setMesh(mesh) {
     this.mesh = mesh;
     enableShadows(this.mesh);
+    this._buildAnimation();
+  }
+
+  // (Re)builds the leg animator for the current mesh.
+  //
+  // The thresholds are set against the player's own numbers (moveSpeed 11,
+  // sprint 1.5x -> 16.5 — see EntityManager.spawnPlayer), because while
+  // ridden Yoshi travels at exactly the player's pace: runSpeed just above
+  // 11 is what makes him break into a run when the player sprints, and
+  // only then.
+  //
+  // walkSpeed is not only the idle/walk threshold: AnimationController
+  // also uses walkSpeed * 2.2 as the speed at which the walk cycle plays
+  // at 1x, and clamps the rate at 1.8x. Left at its default (2.0) Yoshi
+  // would spend the whole time pinned to that clamp, his legs whirring at
+  // the same rate whether he was creeping or charging; at 3.0 the
+  // reference lands at 6.6 and the cycle actually tracks his speed across
+  // the range he really moves at.
+  _buildAnimation() {
+    if (this.animation) this.animation.dispose();
+    this.animation = this.mesh
+      ? new AnimationController(this.mesh, {
+          buildClips: buildYoshiClips,
+          walkSpeed: 3.0,
+          runSpeed: 11.5,
+        })
+      : null;
   }
 
   // Mount/dismount, driven by the "Press E" interaction registered in
@@ -89,6 +124,16 @@ export default class Yoshi {
   // taking it out again is EntityManager's job, symmetrically.
   despawn() {
     this.isRidden = false;
+
+    // Bind pose first, then the mixer: the model comes from the shared
+    // asset cache (see AssetLoader), so leaving it mid-stride would hand
+    // the next Yoshi a skeleton frozen halfway through a step — the same
+    // reason Player.disposeAnimation exists.
+    if (this.animation) {
+      this.animation.restoreBindPose();
+      this.animation.dispose();
+      this.animation = null;
+    }
 
     if (this.body && this.physicsEngine && this.physicsEngine.world) {
       this.physicsEngine.world.removeBody(this.body);
@@ -166,6 +211,39 @@ export default class Yoshi {
         this.body.position.z
       );
     }
+
+    this._updateLegs(delta, player);
+  }
+
+  /**
+   * Advances the walk/run cycle at the speed he is actually travelling.
+   *
+   * WHICH BODY. While he is being ridden the branch above writes his x/z
+   * straight onto his own body every frame to follow the player, so HIS
+   * horizontal velocity stays at zero however far he travels — the
+   * player's is the real one. Off the saddle nobody is moving him and his
+   * own body is the truth again.
+   *
+   * WHY VELOCITY AND NOT THE DISTANCE BETWEEN FRAMES. Measuring "how far
+   * did he move since last frame, divided by delta" looks more direct and
+   * is a trap: the physics world runs on a FIXED 1/60 step with an
+   * accumulator (see PhysicsEngine.update -> world.step(1/60, delta, 3)),
+   * so on a display faster than 60Hz a good half of the frames don't
+   * advance the simulation at all. Those frames measure a distance of
+   * exactly zero, the state machine reads "standing still", and walk/idle
+   * end up alternating frame by frame — every switch calls action.reset()
+   * (see AnimationController.play), which restarts the cycle from its
+   * first frame and reads on screen as legs frozen mid-step. Velocity is
+   * integrated STATE: it keeps its value across the frames that don't
+   * step, so it never lies about standing still.
+   */
+  _updateLegs(delta, player) {
+    if (!this.animation) return;
+
+    const source = this.isRidden && player && player.body ? player.body : this.body;
+    const speed = source ? Math.hypot(source.velocity.x, source.velocity.z) : 0;
+
+    this.animation.update(delta, { speed });
   }
 
   get position() {

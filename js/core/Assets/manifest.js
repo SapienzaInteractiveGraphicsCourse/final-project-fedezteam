@@ -12,14 +12,35 @@
  *  - BUILDING_MODEL_DIR / NPC_MODEL_DIR: base directories for models that
  *    are resolved dynamically from the level JSON's "type" field.
  *  - TEXTURES: standalone image textures (skybox, ground, decorative props).
+ *
+ * Every path here is resolved through assetUrl() (see Assets/basePath.js),
+ * so what these constants actually hold is a full URL under the deployment
+ * root — the same strings work served from / locally and from
+ * /<repo>/ on GitHub Pages. Write the entries themselves as plain relative
+ * paths; the resolution is the module's job, not the reader's.
  */
+import { assetUrl } from "./basePath.js";
 
-const MODELS_ROOT = "assets/models/Super_Mario";
+const MODELS_ROOT = assetUrl("assets/models/Super_Mario");
 
 export const CHARACTER_MODELS = {
   mario: `${MODELS_ROOT}/Main_Characters/Mario/mario.glb`,
   luigi: `${MODELS_ROOT}/Main_Characters/Luigi/luigi.glb`,
-  yoshi: `${MODELS_ROOT}/Main_Characters/YoshiGLTF/yoshi.gltf`,
+  // Mounts/, non Main_Characters/YoshiGLTF/: stesso Yoshi (identica bbox,
+  // identico orientamento e origine ai piedi), ma con uno scheletro Mixamo
+  // completo sopra — che è ciò che gli permette di camminare (vedi
+  // entities/Yoshi.js e animation/clipFactory.js's buildYoshiClips).
+  //
+  // _textured perché l'export del modello riggato ha perso le texture (8
+  // materiali su 16 finiti a grigio piatto, Yoshi bianco in gioco) pur
+  // conservando tutte le UV: yoshi_textured.glb è il file riggato con
+  // sopra ritrapiantati i materiali del modello statico originale e i PNG
+  // incorporati — vedi tools/fix_yoshi_textures.py, che lo rigenera.
+  // yoshi.glb (quello riggato ma bianco) e la vecchia versione statica
+  // restano sul disco, inutilizzati: se un giorno il modello viene
+  // ri-esportato da Blender CON le texture, basta puntare qui quel file e
+  // lo script non serve più.
+  yoshi: `${MODELS_ROOT}/Mounts/yoshi_textured.glb`,
 };
 
 export const ITEM_MODELS = {
@@ -80,15 +101,19 @@ export const ENEMY_MODELS = {
 // similarly resolve from "npc.type". Only the base directories are
 // centralized here; see LevelLoader for the resolution logic.
 export const BUILDING_MODEL_DIR = `${MODELS_ROOT}/Map/`;
-export const NPC_MODEL_DIR = `${MODELS_ROOT}/NPC/`;
+// Lowercase "npc" because that is what the directory is called on disk.
+// macOS hides this kind of mismatch (its filesystem is case-insensitive by
+// default) but the Linux box behind GitHub Pages does not: the old
+// "NPC/" spelling loaded Toad locally and 404'd in production.
+export const NPC_MODEL_DIR = `${MODELS_ROOT}/npc/`;
 
 export const TEXTURES = {
-  skyBox: "assets/textures/sky/skyBox.png",
-  groundGrass: "assets/textures/field/grass2.jpg",
-  colorMap: "assets/textures/colormap.png",
-  planetColor: "assets/textures/planet/planet_color.png",
-  planetNormal: "assets/textures/planet/planet_normal.png",
-  planetRoughness: "assets/textures/planet/planet_roughness.png",
+  skyBox: assetUrl("assets/textures/sky/skyBox.png"),
+  groundGrass: assetUrl("assets/textures/field/grass2.jpg"),
+  colorMap: assetUrl("assets/textures/colormap.png"),
+  planetColor: assetUrl("assets/textures/planet/planet_color.png"),
+  planetNormal: assetUrl("assets/textures/planet/planet_normal.png"),
+  planetRoughness: assetUrl("assets/textures/planet/planet_roughness.png"),
   // Kamek's logo, overlaid as a small plane on the Kamek sign prop (see
   // Decorations.spawnKamekSigns). The source file the user dropped in,
   // assets/images/kamek.png, is actually a JPEG despite the extension (no
@@ -98,7 +123,7 @@ export const TEXTURES = {
   // background keyed out to transparency, so the plane shows a clean,
   // centered circular badge with nothing to visually misalign against the
   // sign's own frame. The original kamek.png is left untouched.
-  kamekLogo: "assets/images/kamek_logo.png",
+  kamekLogo: assetUrl("assets/images/kamek_logo.png"),
   // Bowser's logo, overlaid on the sign next to the warp stars leading to
   // the Bowser obstacle course — same treatment as kamekLogo above.
   // assets/images/gameover.png is a real PNG that already carries an alpha
@@ -106,14 +131,14 @@ export const TEXTURES = {
   // transparent canvas); gameover_logo.png is a derived crop tight around
   // that mark, centered, and downscaled to a sane in-game decal size. The
   // original gameover.png is left untouched.
-  gameoverLogo: "assets/images/gameover_logo.png",
+  gameoverLogo: assetUrl("assets/images/gameover_logo.png"),
   // Procedurally generated (PIL, no external download — see the
   // make_lava_brick.py/make_magic_brick.py generation notes in the boss
   // arena feature's delivery), tileable platform textures for the two boss
   // arenas (see BossArena.js / ARENA_THEMES): dark lava-stone/brick for
   // Bowser's arena, purple magic brick with gold inlay for Kamek's.
-  lavaBrickTexture: "assets/images/lava_brick_texture.png",
-  magicBrickTexture: "assets/images/magic_brick_texture.png",
+  lavaBrickTexture: assetUrl("assets/images/lava_brick_texture.png"),
+  magicBrickTexture: assetUrl("assets/images/magic_brick_texture.png"),
 };
 
 export const DRACO_DECODER_PATH =

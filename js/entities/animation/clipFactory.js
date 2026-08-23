@@ -27,6 +27,14 @@ export const POSE = {
   walkKneeBend: 38,
   walkHipsBob: 0.045,
 
+  // Yoshi: solo gambe (vedi buildYoshiClips). Falcata un filo più corta di
+  // quella di Mario perché le sue gambe sono più tozze, e ginocchio che
+  // piega un po' meno per la stessa ragione.
+  yoshiWalkLegSwing: 22,
+  yoshiWalkKneeBend: 34,
+  yoshiRunLegSwing: 36,
+  yoshiRunKneeBend: 58,
+
   runArmSwing: 45,
   runLegSwing: 40,
   runKneeBend: 65,
@@ -314,6 +322,12 @@ function buildIdle(bm, basis) {
 // Shared shape for both walk and run — only amplitudes/duration differ (see
 // the cfg object passed in from buildCharacterClips below). Builds keyframes
 // for legs, knees, arms, elbows, feet, torso twist and hip bob in one pass.
+//
+// cfg.legsOnly stops at the legs: no arm swing, no torso twist, no hip bob,
+// and nothing is even asked of those bones, so they keep exactly the pose
+// the model was exported in. That's what Yoshi uses (see buildYoshiClips) —
+// his arms are stubby and held against his body, and swinging them the way
+// a human's swing reads as wrong; the brief for him is the legs alone.
 function buildGait(bm, basis, name, duration, cfg) {
   // Five samples: the fifth repeats the first so the cycle closes seamlessly.
   const t = [0, duration * 0.25, duration * 0.5, duration * 0.75, duration];
@@ -339,13 +353,17 @@ function buildGait(bm, basis, name, duration, cfg) {
     hingeTrack(bm, "shinL", t, kneeL.map((k) => cfg.kneeBend * k), basis.left),
     hingeTrack(bm, "shinR", t, kneeR.map((k) => cfg.kneeBend * k), basis.left),
 
-    limbTrack(bm, "upperArmL", t, dirs(armPhase, cfg.armSwing, S, "L")),
-    limbTrack(bm, "upperArmR", t, dirs(armPhase.map((p) => -p), cfg.armSwing, S, "R")),
+    ...(cfg.legsOnly
+      ? []
+      : [
+          limbTrack(bm, "upperArmL", t, dirs(armPhase, cfg.armSwing, S, "L")),
+          limbTrack(bm, "upperArmR", t, dirs(armPhase.map((p) => -p), cfg.armSwing, S, "R")),
 
-    // Elbows bend FORWARD (negative sign), with a bit of play that follows
-    // the arm's swing.
-    hingeTrack(bm, "foreArmL", t, armPhase.map((p) => -(18 + p * 10)), basis.left),
-    hingeTrack(bm, "foreArmR", t, armPhase.map((p) => -(18 - p * 10)), basis.left),
+          // Elbows bend FORWARD (negative sign), with a bit of play that
+          // follows the arm's swing.
+          hingeTrack(bm, "foreArmL", t, armPhase.map((p) => -(18 + p * 10)), basis.left),
+          hingeTrack(bm, "foreArmR", t, armPhase.map((p) => -(18 - p * 10)), basis.left),
+        ]),
 
     // ANKLES. Without this the foot stays rigid relative to the shin and
     // the toe swings around as the leg moves, reading as a badly-attached
@@ -363,17 +381,21 @@ function buildGait(bm, basis, name, duration, cfg) {
       basis.left,
     ),
 
-    // Torso: leans forward (while running) and twists opposite the hips,
-    // like a real walking gait.
-    torsoTrack(
-      bm, "spine", t,
-      [cfg.lean, cfg.lean, cfg.lean, cfg.lean, cfg.lean],
-      [-4, 0, 4, 0, -4],
-      basis,
-    ),
+    ...(cfg.legsOnly
+      ? []
+      : [
+          // Torso: leans forward (while running) and twists opposite the
+          // hips, like a real walking gait.
+          torsoTrack(
+            bm, "spine", t,
+            [cfg.lean, cfg.lean, cfg.lean, cfg.lean, cfg.lean],
+            [-4, 0, 4, 0, -4],
+            basis,
+          ),
 
-    // The hips rise and fall TWICE per cycle, once per footstep.
-    hipsBob(bm, t, [0, cfg.bob, 0, cfg.bob, 0]),
+          // The hips rise and fall TWICE per cycle, once per footstep.
+          hipsBob(bm, t, [0, cfg.bob, 0, cfg.bob, 0]),
+        ]),
   ];
 
   return new THREE.AnimationClip(name, duration, tracks.filter(Boolean));
@@ -521,11 +543,11 @@ function buildFall(bm, basis) {
 // If the pipeline (offsets, tracks, mixer) is correct this changes nothing
 // — the model stays in its resting pose; any visible deformation means the
 // bug is upstream in how we compute directions.
-function buildBind(bm) {
+function buildBind(bm, roles = Object.keys(LIMB_CHILD)) {
   const t = [0, 1];
   const tracks = [];
 
-  for (const role of Object.keys(LIMB_CHILD)) {
+  for (const role of roles) {
     const bone = bm.get(role);
     const child = bm.get(LIMB_CHILD[role]);
     if (!bone || !child) continue;
@@ -541,6 +563,44 @@ function buildBind(bm) {
   }
 
   return new THREE.AnimationClip("bind", 1, tracks);
+}
+
+// Roles Yoshi's clips touch: nothing above the hip is asked to move.
+const YOSHI_ROLES = ["thighL", "thighR", "shinL", "shinR", "footL", "footR"];
+
+/**
+ * Clip set for Yoshi: a walk, a run, and an idle that is simply the pose
+ * the model was exported in.
+ *
+ * Only his legs are animated. His arms are short, held against his chest,
+ * and he has no shoulders to speak of — a human arm swing on that body
+ * reads as a glitch rather than as walking — so buildGait is asked for its
+ * legsOnly shape and the idle is a bind clip narrowed to the leg roles.
+ * Everything else (arms, torso, head, tail) keeps its authored pose,
+ * untouched by any track, which is exactly what "the rest can stay still"
+ * has to mean if the mixer is not to fight the model.
+ *
+ * There is no jump or fall clip on purpose: AnimationController.play()
+ * ignores a state it has no action for, so asking for one mid-air simply
+ * leaves the current gait running instead of snapping to a pose Yoshi
+ * doesn't have.
+ */
+export function buildYoshiClips(boneMap) {
+  const basis = characterBasis(boneMap);
+
+  return {
+    idle: buildBind(boneMap, YOSHI_ROLES),
+    walk: buildGait(boneMap, basis, "walk", 1.0, {
+      legSwing: POSE.yoshiWalkLegSwing,
+      kneeBend: POSE.yoshiWalkKneeBend,
+      legsOnly: true,
+    }),
+    run: buildGait(boneMap, basis, "run", 0.62, {
+      legSwing: POSE.yoshiRunLegSwing,
+      kneeBend: POSE.yoshiRunKneeBend,
+      legsOnly: true,
+    }),
+  };
 }
 
 // Entry point: builds the full set of named AnimationClips (bind/idle/walk/

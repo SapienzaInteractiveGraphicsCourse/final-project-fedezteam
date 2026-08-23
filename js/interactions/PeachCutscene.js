@@ -11,11 +11,14 @@
  * happens once the player then walks up to her there and interacts.
  */
 export default class PeachCutscene {
-  constructor(ui, camera, peachGroup, castleGroup) {
+  constructor(ui, camera, peachGroup, castleGroup, audio = null) {
     this.ui = ui;
     this.camera = camera;
     this.peach = peachGroup;
     this.castle = castleGroup;
+    // Optional, but main.js does pass it: without it the whole cutscene
+    // plays out silently (see _renderLine).
+    this.audio = audio;
 
     this.active = false;
     this.lineIndex = 0;
@@ -43,6 +46,17 @@ export default class PeachCutscene {
     const raw = this.lines[this.lineIndex];
     const text = raw.replace('${heroName}', this.heroName || 'hero');
     const isLast = this.lineIndex >= this.lines.length - 1;
+
+    // Peach's voice, one clip per line: the character-specific greeting on
+    // the opening line — she calls out to Mario and to Luigi differently,
+    // hence 'peach_call' resolving through the active character (see
+    // soundConfig's mario_peach_call/luigi_peach_call) — and a short
+    // generic blip, alternated between her two takes, on every line after
+    // it. The press that CLOSES the dialogue gets nothing: it hands over to
+    // the victory finale, and a fifth blip on the way out would land on top
+    // of it (see advance(), which returns before reaching here).
+    this.audio?.playSFX?.(this.lineIndex === 0 ? 'peach_call' : 'peach_talk');
+
     this.ui.showDialogue('PEACH', text, isLast);
   }
 
