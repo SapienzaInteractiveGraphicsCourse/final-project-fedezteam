@@ -108,12 +108,12 @@ export const BUILDING_MODEL_DIR = `${MODELS_ROOT}/Map/`;
 export const NPC_MODEL_DIR = `${MODELS_ROOT}/npc/`;
 
 export const TEXTURES = {
-  skyBox: assetUrl("assets/textures/sky/skyBox.png"),
-  groundGrass: assetUrl("assets/textures/field/grass2.jpg"),
-  colorMap: assetUrl("assets/textures/colormap.png"),
-  planetColor: assetUrl("assets/textures/planet/planet_color.png"),
-  planetNormal: assetUrl("assets/textures/planet/planet_normal.png"),
-  planetRoughness: assetUrl("assets/textures/planet/planet_roughness.png"),
+  skyBox: assetUrl("assets/Textures/sky/skyBox.png"),
+  groundGrass: assetUrl("assets/Textures/field/grass2.jpg"),
+  colorMap: assetUrl("assets/Textures/colormap.png"),
+  planetColor: assetUrl("assets/Textures/planet/planet_color.png"),
+  planetNormal: assetUrl("assets/Textures/planet/planet_normal.png"),
+  planetRoughness: assetUrl("assets/Textures/planet/planet_roughness.png"),
   // Kamek's logo, overlaid as a small plane on the Kamek sign prop (see
   // Decorations.spawnKamekSigns). The source file the user dropped in,
   // assets/images/kamek.png, is actually a JPEG despite the extension (no
