@@ -7,7 +7,11 @@ A browser-playable, third-person 3D platformer built with **Three.js** and the *
 
 The game features a fully explorable open island, a five-stage quest system, two boss encounters, a rideable companion (Yoshi), procedural skeletal animation, and a Mario-Galaxy-style spherical planet with custom gravity.
 
-**[▶ Play the game](#-how-to-run)** · **[📄 Full technical report](docs/report.pdf)**
+**[📄 Full technical report](docs/report.pdf)**
+
+## Play the Game
+
+**[PLAY](https://sapienzainteractivegraphicscourse.github.io/final-project-fedezteam/)** 
 
 ---
 
@@ -77,10 +81,6 @@ final-project-fedezteam/
 ├── assets/                 # Models, textures and levels (JSON)
 └── docs/                   # Technical report (PDF + LaTeX source)
 ```
-
-## Play the Game
-
-**[PLAY](https://sapienzainteractivegraphicscourse.github.io/final-project-fedezteam/)** 
 
 ## Credits
 
