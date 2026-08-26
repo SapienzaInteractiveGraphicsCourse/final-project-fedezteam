@@ -1,11 +1,11 @@
-# Super Mario-Style 3D Platformer 🍄🌟
+# Super Mario-Style 3D Platformer
 
 > **Interactive Graphics Course** · Sapienza University of Rome
 > **Academic Year:** 2025/2026 · **Professor:** Marco Schaerf
 
 A browser-playable, third-person 3D platformer built with **Three.js** and the **cannon-es** physics engine, inspired by the classic *Super Mario 3D* games.
 
-The game features a fully explorable open island, a five-stage quest system, two boss encounters, a rideable companion (Yoshi), procedural skeletal animation, and a Mario-Galaxy-style spherical planet with custom gravity. It's a fully client-side single-page application — no server, no build step, just static files.
+The game features a fully explorable open island, a five-stage quest system, two boss encounters, a rideable companion (Yoshi), procedural skeletal animation, and a Mario-Galaxy-style spherical planet with custom gravity.
 
 **[▶ Play the game](#-how-to-run)** · **[📄 Full technical report](docs/report.pdf)**
 
@@ -23,7 +23,7 @@ The game features a fully explorable open island, a five-stage quest system, two
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 - **Open world exploration** — A fully explorable main island populated with coins, Power Stars, NPCs and dynamic decorations (trees, flowers, rocks), placed by a procedural scattering algorithm that respects buildings, hills and points of interest.
 - **Mario Galaxy-style spherical gravity** — A walkable "sky planet" with a custom additive gravity field: the player falls toward and walks around its curved surface from any direction, with movement and camera orientation adapting automatically.
@@ -37,7 +37,7 @@ The game features a fully explorable open island, a five-stage quest system, two
 
 ---
 
-## 🎮 Controls
+## Controls
 
 | Input | Action |
 | :--- | :--- |
@@ -48,19 +48,19 @@ The game features a fully explorable open island, a five-stage quest system, two
 | **E** | Interact: talk to an NPC, mount/dismount Yoshi, advance dialogue |
 | **Esc** / Pause button | Pause menu (volume sliders, mute, controls reference, restart) |
 | **F3** | Toggle physics collider wireframe overlay (debug mode) |
-
+| **F4** | Toggle performance (FPS) wireframe overlay |
 ---
 
-## 🛠️ Architecture & Technologies
+## Architecture & Technologies
 
 - **Rendering engine:** [Three.js (r160)](https://threejs.org/)
 - **Physics engine:** [cannon-es (v0.20.0)](https://pmndrs.github.io/cannon-es/)
 - **Data-driven levels:** the main island and both boss arenas are defined as JSON files (`level1.json`, `kamek_zone.json`, `bowser_zone.json`) parsed by a custom `LevelLoader`
 - **Deployment:** fully static, client-side only — no backend, no bundler, optimized for GitHub Pages
 
-For the full breakdown of the animation pipeline, the gravity/physics system, lighting and shaders, and every implemented interaction, see the [technical report](docs/report.pdf) (also available as [LaTeX source](docs/report.tex)).
+For the full breakdown of the animation pipeline, the gravity/physics system, lighting and shaders, and every implemented interaction, see the [technical report](docs/report.pdf).
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 final-project-fedezteam/
@@ -78,28 +78,15 @@ final-project-fedezteam/
 └── docs/                   # Technical report (PDF + LaTeX source)
 ```
 
-## 🚀 How to Run
+## Play the Game
 
-The project uses ES modules, so it must be served over HTTP(S) rather than opened as a local `file://` page.
+**[PLAY](https://sapienzainteractivegraphicscourse.github.io/final-project-fedezteam/)** 
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/SapienzaInteractiveGraphicsCourse/final-project-fedezteam.git
-   cd final-project-fedezteam
-   ```
-2. Start any static local server, for example:
-   ```bash
-   python3 -m http.server
-   ```
-3. Open your browser at `http://localhost:8000`.
+## Credits
 
-Alternatively, play it directly via **[GitHub Pages](https://sapienzainteractivegraphicscourse.github.io/final-project-fedezteam/)** — no setup required.
+Built on [Three.js](https://threejs.org/) and [cannon-es](https://pmndrs.github.io/cannon-es/). Character and prop 3D models were sourced from public asset repositories and are not original team work; all game logic, physics tuning, procedural animation, shaders, level design and UI were developed by the team. 
 
-## 🙏 Credits
-
-Built on [Three.js](https://threejs.org/) and [cannon-es](https://pmndrs.github.io/cannon-es/). Character and prop 3D models were sourced from public asset repositories and are not original team work; all game logic, physics tuning, procedural animation, shaders, level design and UI were developed by the team. See the [technical report](docs/report.pdf) for the full list of third-party assets and libraries.
-
-## 👤 Authors
+## Authors
 
 - **Alessandro Brighenti**
 - **Lorenzo Francescotti**
