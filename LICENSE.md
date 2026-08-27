@@ -8,12 +8,9 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Yoshi**: Original model created by [Seven71987](https://sketchfab.com/Seven71987) ([Model Link](https://sketchfab.com/3d-models/yoshi-58eb9ae7cbd3436eb7b5fde84faca10c)) — **Personally modified using Blender** to suit the needs of the project.
 - **Toad**: Created by [jakobhenerey2023](https://sketchfab.com/jakobhenerey2023) — [Model Link](https://sketchfab.com/3d-models/toad-d6a9f85aecd245fcb75f7d0f7a2f9f95)
 - **Bowser**: Created by [the_shatel](https://sketchfab.com/the_shatel) — [Model Link](https://sketchfab.com/3d-models/bowser-fa17f94ae350416f86c35db7c0e129c3)
-- **Bowser Jr.**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/bowser-jr-mario-kart-8-deluxe-8fd1397374a04d499ab4bd5bf90ffeac)
 - **Goomba**: Created by [stankojacob787](https://sketchfab.com/stankojacob787) — [Model Link](https://sketchfab.com/3d-models/goomba-9aa2e033384142809a52fb0d711f4a15)
-- **Ludwig**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/ludwig-mario-kart-8-deluxe-be487b04ad6446e08b04d1b05ebb34b5)
-- **Morton**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/morton-mario-kart-8-deluxe-b8f6ab968f7a423f89593d13db42825d)
-- **Roy**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/roy-mario-kart-8-deluxe-a990835bfc994b61a58b669c7acad84e)
 - **Kamek**: Created by [taej11503](https://sketchfab.com/taej11503) — [Model Link](https://sketchfab.com/3d-models/mario-party-5-kamek-7affecb01c6346c59c3ab5a47d1d8dd5)
+- **Princess Peach**: [Model Link](https://sketchfab.com/3d-models/princess-peach-lm3-f3f19841c12645a799adca8c501a2010)
 
 ### Items, Blocks & Vehicles
 - **Brick Block**: Created by [Artise1](https://sketchfab.com/Artise1) — [Model Link](https://sketchfab.com/3d-models/mario-brick-block-a104c8ee588d4670ba5cd621bddb94c8)
@@ -22,25 +19,24 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Fire Flower**: Created by [Yanez-Designs](https://sketchfab.com/Yanez-Designs) — [Model Link](https://sketchfab.com/3d-models/fire-flower-super-mario-bros-1465bc069efa437b999669c6db5a01ee)
 - **Go-Kart**: Created by [SamuelTea](https://sketchfab.com/SamuelTea) — [Model Link](https://sketchfab.com/3d-models/go-kart-2338810f0b1e444bace9bd7796b8c9e4)
 - **Star**: Created by [jkimmel694](https://sketchfab.com/jkimmel694) — [Model Link](https://sketchfab.com/3d-models/wii-mario-kart-wii-star-605d03622b334f4695ee7fa5a00d9dc9)
-- **Super Mushroom**: Created by [smarthug](https://smarthug.sketchfab.com/) — [Model Link](https://sketchfab.com/3d-models/mario-super-mushroom-bfecb0aee2984ddca543ea90dcb270cc)
+- **Star Launch (warp star)**: [Model Link](https://sketchfab.com/3d-models/star-launch-super-mario-galaxy-fan-project-1b9adfbb6f4c47869c22034325a868c0)
+- **Super Mushroom**: Created by [smarthug](https://sketchfab.com/smarthug) — [Model Link](https://sketchfab.com/3d-models/mario-super-mushroom-bfecb0aee2984ddca543ea90dcb270cc)
 - **Yoshi Egg**: Created by [Yanez-Designs](https://sketchfab.com/Yanez-Designs) — [Model Link](https://sketchfab.com/3d-models/yoshi-egg-2125c39434ed4b3696bdff0a0bdb6fb2)
 - **Warp Pipe**: Created by [vanc3d](https://sketchfab.com/vanc3d) — [Model Link](https://sketchfab.com/3d-models/super-mario-pipe-for-free-470f2e1ef78d4c4bb35969909adf90ce)
-- **Minecraft Sign**: Created by [Red Fox](https://sketchfab.com/RedFox24) — [Model Link](https://sketchfab.com/3d-models/minecraft-sign-483093c29032437594e86b792dced8d4)
+- https://sketchfab.com/3d-models/yoshi-egg-2125c39434ed4b3696bdff0a0bdb6fb2#download
 
 ### Textures & Environments
 - **Skyboxes**: Provided by [Kenney](https://kenney.nl/assets/skyboxes)
 - **Palm Tree**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/3ds-mario-kart-7-palm-tree-4f27fab359e74e9b82c6a061bc782a18)
 - **Toad House (3D Land)**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/super-mario-3d-land-toad-house-35e2cb6b184a47cca3e20ed5b3036575)
-- **Toad Mushroom House**: Created by [Spooky](https://sketchfab.com/Spooky) — [Model Link](https://sketchfab.com/3d-models/toad-mushroom-house-8fd19ae8900f49ddaad3568e345bfd03)
 - **Mario's House Exterior**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/nintendo-64-paper-mario-marios-house-exterio-6eaf1353a8a34de4a9a1d74a41445f2d)
+- **Peach's Castle**: [Model Link](https://sketchfab.com/3d-models/peachs-castle-e8002b22690b48e69424938742c8e040)
 - **Egg Planet**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/egg-planet-8e5dba7af88e487ea61992f804b91eb8)
-- **Grass**: Created by [Quaternius](https://poly.pizza/m/3tyh15Fbmsx) — [Model Link](https://poly.pizza/m/3tyh15Fbmsx) (CC0)
-
----
-
-## 🎵 Audio & SFX Credits
-
-All audio assets, sound effects, and music are property of **Nintendo** and are used non-commercially under fair use / educational purposes.
-
-- **Super Mario Galaxy Sound Effects**: Sourced via [The Sounds Resource](https://sounds.spriters-resource.com/wii/supermariogalaxy/asset/395356/)
-- **Super Mario 64 Remastered Soundtrack**: Sourced via [KHInsider](https://downloads.khinsider.com/game-soundtracks/album/super-mario-64-remastered-soundtrack)
+- **Grass (prop model)**: Created by [Quaternius](https://poly.pizza/m/3tyh15Fbmsx) — [Model Link](https://poly.pizza/m/3tyh15Fbmsx) (CC0)
+- **Ground grass texture**: [Seamless green grass pattern](https://www.magnific.com/free-vector/seamless-green-grass-pattern_13187581.htm)
+- **Flower (pink lotus)**: [Model Link](https://sketchfab.com/3d-models/pink-lotus-flower-3d-model-fe02934ea3b04fceab369af3c5fb9cc7)
+- **Kamek logo** (zone sign decal): by [luism-h](https://www.deviantart.com/luism-h) — [Image Link](https://www.deviantart.com/luism-h/art/Kamek-Magikoopa-Symbol-1254657609)
+- **Bowser emblem logo** (zone sign decal): [Image Link](https://logos-world.net/wp-content/uploads/2024/01/Bowser-Emblem.png)
+- https://sketchfab.com/3d-models/minecraft-sign-483093c29032437594e86b792dced8d4
+- https://sounds.spriters-resource.com/wii/supermariogalaxy/asset/395356/
+- https://sounds.spriters-resource.com/wii/supermariogalaxy/asset/395355/
