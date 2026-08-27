@@ -3,18 +3,9 @@ import { enableShadows } from "../utils/shadows.js";
 
 /**
  * NPC.js — mesh + static physics body for a level NPC (Toad, ...), spawned
- * from the level JSON's "npcs" array (see LevelLoader.buildBuildingsAndNPCs).
- *
- * BUG FIX (missing Toad collision): NPCs used to be spawned as a bare mesh
- * with no physics body at all — nothing stopped the player from walking
- * straight through Toad. This gives every NPC the same simple box collider
- * ToadHouse.js already uses for its own structure, sized generously enough
- * to cover any of the (currently small, human/toad-scale) NPC models
- * without needing per-type tuning.
- *
- * Also exposes a plain `position` object (independent of `scale`/rotation
- * quirks in `mesh.position`) so InteractionManager can register a prompt at
- * this NPC's location without reaching into three.js internals.
+ * from the level JSON's "npcs" array. Also exposes a plain `position`
+ * object so InteractionManager can register a prompt without touching
+ * three.js internals.
  */
 export default class NPC {
   constructor(mesh, physicsEngine, data) {
@@ -40,13 +31,8 @@ export default class NPC {
       return;
     }
 
-    // A simple box around the NPC's rough footprint/height — tunable per
-    // level-JSON entry via hitboxRadius/hitboxHeight (absolute world units,
-    // NOT multiplied by `scale`). Without an explicit override, the default
-    // (sized for a roughly human-scale character at scale=1) is scaled down
-    // WITH the model's own `scale` instead of applied at face value —
-    // otherwise a small NPC like Toad (scale 0.4) would end up wearing a
-    // human-sized collider several times taller than its own visible model.
+    // Box collider, tunable via hitboxRadius/hitboxHeight (world units).
+    // Default scales WITH `scale` so small NPCs don't get oversized colliders.
     const radius = data.hitboxRadius ?? 1.0 * scale;
     const height = data.hitboxHeight ?? 2.6 * scale;
 

@@ -5,35 +5,13 @@ import { COLLISION_GROUPS } from "../../physics/PhysicsEngine.js";
 import AnimationController from "../animation/AnimationController.js";
 
 /**
- * Enemy.js — shared base class for every enemy in the game (Goomba, Kamek,
- * Bowser, and any future addition).
- *
- * Follows the same spawn()/update() shape as Player.js/Yoshi.js: a dynamic
- * spherical cannon-es body (so gravity and terrain collision work exactly
- * like the player), synced to a visual mesh each frame.
- *
- * On top of that, it owns:
- *  - A simple "idle until the player is within detectionRange, then chase"
- *    AI (straight-line seek, no pathfinding).
- *  - A generic multi-hit defeat system: hitsToDefeat + invulnerabilityDuration.
- *    A one-hit enemy (Goomba) just uses the defaults; a boss (Kamek, Bowser)
- *    sets a higher hitsToDefeat and a cooldown between hits, without needing
- *    any extra code — see Goomba.js / Kamek.js / Bowser.js.
- *  - Classic Mario stomp rule for player contact: landing on top of the
- *    enemy while falling defeats/damages it and bounces the player; any
- *    other contact damages the player instead (via the onDamagePlayer
- *    callback, wired up by whoever spawns the enemy — see main.js).
- *
- * Deliberately never touches Player.js: it only reads player.mesh/player.body
- * and, on a stomp/hit, nudges player.body.velocity.y for the bounce — the
- * same "poke the body directly" pattern EntityManager already uses for the
- * void-fall respawn.
+ * Enemy.js — shared base for every enemy (Goomba, Kamek, Bowser, ...).
+ * Follows Player.js/Yoshi.js's spawn()/update() shape: a dynamic
+ * spherical body synced to a mesh. Adds chase AI, a generic multi-hit
+ * defeat system, and the classic stomp-vs-side-contact rule. Never
+ * touches Player.js beyond reading its mesh/body and nudging velocity.y.
  */
 export default class Enemy {
-  // Reads every tunable stat from `options` (falling back to plain-enemy
-  // defaults), and sets up the bookkeeping state (chase/defeat/cooldown
-  // flags) shared by every subclass. Does not create the physics body or
-  // add anything to the scene yet — see spawn() for that.
   constructor(mesh, physicsEngine, options = {}) {
     this.mesh = mesh;
     this.physicsEngine = physicsEngine;
@@ -41,21 +19,16 @@ export default class Enemy {
     this.detectionRange = options.detectionRange ?? 9;
     this.chaseSpeed = options.chaseSpeed ?? 2.5;
     this.radius = options.radius ?? 0.7;
-    // If set, spawn() rescales the mesh so its bounding-box height matches
-    // this value exactly, regardless of the source GLB's native scale (the
-    // same normalization trick used for the palm tree colliders). Leave
-    // null to keep the model's original scale untouched.
+    // If set, spawn() rescales the mesh to this bounding-box height
+    // regardless of the source GLB's native scale.
     this.targetHeight = options.targetHeight ?? null;
 
-    // Chase has hysteresis: once the player is noticed (inside
-    // detectionRange), the enemy keeps chasing until the player gets to
-    // 2x that range, not just outside the original range. Makes "shake it
-    // off" feel deliberate instead of the enemy stopping the instant you
-    // take one step back.
+    // Hysteresis: once noticed, keeps chasing until the player reaches 2x
+    // detectionRange, not just outside the original range.
     this.isChasing = false;
 
-    // Multi-hit defeat system. A simple enemy (Goomba) just leaves these at
-    // the 1-hit/no-invulnerability defaults; a boss overrides both.
+    // Multi-hit defeat: Goomba leaves these at 1-hit/no-invuln defaults;
+    // a boss overrides both.
     this.hitsToDefeat = options.hitsToDefeat ?? 1;
     this.invulnerabilityDuration = options.invulnerabilityDuration ?? 0;
     this.stompBounceVelocity = options.stompBounceVelocity ?? 10;
@@ -64,38 +37,31 @@ export default class Enemy {
     this.invulnerableTimer = 0;
     this.isDefeated = false;
 
-    // Brief cooldown after damaging the player, so standing in continuous
-    // side-contact doesn't strip multiple lives in a single second.
+    // Cooldown after damaging the player, so side-contact doesn't strip
+    // multiple lives per second.
     this.playerHitCooldown = 0;
 
     this.body = null;
     this._waddlePhase = Math.random() * Math.PI * 2; // desync multiple enemies
 
-    // Skeletal animation, built in spawn() for the enemies whose model
-    // actually has a skeleton (currently only Bowser). Stays null until
-    // then, and stays inert afterwards for the boneless ones.
+    // Built in spawn() for enemies whose model has a skeleton (Bowser);
+    // stays inert for the boneless ones.
     this.animation = null;
 
-    // Optional callbacks, set by whoever spawns this enemy (see main.js):
-    //   onDamagePlayer(player) — called once per side-contact hit.
-    //   onStomped(hitsTaken, hitsToDefeat) — called on every successful stomp.
-    //   onDefeated() — called once, when hitsTaken reaches hitsToDefeat.
+    // Optional callbacks set by the spawner (main.js): onDamagePlayer(player),
+    // onStomped(hitsTaken, hitsToDefeat), onDefeated().
     this.onDamagePlayer = null;
     this.onStomped = null;
     this.onDefeated = null;
   }
 
-  // Places the enemy in the world: normalizes its visual scale (if
-  // targetHeight is set), positions the mesh, and creates+registers its
-  // dynamic physics body.
+  // Normalizes visual scale (if targetHeight set), positions the mesh,
+  // and creates+registers the dynamic physics body.
   spawn(x, y, z) {
     if (!this.mesh) return;
 
-    // Normalize visual scale from the model's real bounding-box height
-    // instead of guessing a raw scale multiplier — different enemy GLBs
-    // can have wildly different native scales (a Goomba spawned at scale 1
-    // came out towering over the player), so this makes every enemy come
-    // out at a predictable, comparable size.
+    // Scale from the model's real bounding-box height rather than a guessed
+    // multiplier — GLBs vary wildly (a Goomba at scale 1 towered over the player).
     if (this.targetHeight) {
       this.mesh.scale.set(1, 1, 1);
       this.mesh.position.set(0, 0, 0);
@@ -113,8 +79,7 @@ export default class Enemy {
 
     const shape = new CANNON.Sphere(this.radius);
 
-    // Same "raise the sphere center by radius" trick as Player/Yoshi, so
-    // the model's origin (feet, y=0) touches the ground.
+    // Sphere center raised by `radius` so the model's feet (y=0) touch ground.
     this.body = new CANNON.Body({
       mass: 3,
       position: new CANNON.Vec3(x, y + this.radius, z),
@@ -123,11 +88,8 @@ export default class Enemy {
       fixedRotation: true,
     });
 
-    // Collides with everything EXCEPT the player — see COLLISION_GROUPS'
-    // comment in PhysicsEngine.js. Every enemy-player interaction already
-    // goes through _checkPlayerContact below; a real cannon-es collision
-    // between the two dynamic spheres on top of that was unintentional and
-    // is what caused the "rimbalzo continuo" bug on Bowser.
+    // Excludes the player — all enemy-player interaction goes through
+    // _checkPlayerContact; a real physics collision caused a bounce bug.
     this.body.collisionFilterGroup = COLLISION_GROUPS.ENEMY;
     this.body.collisionFilterMask = -1 & ~COLLISION_GROUPS.PLAYER;
 
@@ -135,47 +97,28 @@ export default class Enemy {
       this.physicsEngine.world.addBody(this.body);
     }
 
-    // Walk cycle, for enemies whose GLB carries a usable skeleton — the
-    // same procedural system the player characters use (see
-    // entities/animation/). Built HERE and not in the constructor because
-    // the clips are derived from the bones' world positions, which only
-    // settle once the height normalization above has been applied.
-    //
-    // A model without bones (Goomba, Kamek) leaves the controller inert
-    // rather than failing — see AnimationController's header — which is
-    // what the waddle fallback in update() keys off.
+    // Real walk cycle for enemies with a usable skeleton. Built here, not the
+    // constructor, since clips need the height normalization above applied.
     this.animation = new AnimationController(this.mesh, {
-      // Chasing should read as walking whatever the enemy's speed, and
-      // never as the player's flat-out run: that clip belongs to a much
-      // faster speed range than any chase.
+      // Chasing should read as walking at this enemy's own speed, never
+      // the player's flat-out run clip.
       walkSpeed: this.chaseSpeed * 0.5,
       runSpeed: this.chaseSpeed * 10,
     });
   }
 
-  // Per-frame tick: ticks timers, runs the chase AI, syncs the mesh to the
-  // physics body, plays the idle waddle, and checks for player contact.
-  // No-ops once the enemy is defeated or before spawn() has run.
+  // Per-frame: ticks timers, runs chase AI, syncs mesh to body, plays the
+  // idle waddle/walk, checks player contact. No-ops once defeated.
   update(delta, player) {
     if (this.isDefeated || !this.body || !this.mesh) return;
 
     if (this.invulnerableTimer > 0) this.invulnerableTimer -= delta;
     if (this.playerHitCooldown > 0) this.playerHitCooldown -= delta;
 
-    // Animation FIRST, reading the velocity this enemy ended the previous
-    // frame with rather than the one it is about to be given. A boss
-    // freezes itself while charging an attack — Boss._updateAttack zeroes
-    // the chase velocity, and it runs after this class has had its turn —
-    // so sampling later in the same frame showed Bowser walking on the
-    // spot while he stood still puffing up. One frame of lag is invisible;
-    // a walk cycle playing under a motionless boss is not.
-    //
-    // A real walk cycle when the skeleton allows one, the sine-based tilt
-    // otherwise. Never both: the waddle exists precisely to give a
-    // boneless enemy some sign of life.
+    // Animation reads last frame's velocity (before chase/Boss.attack change
+    // it) — one frame of lag beats a walk cycle under a frozen charging boss.
     if (this.animation && this.animation.enabled) {
-      // grounded is simply true: these enemies walk, they never jump, and
-      // gravity keeps them on the platform they were spawned on.
+      // grounded is simply true: enemies walk, never jump.
       this.animation.update(delta, {
         speed: Math.hypot(this.body.velocity.x, this.body.velocity.z),
         verticalVelocity: 0,
@@ -189,7 +132,7 @@ export default class Enemy {
       this._updateChase(delta, player);
     }
 
-    // Sync the visual mesh to the physics body (same offset as Player/Yoshi).
+    // Sync mesh to body (same offset as Player/Yoshi).
     this.mesh.position.set(
       this.body.position.x,
       this.body.position.y - this.radius,
@@ -203,10 +146,8 @@ export default class Enemy {
     }
   }
 
-  // Straight-line "seek" toward the player once noticed; otherwise lets
-  // horizontal velocity bleed off so the enemy settles back to a stop.
-  // See the isChasing hysteresis note in the constructor: entering range
-  // starts the chase, but escaping it takes getting to 2x that range.
+  // Straight-line seek once noticed; otherwise bleeds off velocity to a
+  // stop. See the isChasing hysteresis note in the constructor.
   _updateChase(delta, player) {
     const dx = player.mesh.position.x - this.body.position.x;
     const dz = player.mesh.position.z - this.body.position.z;
@@ -227,7 +168,6 @@ export default class Enemy {
       this.body.velocity.x = (dx / dist) * this.chaseSpeed;
       this.body.velocity.z = (dz / dist) * this.chaseSpeed;
 
-      // Face the player while chasing.
       this.mesh.rotation.y = Math.atan2(dx, dz);
     } else {
       this.body.velocity.x *= 0.9;
@@ -235,14 +175,8 @@ export default class Enemy {
     }
   }
 
-  // Blinks the whole mesh on/off while invulnerableTimer is counting down
-  // (only ever non-zero for a boss between stomps — see _onStomped), the
-  // classic "just got hit and can't be chain-stomped yet" tell. Driven by
-  // invulnerableTimer's own countdown rather than a separate elapsed-time
-  // accumulator, so the flicker is perfectly in sync regardless of frame
-  // rate and needs no extra state to reset when it ends. Restores full
-  // visibility on the very last tick so the boss never gets stuck invisible
-  // if invulnerabilityDuration doesn't divide evenly into flicker periods.
+  // Blinks the mesh while invulnerableTimer counts down (boss only, between
+  // stomps). Driven by the timer, so it's frame-rate independent.
   _updateInvulnerabilityFlicker() {
     if (this.invulnerableTimer > 0) {
       const FLICKER_RATE = 10; // on/off toggles per second
@@ -252,20 +186,21 @@ export default class Enemy {
     }
   }
 
-  // Small procedural "waddle" — a sine-based tilt of the whole mesh — so
-  // an enemy whose model has no bones still reads as alive. The fallback
-  // half of the branch in update(): an enemy that does have a skeleton
-  // gets a real walk cycle instead and never tilts, since the two together
-  // would just look like a stagger.
+  // Sine-based mesh tilt so a boneless enemy still reads as alive — the
+  // fallback half of update()'s branch; a skeletal enemy never tilts.
   _updateWaddle(delta) {
     this._waddlePhase += delta * 6;
     this.mesh.rotation.z = Math.sin(this._waddlePhase) * 0.15;
   }
 
-  // Distinguishes a stomp (player falling, above the enemy) from a
-  // side/other contact (damages the player instead), and dispatches to
-  // the matching handler. No-ops if the player is out of contact range.
+  // Distinguishes a stomp (player falling, above the enemy) from side
+  // contact and dispatches accordingly. No-ops if out of contact range.
   _checkPlayerContact(player) {
+    // BUG FIX (fake invulnerability): gated up front now, not per-branch —
+    // NOTHING (stomp or side contact) can register while still flickering,
+    // instead of relying on each branch below to remember its own check.
+    if (this.invulnerableTimer > 0) return;
+
     const dx = player.mesh.position.x - this.mesh.position.x;
     const dz = player.mesh.position.z - this.mesh.position.z;
     const horizontalDist = Math.sqrt(dx * dx + dz * dz);
@@ -277,57 +212,29 @@ export default class Enemy {
     const isFalling = player.body && player.body.velocity.y < 0;
     const isAbove = verticalDiff > this.radius * 0.3;
 
-    // BUG FIX (continuous bounce on Bowser): a stomp used to be accepted on
-    // ANY frame where isFalling && isAbove held, with no cooldown at all —
-    // only the side-contact branch below ever checked invulnerableTimer.
-    // So the instant Mario's bounce arc peaked and gravity started pulling
-    // him back down, if he was still horizontally within contactRange (easy
-    // on Bowser: radius 1 + targetHeight 3.4 keep the "above" window open
-    // far longer than Kamek's radius 0.3/targetHeight 2.2), _onStomped fired
-    // again immediately — re-bouncing him, re-granting invulnerability, and
-    // counting another hit the fight wasn't supposed to award yet. That's
-    // the "rimbalzo continuo": a rapid, self-sustaining stutter-bounce that
-    // also read as the boss' hitbox anomalously growing, since a single
-    // stomp was effectively registering hits across a much taller window
-    // than one legitimate stomp should. Gating this branch on
-    // invulnerableTimer too (the same guard the contact-damage branch
-    // already used) makes a stomp count once per invulnerability window,
-    // exactly as the multi-hit system was designed to work.
-    if (isFalling && isAbove && this.invulnerableTimer <= 0) {
+    if (isFalling && isAbove) {
       this._onStomped(player);
       return;
     }
 
-    // BUG FIX (damage from jumping on the head): side-contact damage used to
-    // fire on ANY frame that wasn't a successful stomp — including a player
-    // still mid-air on their way to landing on top (rising or floating over
-    // a tall boss like Bowser/Kamek, horizontally within contactRange but
-    // not yet falling, or falling but not quite past the isAbove threshold
-    // yet). That read as "I jumped on his head and got hurt anyway", even
-    // though the player was airborne the whole time and never actually
-    // walked into the boss. Player.js computes its own "grounded" the same
-    // way (canJump && velocity.y > -2, see Player.update) — reusing that
-    // definition here means _onPlayerContact can now only fire while the
-    // player has their feet on the ground, matching "il danno da contatto
-    // e' solo laterale, quando non sono in salto": a stomp can still land
-    // (or whiff) at any height, but lateral bump damage is a ground-only
-    // interaction again.
+    // Ground-only (BUG FIX: side-contact used to also fire on a player still
+    // airborne en route to a stomp). Mirrors Player's own grounded check.
     const isGrounded = !!(player.canJump && player.body && player.body.velocity.y > -2);
     if (!isGrounded) return;
 
-    if (this.invulnerableTimer <= 0 && this.playerHitCooldown <= 0) {
+    if (this.playerHitCooldown <= 0) {
       this._onPlayerContact(player);
     }
   }
 
-  // Handles a successful stomp: bounces the player, counts the hit, and
-  // either defeats the enemy (hitsTaken reached hitsToDefeat) or grants a
-  // brief invulnerability window before it can be stomped again.
+  // Bounces the player, counts the hit, and defeats or grants a brief
+  // invulnerability window before the enemy can be stomped again.
   _onStomped(player) {
-    // Bounce the player upward, same "poke the body directly" pattern used
-    // elsewhere in the codebase (e.g. the void-fall respawn in
-    // EntityManager) — never touches Player.js itself.
     if (player.body) player.body.velocity.y = this.stompBounceVelocity;
+    // BUG FIX (fake invulnerability): the bounce alone left canJump=true,
+    // so the very next frame's "isGrounded" side-contact check could read
+    // the still-airborne player as grounded. Mirrors Player's own jump.
+    if (player) player.canJump = false;
 
     this.hitsTaken++;
     if (this.onStomped) this.onStomped(this.hitsTaken, this.hitsToDefeat);
@@ -335,21 +242,17 @@ export default class Enemy {
     if (this.hitsTaken >= this.hitsToDefeat) {
       this._defeat();
     } else {
-      // Not defeated yet (boss case): grant a short invulnerability window
-      // so the player can't chain-stomp it down in one jump combo.
       this.invulnerableTimer = this.invulnerabilityDuration;
     }
   }
 
-  // Handles a non-stomp contact: starts the hit cooldown and forwards to
-  // the onDamagePlayer callback, if one was wired up by the spawner.
+  // Starts the hit cooldown and forwards to onDamagePlayer, if wired up.
   _onPlayerContact(player) {
     this.playerHitCooldown = 1.0;
     if (this.onDamagePlayer) this.onDamagePlayer(player);
   }
 
-  // Removes the enemy from the scene and physics world, marks it defeated
-  // (so update() becomes a no-op from here on), and fires onDefeated().
+  // Removes the enemy from scene/physics, marks it defeated, fires onDefeated().
   _defeat() {
     this.isDefeated = true;
 
@@ -368,7 +271,6 @@ export default class Enemy {
     if (this.onDefeated) this.onDefeated();
   }
 
-  // Current world position, or the origin if the enemy hasn't spawned yet.
   get position() {
     return this.mesh ? this.mesh.position : new THREE.Vector3();
   }

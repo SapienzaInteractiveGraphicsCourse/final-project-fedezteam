@@ -7,47 +7,15 @@ import { enableShadows } from "../../utils/shadows.js";
 import { normalizeMaterials } from "../../utils/materials.js";
 
 /**
- * EndingZone.js — where the player ends up after collecting every star and
- * pressing "REACH PRINCESS PEACH" on the win screen: a wide grass field
- * with Peach's castle on it and Peach herself waiting in front of the
- * entrance.
- *
- * Built from data (assets/levels/peach_castle.json) and reached by
- * teleport, exactly like the two boss courses — see ObstacleZone.js for the
- * reasoning behind "another far-away corner of the same physics world"
- * rather than a real scene switch. It sits around z = -400, well clear of
- * the island (±120), Kamek's course (x 260..320) and Bowser's (x -300..-230).
- *
- * The difference from ObstacleZone is that this one is scenery, not a
- * course: no lava, no enemies, nothing to lose a life to. The ground is a
- * modestly-sized slab (just enough to comfortably fit the entry point, the
- * castle and Peach — see the "ground"/"wallHeight" fields in the JSON)
- * ringed by invisible boundary walls (see _buildBoundaryWalls) so it's
- * actually impossible to walk off the edge into the void, rather than just
- * unlikely — the run is over at this point, the reward shouldn't be able to
- * kill them.
- *
- * Both models are placed by MEASURING them rather than by trusting numbers
- * in the JSON: each is scaled to the height the level file asks for and
- * then shifted so its base rests exactly on the ground and its footprint is
- * centered on the requested x/z. Peach's model is ~4.8 units tall and the
- * castle only ~1.1, with its origin off to one side — hardcoded offsets
- * would silently break the moment either file is re-exported.
+ * EndingZone.js — the epilogue reached after collecting every star: a grass
+ * field with Peach's castle and Peach herself, built from
+ * assets/levels/peach_castle.json and reached by teleport (see ObstacleZone.js),
+ * far out at z ≈ -400. Pure scenery — no lava, no enemies, ringed by
+ * invisible walls so falling off the edge is impossible, not just unlikely.
  */
-/**
- * Dimensions of the perimeter fence. Its height is set against the jump
- * both characters share: they leave the ground at 18 u/s against a gravity
- * of 30 (see EntityManager.spawnPlayer and PhysicsEngine), so they peak
- * 18^2 / (2 * 30) = 5.4 units up. The railing tops out at 6.35 and the
- * stone pillars at 7.45 — over it, but only just, which is the point: a
- * fence sized to be un-hoppable rather than sized to loom.
- *
- * Luigi used to jump higher than Mario and clear this railing; he doesn't
- * anymore, the two now share one set of movement stats. The invisible wall
- * _buildBoundaryWalls puts on the same line, several times this tall, stays
- * regardless — it's what makes falling out of the epilogue impossible
- * rather than merely unlikely.
- */
+
+// Perimeter fence dimensions, sized to clear the shared jump apex (5.4 units)
+// just enough to be un-hoppable — the real barrier is _buildBoundaryWalls' invisible wall.
 const FENCE = {
   depth: 0.8, // thickness of the low wall the railing stands on
   baseHeight: 1.6,
@@ -73,19 +41,14 @@ export default class EndingZone {
     this.loader = new GLTFLoader();
 
     // Where the win screen's button drops the player (see main.js's
-    // onReachPeach). Stays null if load() failed, which is what tells the
-    // caller not to teleport anyone.
+    // onReachPeach). Stays null if load() failed, telling the caller not to teleport.
     this.entryPoint = null;
     this.castle = null;
     this.peach = null;
   }
 
-  /**
-   * Fetches the zone's JSON file and builds the ground, the castle and
-   * Peach into the scene and physics world. Returns the parsed data, or
-   * null if anything essential failed (logged via console.warn) — in which
-   * case entryPoint stays null and the ending teleport is simply skipped.
-   */
+  // Fetches the zone's JSON and builds ground/castle/Peach into the scene
+  // and physics world. Returns null (entryPoint stays null) if anything essential failed.
   async load(jsonPath = "./assets/levels/peach_castle.json") {
     let data;
     try {
@@ -106,18 +69,14 @@ export default class EndingZone {
 
     this._buildGround(ground);
 
-    // The visible fence and the invisible walls are both laid out from this
-    // one perimeter, so a collider can never end up somewhere other than
-    // where the player can see a fence. "wallHeight" is optional in the
-    // JSON (default below) since the ground's x/z size is what actually
-    // decides where the ring goes.
+    // The visible fence and invisible walls both come from this one
+    // perimeter, so a collider can never end up where no fence is visible.
     const perimeter = this._perimeter(ground);
     this._buildFence(perimeter);
     this._buildBoundaryWalls(perimeter, data.wallHeight || 24);
 
-    // The castle first: Peach's own placement doesn't depend on it (the
-    // level file positions her directly), but loading it first means a
-    // failure there is reported before anything else goes wrong.
+    // Castle first: Peach's placement doesn't depend on it, but loading it
+    // first surfaces a failure there before anything else goes wrong.
     this.castle = await this._placeModel(ENDING_MODELS.peachCastle, data.castle, groundTop, {
       collider: true,
     });
@@ -131,9 +90,7 @@ export default class EndingZone {
   }
 
   // The grass slab everything stands on: same textured-box recipe as the
-  // island's own platforms (see LevelLoader.buildPlatforms), including the
-  // slight darkening that keeps a surface this large from reading as
-  // overexposed.
+  // island's own platforms (LevelLoader.buildPlatforms).
   _buildGround(cfg) {
     const grass = new THREE.TextureLoader().load(TEXTURES.groundGrass);
     grass.wrapS = THREE.RepeatWrapping;
@@ -169,15 +126,8 @@ export default class EndingZone {
     }
   }
 
-  /**
-   * The single line the whole boundary is built from: the centre line of
-   * the fence, pulled half its own thickness inside the ground's edge so
-   * the fence stands ON the grass rather than hanging over the drop.
-   *
-   * Returns the four runs that make up the ring, each with its centre, its
-   * length, and which axis it runs along — everything the fence and the
-   * colliders need, worked out once.
-   */
+  // The line the whole boundary is built from: the fence's centreline, inset half
+  // its thickness. Returns the four runs (centre/length/axis) and corners both need.
   _perimeter(cfg) {
     const groundTop = cfg.y + cfg.size.y / 2;
     const inset = FENCE.depth / 2;
@@ -206,17 +156,8 @@ export default class EndingZone {
     };
   }
 
-  /**
-   * The visible fence: a low stone wall carrying a run of gold railings,
-   * with stone pillars at the corners and at intervals along each side.
-   *
-   * The bars are one InstancedMesh rather than ~250 separate meshes (same
-   * treatment the grass gets in Decorations.spawnFieldProps) — it's a
-   * single draw call, and the fence is on screen for the whole ending. They
-   * also don't cast shadows: at 0.18 units thick each one contributes
-   * nothing readable to the shadow map and they are by far the most
-   * numerous thing here.
-   */
+  // The visible fence: a low stone wall carrying gold railings, with stone pillars
+  // at corners and along each side. Bars are one InstancedMesh (like Decorations' grass).
   _buildFence(perimeter) {
     const stone = new THREE.MeshStandardMaterial({
       color: FENCE.stoneColor,
@@ -347,23 +288,16 @@ export default class EndingZone {
     this.scene.add(caps);
   }
 
-  /**
-   * The colliders behind the fence: four invisible boxes sitting on the
-   * exact same perimeter, each one starting at the fence's inner face and
-   * extending outward over the drop, where there is nothing else to get in
-   * the way. They are far taller than the fence looks (`wallHeight`), which
-   * costs nothing and means no amount of bouncing off scenery can ever put
-   * the player on the wrong side of it.
-   */
+  // Four invisible boxes on the same perimeter as the fence, far taller than
+  // the fence looks — so no amount of bouncing can put the player on the wrong side.
   _buildBoundaryWalls(perimeter, wallHeight) {
     const world = this.physicsEngine?.world || this.physicsEngine;
     if (!world) return;
 
     const thickness = 4;
     const centerY = perimeter.groundTop + wallHeight / 2;
-    // The wall's inner face lines up with the fence's inner face, so the
-    // player is stopped right where the stonework is rather than a stride
-    // short of it or a stride past it.
+    // The wall's inner face lines up with the fence's inner face, so the player
+    // is stopped right where the stonework is.
     const shift = thickness / 2 - FENCE.depth / 2;
 
     for (const run of perimeter.runs) {
@@ -394,19 +328,8 @@ export default class EndingZone {
     }
   }
 
-  /**
-   * Peach's model ships in a T-pose (it has a full skeleton but not a single
-   * animation), which next to the castle reads as an unfinished import
-   * rather than a princess waiting outside her door. This brings her arms
-   * down along her sides.
-   *
-   * The rotation is worked out in WORLD space — "point this bone from where
-   * it currently aims to where I want it to aim" — instead of by picking
-   * euler angles per joint. Bone local axes are whatever the artist's rig
-   * happened to use, so hand-written angles only ever work for one specific
-   * model; aiming is the same trick clipFactory's limbDir uses for Mario
-   * and Luigi, and it survives a re-export.
-   */
+  // Peach's model ships T-posed; brings her arms down along her sides by aiming
+  // bones in WORLD space (clipFactory's limbDir trick) so it survives a re-export.
   _lowerArms(model) {
     const bones = {};
     model.traverse((o) => {
@@ -431,8 +354,7 @@ export default class EndingZone {
       const bone = bones[boneKey];
       if (!bone) continue;
       // The bone's own direction is the line from it to its child (the next
-      // joint down the arm); for the forearm, whatever child the rig gives
-      // it — the wrist.
+      // joint down the arm); for the forearm, the wrist.
       const child = childKey ? bones[childKey] : bone.children.find((c) => c.isBone);
       if (!child) continue;
 
@@ -464,15 +386,8 @@ export default class EndingZone {
     bone.quaternion.copy(parentWorld.invert().multiply(correction).multiply(world));
   }
 
-  /**
-   * Loads one GLB and drops it on the ground at cfg.x/cfg.z, scaled so it
-   * ends up cfg.height units tall. Returns the placed Object3D, or null if
-   * the file couldn't be loaded.
-   *
-   * The model is wrapped in a group and the model itself is offset inside
-   * it, so the group's position is the honest "where this thing stands"
-   * value regardless of where the artist left the model's origin.
-   */
+  // Loads one GLB, scales it to cfg.height, and drops it on the ground at cfg.x/z
+  // inside a wrapper group (so the group's position is always "where this stands").
   async _placeModel(path, cfg, groundTop, { collider, pose }) {
     if (!cfg) return null;
 
@@ -488,9 +403,8 @@ export default class EndingZone {
     normalizeMaterials(model);
     enableShadows(model, { castShadow: true, receiveShadow: true });
 
-    // Before any measuring: a T-posed model is wider than the same model
-    // standing normally, and that width would end up baked into both the
-    // scale and the collider computed below.
+    // Before any measuring: a T-posed model is wider than the same model standing
+    // normally, and that width would end up baked into the scale and collider.
     if (pose) pose(model);
 
     // Measure at scale 1 first, then scale to the requested height.
@@ -500,9 +414,8 @@ export default class EndingZone {
     const scale = cfg.height && size.y > 0 ? cfg.height / size.y : 1;
     model.scale.setScalar(scale);
 
-    // Re-measure once scaled and shift the model so its footprint is
-    // centered on the origin and its base sits at y = 0 — both within the
-    // group, so the group can then simply be moved where it belongs.
+    // Re-measure once scaled and shift the model so its footprint is centered on
+    // the origin and its base sits at y = 0, within the group.
     model.updateMatrixWorld(true);
     const scaled = new THREE.Box3().setFromObject(model);
     const center = scaled.getCenter(new THREE.Vector3());
@@ -518,11 +431,8 @@ export default class EndingZone {
       const s = scaled.getSize(new THREE.Vector3());
       const world = this.physicsEngine?.world || this.physicsEngine;
       if (world) {
-        // One box around the whole building. The towers are narrower than
-        // the base so this is generous at the corners, but the alternative
-        // (a shape per tower) buys nothing here: there is nothing to do
-        // inside the castle, the collider exists only to stop the player
-        // from walking through the walls.
+        // One box around the whole building: generous at the corners since the
+        // towers are narrower than the base, but a per-tower shape buys nothing here.
         world.addBody(
           new CANNON.Body({
             mass: 0,

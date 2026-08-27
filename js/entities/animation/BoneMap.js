@@ -1,32 +1,18 @@
 /**
- * BoneMap.js — translates a skeleton's real bone names into semantic ROLES
- * (hips, left shoulder, right knee, ...), so the rest of the animation code
- * never has to know which naming convention a given model uses.
- *
- * Every model names its bones its own way:
- *   Mixamo      → "mixamorig:LeftForeArm", "mixamorig:LeftUpLeg"
- *   Koopaling   → "ElbowL_021",            "LegL_03"
- * The animations we write need to say "rotate the left forearm" without
- * caring which of these conventions the loaded model happens to use.
+ * BoneMap.js — translates a skeleton's real bone names into semantic
+ * ROLES (hips, left shoulder, ...), so animation code never has to know
+ * which naming convention (Mixamo, Koopaling, ...) a model uses.
  */
 
-// Reduces a bone name to a comparable form:
-//   "mixamorig:LeftForeArm" → "leftforearm"
-//   "ElbowL_021"            → "elbowl"
-//   "Spine1_011"            → "spine1"
+// Reduces a bone name to a comparable form, e.g. "mixamorig:LeftForeArm"
+// -> "leftforearm" (GLTFLoader already strips ":", so matched without it too).
 function normalize(name) {
   return String(name)
     .replace(/^.*:/, "") // strip a "mixamorig:" prefix
-    // three.js does NOT keep the colon: GLTFLoader runs every name through
-    // PropertyBinding.sanitizeNodeName(), which strips [ ] . : / because
-    // they're reserved in KeyframeTrack paths. So by load time
-    // "mixamorig:Hips" is already "mixamorigHips" and the line above finds
-    // nothing to cut — the prefix has to be stripped when fused too.
     .replace(/^mixamorig\d*/i, "")
-    // The separator is required: "Spine1_011" → "Spine1", but "Spine2" stays
-    // "Spine2". Without it Mixamo's Spine1/Spine2 would both collapse to
-    // "spine" and overwrite each other.
-    .replace(/[_.\-\s]\d+$/, "") // strip a numeric suffix like "_021"
+    // Numeric-suffix strip must keep a trailing single digit like
+    // "Spine1"/"Spine2" distinct — only cuts multi-digit suffixes ("_021").
+    .replace(/[_.\-\s]\d+$/, "")
     .replace(/[_.\-\s]/g, "") // strip any remaining separators
     .toLowerCase();
 }
@@ -60,8 +46,7 @@ const ROLES = {
   footL: [/^leftfoot$/, /^footl$/],
   footR: [/^rightfoot$/, /^footr$/],
 
-  // Toes aren't needed for animation, only to figure out which way the
-  // character is facing: the toe always sits in front of the heel.
+  // Only needed to figure out facing direction: toe sits in front of heel.
   toeL: [/^lefttoebase$/, /^toel$/, /^footlend$/, /^toebasel$/],
   toeR: [/^righttoebase$/, /^toer$/, /^footrend$/, /^toebaser$/],
 };
@@ -78,8 +63,6 @@ const ESSENTIAL = [
 ];
 
 export default class BoneMap {
-  // Resolves every ROLES entry against the bones found under `root` and
-  // stores the result; see _resolve() below for the matching logic.
   constructor(root) {
     /** @type {Object<string, THREE.Bone>} role → bone */
     this.bones = {};

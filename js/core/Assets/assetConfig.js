@@ -6,9 +6,8 @@ export function initGameModels(assetLoader) {
   return assetLoader.loadAll(CHARACTER_MODELS);
 }
 
-// Loads every enemy model in ENEMY_MODELS. Uses the same AssetLoader
-// instance/cache as initGameModels, so calling both just merges into one
-// combined assets map (AssetLoader.assets is shared, not reset per call).
+// Loads every enemy model. Shares the same AssetLoader cache as
+// initGameModels, so both calls merge into one combined assets map.
 export function initEnemyModels(assetLoader) {
   return assetLoader.loadAll(ENEMY_MODELS);
 }

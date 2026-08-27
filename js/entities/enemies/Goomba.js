@@ -1,18 +1,11 @@
 import Enemy from "./Enemy.js";
 
 /**
- * Goomba.js — the basic one-hit enemy.
- *
- * Goomba is a thin config wrapper around the shared Enemy base class: it
- * contributes only its own tuning numbers (detection range, chase speed,
- * collision radius, visual scale) and leaves every behavior — chase AI,
- * physics body, stomp/contact detection, defeat — to Enemy. A Goomba dies in
- * a single stomp, so no invulnerability window is needed.
+ * Goomba.js — basic one-hit enemy. Thin config wrapper around Enemy: only
+ * contributes tuning numbers, all behavior lives in the base class.
  */
 export default class Goomba extends Enemy {
-  // Builds a Goomba with its default stats, overridable via `options`.
-  // targetHeight normalizes goomba.glb's scale, which otherwise renders
-  // far too tall relative to the player.
+  // targetHeight normalizes goomba.glb's scale (otherwise renders too tall).
   constructor(mesh, physicsEngine, options = {}) {
     super(mesh, physicsEngine, {
       detectionRange: 9,

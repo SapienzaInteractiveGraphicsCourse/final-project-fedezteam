@@ -19,9 +19,6 @@ export default class ToadHouse {
     // --- 2. PHYSICS SETUP ---
     const world = this.physicsEngine?.world || this.physicsEngine;
     if (!world) {
-      // This used to fail silently: if `physicsEngine` was ever undefined/
-      // null for this specific call, the house would render but get NO
-      // collider, with no error anywhere. This warning covers that case.
       console.warn(
         `[ToadHouse] No physics world available for "${data.type || "toad_house"}" ` +
         `at (${x}, ${y}, ${z}). No collider was created — the mesh is purely visual.`
@@ -34,26 +31,15 @@ export default class ToadHouse {
       material: this.physicsEngine.defaultMaterial,
     });
 
-    // PHYSICS SCALE NORMALIZATION.
-    // This model's .glb has a huge built-in scale, so the JSON `scale` value
-    // (e.g. 0.01) is tiny — correct for the mesh, but far too small for the
-    // hitbox constants below (which assume scale ~= 1). The two are
-    // decoupled: `scale` keeps driving the VISUAL mesh as before, while
-    // `physicsScale` drives the collider size only.
-    //
-    // How to tune PHYSICS_SCALE_FACTOR: it's the ratio between a "normal"
-    // scale (~1) and this model's actual JSON scale. If the working JSON
-    // scale is 0.01 and the collider should be sized as if scale were ~1,
-    // use factor = 1 / 0.01 = 100. Adjust until the debug collider cage
-    // matches the visible house.
-    const PHYSICS_SCALE_FACTOR = 100;
+    // The .glb has a huge built-in scale, so JSON `scale` (e.g. 0.01) is too
+    // small for the hitbox constants below; physicsScale decouples the two.
+    const PHYSICS_SCALE_FACTOR = 100; // 1 / typical JSON scale (~0.01)
     const physicsScale = scale * PHYSICS_SCALE_FACTOR;
 
-    // CORRECTION OFFSET (tweak these three values if the debug collider
-    // cage isn't centered on the model).
-    const offX = 0.0; // shift right (+) / left (-)
-    const offY = 0.0; // raise (+) / lower (-) relative to the ground
-    const offZ = 0.0; // shift forward (+) / backward (-)
+    // Tweak these if the debug collider cage isn't centered on the model.
+    const offX = 0.0; // right(+)/left(-)
+    const offY = 0.0; // up(+)/down(-)
+    const offZ = 0.0; // forward(+)/back(-)
 
     // A. LOW BASE (the circular stone platform).
     const baseShape = new CANNON.Box(

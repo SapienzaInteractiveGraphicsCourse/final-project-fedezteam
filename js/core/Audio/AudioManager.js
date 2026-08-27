@@ -3,52 +3,41 @@
 export const OVERWORLD_MUSIC = "bgm";
 
 export default class AudioManager {
-  // Quante copie dello stesso effetto possono suonare insieme. Oltre questa
-  // soglia si riusa la piu' vecchia: quattro monete sovrapposte suonano
-  // gia' come una manciata di monete.
+  // Max copies of the same effect playing together; beyond this the oldest
+  // is reused (four overlapping coins already read as one handful).
   static MAX_VOICES = 4;
 
-  // Distanza minima fra due riproduzioni dello stesso effetto, in
-  // millisecondi — due frame a 60fps.
+  // Minimum gap between two plays of the same effect, in ms (two frames at 60fps).
   static RETRIGGER_MS = 30;
 
   constructor() {
     this.sounds = {};
 
-    // Every looping track from the manifest, by name: the overworld theme
-    // plus one per boss zone (see playMusic).
+    // Every looping track from the manifest, by name (overworld + one per
+    // boss zone — see playMusic).
     this.music = {};
-    // Whichever of them is currently the background music. Everything else
-    // in this class works off this one, exactly as it did when there was
-    // only ever a single track.
+    // Whichever track is currently the background music; everything else
+    // in this class works off this one field.
     this.bgm = null;
     this.isMuted = false;
     this.currentCharacter = "mario"; // Default character.
 
-    // Optional stand-in for currentCharacter when resolving a
-    // character-specific effect: set to "yoshi" while he's being ridden, so
-    // jumping and falling come out in HIS voice instead of the rider's (see
-    // setVoice and _resolveSFX). Null means "just use the character".
+    // Optional stand-in for currentCharacter when resolving an effect
+    // (e.g. "yoshi" while ridden). Null means "just use the character".
     this.voice = null;
 
-    // Which of the two takes plays next, per effect name — see _resolveSFX,
-    // which fills this in on demand. Populated lazily rather than declared
-    // up front: an effect gets a second take by shipping the file, not by
-    // being listed here.
+    // Which of the two takes plays next, per effect name — filled in lazily
+    // by _resolveSFX as effects are discovered, not declared up front.
     this.variantToggles = {};
 
-    // Effetti brevi decodificati in memoria e pronti a partire, piu' il
-    // contesto Web Audio che li suona — vedi _decode/playSFX. La musica non
-    // passa di qui: resta sugli elementi <audio>, che la trasmettono senza
-    // doverla tenere tutta decodificata in RAM.
+    // Short effects decoded into memory via the Web Audio context (see
+    // _decode/playSFX). Music stays on <audio> elements instead.
     this.buffers = {};
     this.ctx = null;
     this.sfxGain = null;
 
-    // Elementi <audio> riutilizzabili per ogni effetto, e quando ciascuno e'
-    // stato riprodotto l'ultima volta — vedi _takeVoice/playSFX. Restano la
-    // via di riserva se Web Audio non e' disponibile o un file non si
-    // decodifica.
+    // Reusable <audio> elements per effect, and when each last played (see
+    // _takeVoice/playSFX) — the fallback path when Web Audio is unavailable.
     this.pools = {};
     this.lastPlayed = {};
 
@@ -59,9 +48,7 @@ export default class AudioManager {
     this.sfxVolume = 0.6;
   }
 
-  /**
-   * Sets the background music volume (0 - 1).
-   */
+  // Sets the background music volume (0-1).
   setBGMVolume(volume) {
     this.bgmVolume = volume;
     // Every track, not just the one playing: otherwise switching zones
@@ -71,9 +58,7 @@ export default class AudioManager {
     }
   }
 
-  /**
-   * Sets the sound effects volume (0 - 1).
-   */
+  // Sets the sound effects volume (0-1).
   setSFXVolume(volume) {
     this.sfxVolume = volume;
     if (this.sfxGain && !this.isMuted) this.sfxGain.gain.value = volume;
@@ -84,34 +69,21 @@ export default class AudioManager {
     }
   }
 
-  /**
-   * Sets the active character ('mario' or 'luigi'), used to resolve
-   * character-specific sound effects.
-   */
+  // Sets the active character ('mario' or 'luigi'), used to resolve
+  // character-specific sound effects.
   setCharacter(character) {
     if (character) {
       this.currentCharacter = character.toLowerCase();
     }
   }
 
-  /**
-   * Puts someone else in front of the playable character when resolving
-   * character-specific effects — currently only Yoshi, while the player is
-   * riding him (see main.js's mount/dismount interaction). Call with no
-   * argument (or null) to hand the voice back.
-   *
-   * This is an override, not a replacement: _resolveSFX still falls through
-   * to the character for any effect the voice has no clip of its own for,
-   * so Yoshi taking over "jump" and "fall" doesn't have to mean inventing a
-   * Yoshi version of every other sound in the game.
-   */
+  // Overrides who _resolveSFX speaks as (currently only Yoshi while ridden);
+  // call with no argument to hand the voice back to the character.
   setVoice(voice = null) {
     this.voice = voice ? voice.toLowerCase() : null;
   }
 
-  /**
-   * Preloads an audio file under the given name.
-   */
+  // Preloads an audio file under the given name.
   load(name, src, isBGM = false) {
     const audio = new Audio(src);
     audio.preload = "auto";
@@ -127,22 +99,14 @@ export default class AudioManager {
       audio.volume = 0.6;
       this.sounds[name] = audio;
 
-      // Solo i .wav: sono gli effetti brevi, quelli che devono partire
-      // nell'istante esatto in cui succede la cosa. Gli .mp3 del progetto
-      // sono musica e jingle (temi dei boss, game over, finale da 8,8 MB):
-      // decodificarli vorrebbe dire tenerne in RAM decine di megabyte di
-      // PCM per un suono che non ha bisogno di partire al millisecondo.
+      // Only .wav files are decoded (short effects that must fire exactly
+      // on cue); the project's .mp3s are music/jingles, too big to keep in RAM as PCM.
       if (/\.wav$/i.test(src)) this._decode(name, src);
     }
   }
 
-  /**
-   * Il contesto Web Audio, creato alla prima occasione utile.
-   *
-   * Nasce sospeso finche' il browser non vede un gesto dell'utente: ci
-   * pensa playBGM(), che parte proprio dal clic sulla schermata iniziale
-   * (vedi main.js), e in seconda battuta playSFX.
-   */
+  // The Web Audio context, created on first use. Starts suspended until a
+  // user gesture; playBGM() (the start-screen click) resumes it, playSFX() as a fallback.
   _ensureContext() {
     if (this.ctx) return this.ctx;
 
@@ -160,8 +124,8 @@ export default class AudioManager {
     return this.ctx;
   }
 
-  // Scarica e decodifica un effetto. Fallire non e' grave: senza campione
-  // playSFX ricade sugli elementi <audio> come prima.
+  // Fetches and decodes one effect. Failure isn't fatal: playSFX falls back
+  // to the <audio> element pool.
   async _decode(name, src) {
     const ctx = this._ensureContext();
     if (!ctx) return;
@@ -171,16 +135,15 @@ export default class AudioManager {
       const data = await response.arrayBuffer();
       this.buffers[name] = await ctx.decodeAudioData(data);
     } catch (e) {
-      // niente da fare: resta la via degli elementi <audio>
+      // nothing to do: falls back to the <audio> element path
     }
   }
 
   playBGM() {
     if (!this.bgm) return;
 
-    // Il clic che fa partire la musica e' il gesto che serve al browser per
-    // sbloccare anche Web Audio: e' il momento buono per svegliare il
-    // contesto degli effetti (vedi _ensureContext).
+    // The click that starts the music is also the gesture that unlocks Web
+    // Audio — a good moment to wake the effects context too.
     const ctx = this._ensureContext();
     if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
 
@@ -208,17 +171,8 @@ export default class AudioManager {
     this.hasStarted = false;
   }
 
-  /**
-   * Switches the background music to `name`, one of the looping tracks in
-   * the manifest. Called with no argument it goes back to the overworld
-   * theme, which is what everywhere that isn't a boss zone uses.
-   *
-   * The outgoing track is rewound as well as paused, so walking back into a
-   * zone later restarts its theme from the top instead of dropping the
-   * player into the middle of it. Asking for the track that is already
-   * playing does nothing — stepping on a warp star that leads where you
-   * already are shouldn't make the music stutter.
-   */
+  // Switches BGM to `name` (default: overworld theme). Rewinds the outgoing
+  // track so re-entering later restarts it; a no-op if `name` is already playing.
   playMusic(name = OVERWORLD_MUSIC) {
     const next = this.music[name];
     if (!next) return;
@@ -239,28 +193,15 @@ export default class AudioManager {
     this.bgm.volume = this.bgmVolume;
     this.bgm.muted = this.isMuted;
 
-    // Started only if the player has already pressed Start, the same rule
-    // playBGM() follows — otherwise this would be an autoplay attempt with
-    // no user gesture behind it.
+    // Started only if the player has already pressed Start (same rule as
+    // playBGM()), to avoid an autoplay attempt with no user gesture.
     if (this.hasStarted && this.bgm.paused) {
       this.bgm.play().catch((err) => console.warn("Error starting audio playback:", err));
     }
   }
 
-  /**
-   * Turns the name a call site asked for into an actual manifest key, or
-   * null if nothing matches. Three cases, tried in this order:
-   *
-   *  - an exact key ("coin", "gameover", "bowser_attack"): used as is;
-   *  - a two-variant per-speaker effect ("jump", "damage"): alternates
-   *    between `<speaker>_<name>1` and `<speaker>_<name>2`;
-   *  - anything else: `<speaker>_<name>`, e.g. "fall" -> "mario_fall".
-   *
-   * The speaker is the voice override first (Yoshi, while he's carrying
-   * the player) and the playable character second, so an effect Yoshi has
-   * no clip for simply comes out in the rider's voice instead of silently
-   * doing nothing.
-   */
+  // Resolves a requested name to a manifest key: an exact match, a
+  // two-variant per-speaker effect, or `<speaker>_<name>` (voice, then character).
   _resolveSFX(name) {
     if (this.sounds[name]) return name;
 
@@ -268,13 +209,8 @@ export default class AudioManager {
       ? [this.voice, this.currentCharacter]
       : [this.currentCharacter];
 
-    // Two-variant effects, alternated so doing the same thing twice in a
-    // row doesn't replay the identical clip. Both shapes are handled: the
-    // plain one (peach_talk1/peach_talk2 — nobody's voice but Peach's, so
-    // there's no speaker to prefix) and the per-speaker one
-    // (mario_jump1/mario_jump2). Which shape an effect uses is discovered
-    // from the manifest instead of being declared in a list up here, so
-    // giving something a second take is just a matter of adding the file.
+    // Two-variant effects alternate so repeats don't replay the identical
+    // clip; discovered from the manifest rather than declared in a list.
     const suffix = this.variantToggles[name] ? "2" : "1";
     for (const stem of [name, ...speakers.map((s) => `${s}_${name}`)]) {
       if (!this.sounds[`${stem}1`]) continue;
@@ -282,9 +218,8 @@ export default class AudioManager {
       // The second take is optional: an effect that only ever shipped a
       // "1" still plays, it simply has nothing to alternate with.
       const key = this.sounds[`${stem}${suffix}`] ? `${stem}${suffix}` : `${stem}1`;
-      // Flipped only once something is actually going to play: otherwise a
-      // miss would eat a turn and make the next hit repeat the very clip
-      // this one was meant to alternate away from.
+      // Flipped only once something is actually going to play, so a miss
+      // doesn't eat a turn and make the next hit repeat this same clip.
       this.variantToggles[name] = !this.variantToggles[name];
       return key;
     }
@@ -298,33 +233,18 @@ export default class AudioManager {
     return null;
   }
 
-  /**
-   * Restituisce un elemento <audio> libero per questo effetto, creandone
-   * uno solo se serve davvero.
-   *
-   * PERCHE' UN POOL. Prima ogni singola riproduzione faceva cloneNode():
-   * un elemento multimediale nuovo di zecca, con il suo decoder, buttato
-   * via subito dopo. Con monete, salti e colpi che si accavallano sono
-   * decine di allocazioni al secondo, e il costo non e' il suono in se' —
-   * e' il lavoro che il browser fa attorno, piu' la spazzatura che lascia
-   * da raccogliere, che sui portatili si vede come micro-scatti.
-   *
-   * Riusare gli elementi mantiene lo stesso comportamento (due copie dello
-   * stesso effetto possono ancora sovrapporsi) con un numero di elementi
-   * che si stabilizza da solo: quasi tutti ne usano uno o due, e nessuno
-   * puo' superare MAX_VOICES.
-   */
+  // Returns a free <audio> element for this effect, creating one only when
+  // needed — a pool instead of cloneNode() per play, which caused stutter.
   _takeVoice(key) {
     let pool = this.pools[key];
     if (!pool) {
-      // La prima voce e' l'elemento gia' caricato all'avvio: e' anche
-      // quella che si usa quasi sempre (un effetto per volta), quindi e'
-      // proprio lei che deve essere riavvolta in anticipo.
+      // The first voice is the element already loaded at startup — also
+      // the one used almost always, so it's the one pre-armed to rewind.
       pool = this.pools[key] = [this.sounds[key]];
       this._armRewind(pool[0]);
     }
 
-    // La prima voce che ha finito di suonare.
+    // The first voice that's finished playing.
     for (const voice of pool) {
       if (voice.paused || voice.ended) return voice;
     }
@@ -336,8 +256,7 @@ export default class AudioManager {
       return voice;
     }
 
-    // Tutte occupate: si riusa quella iniziata prima, cioe' la piu' avanti
-    // nella riproduzione — e' quella a cui resta meno da sentire.
+    // All busy: reuse the one furthest into playback — least left to hear.
     let oldest = pool[0];
     for (const voice of pool) {
       if (voice.currentTime > oldest.currentTime) oldest = voice;
@@ -345,9 +264,8 @@ export default class AudioManager {
     return oldest;
   }
 
-  // Riavvolge la voce appena la clip finisce, cosi' al riutilizzo e' gia'
-  // pronta e play() non deve aspettare la fine di una ricerca (vedi
-  // playSFX: era quel ritardo a far sentire il salto in ritardo).
+  // Rewinds a voice as soon as its clip ends, so reuse doesn't have to wait
+  // on a seek (that lag was making jumps sound delayed).
   _armRewind(voice) {
     voice.addEventListener("ended", () => {
       voice.currentTime = 0;
@@ -360,16 +278,8 @@ export default class AudioManager {
       : Date.now();
   }
 
-  /**
-   * Plays a sound effect by name — see _resolveSFX for how a generic name
-   * like "jump" is turned into the right clip for whoever is speaking.
-   *
-   * Due richieste identiche a meno di RETRIGGER_MS l'una dall'altra valgono
-   * per una sola: piu' copie della stessa clip partite nello stesso frame
-   * non si distinguono a orecchio (si sommano e basta) ma costano come
-   * tutte le altre. Succede piu' spesso di quanto sembri — due monete
-   * raccolte insieme, un nemico colpito mentre ne muore un altro.
-   */
+  // Plays a sound effect by name (see _resolveSFX). Two identical requests
+  // within RETRIGGER_MS collapse to one — indistinguishable by ear but not free.
   playSFX(name, onEnded = null) {
     if (this.isMuted || this.sfxVolume === 0) return null;
 
@@ -382,7 +292,7 @@ export default class AudioManager {
     }
     this.lastPlayed[soundKey] = now;
 
-    // Via principale: il campione e' gia' decodificato, parte adesso.
+    // Main path: the sample is already decoded, starts now.
     const buffer = this.buffers[soundKey];
     if (buffer && this.ctx) {
       if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
@@ -395,18 +305,16 @@ export default class AudioManager {
       return source;
     }
 
-    // Riserva: elemento <audio> dal pool.
+    // Fallback: an <audio> element from the pool.
     const voice = this._takeVoice(soundKey);
     if (!voice) return null;
 
-    // Il volume corrente vive sull'elemento originale (vedi setSFXVolume):
-    // le voci del pool lo ricevono qui, al momento di partire.
+    // Current volume lives on the original element (see setSFXVolume); pool
+    // voices pick it up here, right as they start.
     voice.volume = this.sounds[soundKey].volume;
     voice.muted = this.isMuted;
-    // Il riavvolgimento avviene alla fine della clip (vedi _takeVoice), non
-    // qui: chiedere un salto a currentTime = 0 subito prima di play() fa
-    // aspettare al browser la fine della ricerca, ed e' un ritardo che si
-    // sente — il salto suonava dopo che Mario era gia' per aria.
+    // Rewinding happens when the clip ends (see _takeVoice), not here:
+    // seeking to 0 right before play() made the delay audible.
     if (voice.currentTime !== 0) voice.currentTime = 0;
     if (onEnded) voice.addEventListener("ended", onEnded, { once: true });
     voice.play().catch(() => {});
@@ -414,17 +322,8 @@ export default class AudioManager {
     return voice;
   }
 
-  /**
-   * Plays several effects one after the other, each one starting when the
-   * previous has finished — Toad's welcome greeting followed by the quest
-   * line he opens with, say (see QuestManager._showToadDialogue).
-   *
-   * Chained on the clip's own "ended" event rather than on a timer, so it
-   * doesn't need the durations hardcoded anywhere and stays right if a
-   * clip is ever re-recorded longer or shorter. Anything that can't play
-   * (muted, or a name no manifest key matches) simply doesn't hold up the
-   * rest of the queue.
-   */
+  // Plays several effects back to back, each starting when the previous
+  // ends. Chained on the "ended" event; anything that can't play is skipped.
   playSFXSequence(names) {
     const queue = (Array.isArray(names) ? names : [names]).filter(Boolean);
 
@@ -432,27 +331,16 @@ export default class AudioManager {
       const next = queue.shift();
       if (!next) return;
 
-      // La callback vale per entrambe le vie: onended di un BufferSource o
-      // l'evento "ended" di un elemento <audio> (vedi playSFX).
+      // Covers both paths: a BufferSource's onended or an <audio>
+      // element's "ended" event (see playSFX).
       if (!this.playSFX(next, step)) step();
     };
 
     step();
   }
 
-  /**
-   * Plays a one-shot music cue — currently the ending theme — from the
-   * element that was preloaded at startup instead of from a throwaway copy.
-   *
-   * playSFX() clones its element before playing so two overlapping hits of
-   * the same effect can't cut each other off. That's the right trade for a
-   * 15 KB jump grunt, but a clone starts its own fresh load of the file,
-   * and ending.mp3 is 8.8 MB: the music would sit silent until that second
-   * download caught up (measured: still at readyState 0, nothing decoded,
-   * seconds after play() was called). A music cue never overlaps itself, so
-   * it has no reason to be cloned and can start instantly from the copy
-   * that has been in memory since the loading screen.
-   */
+  // Plays a one-shot music cue from the element preloaded at startup
+  // rather than a clone: ending.mp3 is 8.8 MB, a clone would re-download it.
   playTrack(name) {
     if (this.isMuted || this.sfxVolume === 0) return;
 
@@ -468,8 +356,8 @@ export default class AudioManager {
   setMute(isMuted) {
     this.isMuted = isMuted;
 
-    // Zittisce anche gli effetti gia' partiti su Web Audio, come fa
-    // element.muted per quelli sugli elementi <audio>.
+    // Also silences effects already playing via Web Audio, mirroring
+    // element.muted for the <audio>-based ones.
     if (this.sfxGain) this.sfxGain.gain.value = isMuted ? 0 : this.sfxVolume;
 
     for (const key in this.music) {
@@ -477,10 +365,8 @@ export default class AudioManager {
     }
 
     if (this.bgm) {
-      // Resume playback automatically only if: the game is being unmuted,
-      // the track was paused, and the player has already pressed "Start"
-      // at least once (hasStarted) - otherwise this would break the
-      // "audio starts on the first user gesture" requirement.
+      // Resume automatically only if unmuting, the track was paused, and
+      // the player already pressed "Start" (preserves the gesture rule).
       if (!isMuted && this.hasStarted && this.bgm.paused) {
         this.bgm
           .play()
@@ -488,9 +374,8 @@ export default class AudioManager {
       }
     }
 
-    // Mute every sound effect as well — comprese le voci del pool che in
-    // questo momento stanno suonando (vedi _takeVoice): sono elementi
-    // distinti da quelli in this.sounds.
+    // Mutes every sound effect too, including pool voices currently
+    // playing (see _takeVoice) — separate elements from this.sounds.
     for (const key in this.sounds) {
       if (this.sounds[key]) {
         this.sounds[key].muted = isMuted;

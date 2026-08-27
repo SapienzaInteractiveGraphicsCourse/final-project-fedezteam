@@ -1,18 +1,11 @@
 import { assetUrl } from "../Assets/basePath.js";
 
-// Manifest of every sound effect and music track used by the game, keyed by
-// the name AudioManager will use to reference it.
-//
-// The KEY is not just a label: playSFX() resolves a generic request like
-// "jump" or "fall" into `<speaker>_<effect>`, where the speaker is the
-// playable character (or Yoshi while he's being ridden — see
-// AudioManager.setVoice). So the keys below have to keep that shape even
-// where the file on disk is named the other way round, as with Peach's two
-// greetings. Everything else is looked up by its exact key.
+// Manifest of every sound/music track, keyed by name. Generic requests
+// ("jump", "fall") resolve to `<speaker>_<effect>` via playSFX/_resolveSFX
+// (see AudioManager.setVoice) — keys below follow that shape even where
+// the file on disk is named differently (Peach's two greetings).
 export const SOUND_MANIFEST = [
-  // Looping music. The first one is what the game opens on; the other two
-  // take over inside the matching boss zone (see AudioManager.playMusic and
-  // updateGame's zone check in main.js).
+  // Looping music: overworld on start, the other two per boss zone.
   { key: 'bgm', path: 'assets/audio/overworld_bgm.mp3', loop: true },
   { key: 'kamek_battle', path: 'assets/audio/kamek_battle.mp3', loop: true },
   { key: 'bowser_battle', path: 'assets/audio/bowser_battle.mp3', loop: true },
@@ -27,9 +20,7 @@ export const SOUND_MANIFEST = [
   { key: 'mario_selected', path: 'assets/audio/mario_selected.wav' },
   { key: 'luigi_selected', path: 'assets/audio/luigi_selected.wav' },
 
-  // The two playable characters. "jump" and "damage" ship as two variants
-  // each, alternated by playSFX so repeating the same action doesn't replay
-  // the identical clip.
+  // Mario/Luigi: jump and damage ship as two takes, alternated by playSFX.
   { key: 'mario_jump1', path: 'assets/audio/Mario/mario_jump1.wav' },
   { key: 'mario_jump2', path: 'assets/audio/Mario/mario_jump2.wav' },
   { key: 'mario_fall', path: 'assets/audio/Mario/mario_fall.wav' },
@@ -41,40 +32,24 @@ export const SOUND_MANIFEST = [
   { key: 'luigi_damage1', path: 'assets/audio/Luigi/luigi_damage1.wav' },
   { key: 'luigi_damage2', path: 'assets/audio/Luigi/luigi_damage2.wav' },
 
-  // Yoshi speaks for the rider while he's being ridden: same `<speaker>_`
-  // key shape as the two characters above, so "jump" and "fall" resolve to
-  // him instead once main.js has called setVoice("yoshi"). He has no damage
-  // grunt on purpose — that one falls back through to Mario/Luigi.
+  // Yoshi speaks for the rider while mounted (setVoice("yoshi")). No
+  // damage grunt on purpose — falls back to Mario/Luigi's.
   { key: 'yoshi_jump1', path: 'assets/audio/Yoshi/yoshi_jump1.wav' },
   { key: 'yoshi_jump2', path: 'assets/audio/Yoshi/yoshi_jump2.wav' },
   { key: 'yoshi_fall', path: 'assets/audio/Yoshi/yoshi_fall.wav' },
   { key: 'yoshi_mounted', path: 'assets/audio/Yoshi/yoshi_mounted.wav' },
-  // His own cry as he comes out of the egg. Looked up by its exact key,
-  // not through the speaker mechanism above: this one plays at hatching
-  // time, before anyone is riding him.
+  // Egg-hatch cry, looked up directly (before anyone is riding him).
   { key: 'yoshi_spawn', path: 'assets/audio/Yoshi/yoshi_spawn.wav' },
 
-  // Peach's ending dialogue (see interactions/PeachCutscene.js). Her
-  // greeting differs per character, so its keys are spelled the way
-  // playSFX resolves them — "peach_call" -> "mario_peach_call" — even
-  // though the files themselves are named peach_call_mario/luigi.
-  // Her per-line blip has two takes, alternated like the jump and damage
-  // grunts — but with no speaker prefix, since Peach is the only one who
-  // ever says these (see AudioManager._resolveSFX).
+  // Peach (PeachCutscene.js): per-character greeting, then two alternated
+  // generic blips per line (no speaker prefix — only Peach uses these).
   { key: 'mario_peach_call', path: 'assets/audio/Peach/peach_call_mario.wav' },
   { key: 'luigi_peach_call', path: 'assets/audio/Peach/peach_call_luigi.wav' },
   { key: 'peach_talk1', path: 'assets/audio/Peach/peach_talk.wav' },
   { key: 'peach_talk2', path: 'assets/audio/Peach/peach_talk2.wav' },
 
-  // Toad's quest dialogue (see interactions/QuestManager.js). His generic
-  // per-line blip has two takes alternated by playSFX, so its keys are
-  // spelled the way _resolveSFX finds them — "toad_talk" ->
-  // toad_talk1/toad_talk2 — even though the files themselves are named
-  // toad_1/toad_2, the same spelling-vs-filename split Peach's greetings
-  // above already use. The other four are looked up by their exact key,
-  // one per scripted moment: the first time the player ever talks to him,
-  // the two "go and deal with him" quest lines, and the Power Star he
-  // hands over for the 25 coins.
+  // Toad (QuestManager.js): two alternated generic blips, plus four
+  // exact-key one-offs for the first meeting and each quest handoff.
   { key: 'toad_talk1', path: 'assets/audio/Toad/toad_1.wav' },
   { key: 'toad_talk2', path: 'assets/audio/Toad/toad_2.wav' },
   { key: 'toad_welcome', path: 'assets/audio/Toad/toad_welcome.wav' },
@@ -82,9 +57,7 @@ export const SOUND_MANIFEST = [
   { key: 'toad_bowser', path: 'assets/audio/Toad/toad_bowser.wav' },
   { key: 'toad_give_star', path: 'assets/audio/Toad/toad_give_star.wav' },
 
-  // The two bosses, all looked up by their exact key (see main.js): the
-  // greeting on arriving in their zone, the roar that opens each ranged
-  // attack's wind-up, the yelp on a non-fatal stomp and the death cry.
+  // Bosses: zone-arrival greeting, attack roar, stomp yelp, death cry.
   { key: 'kamek_start', path: 'assets/audio/Kamek/kamek_start.wav' },
   { key: 'kamek_attack', path: 'assets/audio/Kamek/kamek_attack.wav' },
   { key: 'kamek_hit', path: 'assets/audio/Kamek/kamek_hit.wav' },
@@ -95,12 +68,8 @@ export const SOUND_MANIFEST = [
   { key: 'bowser_last_hit', path: 'assets/audio/Bowser/bowser_last_hit.wav' },
 ];
 
-// Preloads every entry of SOUND_MANIFEST into the given AudioManager.
-//
-// The paths above are written relative to the project root and turned into
-// real URLs here, the one place they reach the browser (AudioManager.load
-// hands them straight to `new Audio`) — see Assets/basePath.js for why
-// that matters once the game is served from a sub-path.
+// Preloads every entry into `audioManager`, resolving each relative path
+// through assetUrl() (see basePath.js) before handing it to `new Audio`.
 export function initGameAudio(audioManager) {
   SOUND_MANIFEST.forEach(({ key, path, loop }) => {
     audioManager.load(key, assetUrl(path), loop || false);

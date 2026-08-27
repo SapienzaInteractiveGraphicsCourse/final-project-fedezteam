@@ -6,14 +6,9 @@ import { normalizeMaterials } from "../../utils/materials.js";
 
 /**
  * Owns every collectible/interactive prop in the level: coins, stars,
- * mushrooms (both level-authored and the ones spawned dynamically by "?"
- * blocks), and the "?" blocks themselves. Extracted out of the former
- * monolithic GameLevel.js.
- *
- * Coins are visually placed by Decorations (they're scattered together
- * with trees/flowers using the same random layout pass), which calls
- * registerCoin() for every coin mesh it creates; every other collectible
- * type is spawned directly by this class.
+ * mushrooms (static + "?"-block-spawned), and the "?" blocks themselves.
+ * Coins are placed by Decorations, which calls registerCoin() per mesh;
+ * everything else is spawned directly by this class.
  */
 export default class Collectibles {
   constructor(scene, physicsWorld, gltfLoader) {
@@ -33,25 +28,18 @@ export default class Collectibles {
     this.questionMarkBlocks = [];
     this.mushroomGlb = null;
 
-    // undefined = not attempted yet, null = attempted and failed to load —
-    // same cache convention as Decorations._loadCoinModel. spawnStars() is
-    // called not just once at level load but also at RUNTIME every time a
-    // boss (Kamek/Bowser) is defeated, dropping a fresh star (see main.js);
-    // without this cache each defeat re-fetched and re-parsed star.glb from
-    // scratch, which was the actual cause of the brief stutter on boss
-    // defeat.
+    // undefined = not attempted, null = failed. Caches star.glb so
+    // repeated boss-defeat drops don't re-parse it (was a stutter cause).
     this._starGlbCache = undefined;
   }
 
-  // Loads (and caches) the star model — see the comment on _starGlbCache.
+  // Loads (and caches) the star model — see _starGlbCache above.
   async _loadStarModel() {
     if (this._starGlbCache !== undefined) return this._starGlbCache;
 
     try {
       this._starGlbCache = await this.loader.loadAsync(ITEM_MODELS.star);
-      // Normalized once here — every star clone shares this material by
-      // reference, so this covers all of them regardless of which
-      // spawnStars() call they came from.
+      // Normalized once — every clone shares this material by reference.
       normalizeMaterials(this._starGlbCache.scene);
     } catch (e) {
       console.warn("[Collectibles] star.glb not found.");
@@ -61,14 +49,12 @@ export default class Collectibles {
     return this._starGlbCache;
   }
 
-  // Preloads the mushroom model once, reused both by the static mushroom
-  // list and by "?" blocks spawning one dynamically at runtime.
+  // Preloads the mushroom model once, reused by both static mushrooms and
+  // "?" blocks spawning one dynamically at runtime.
   async preloadMushroomModel() {
     try {
       this.mushroomGlb = await this.loader.loadAsync(ITEM_MODELS.mushroom);
-      // Materials are shared by reference across every clone made from
-      // this.mushroomGlb.scene (none of the mushroom spawn methods clone
-      // materials individually), so normalizing once here is enough.
+      // Materials are shared by reference across every clone of this scene.
       normalizeMaterials(this.mushroomGlb.scene);
     } catch (e) {
       console.warn("[Collectibles] mushroom.glb not found.");
@@ -84,10 +70,8 @@ export default class Collectibles {
     });
   }
 
-  // Spawns collectible stars either at the positions given by the level
-  // JSON, or at a small default layout if none was provided. Also usable at
-  // runtime for one-off stars (e.g. the one Kamek drops on defeat — see
-  // main.js), since it just appends to this.stars either way.
+  // Spawns stars at given positions (or a small default layout). Also used
+  // at runtime for one-off drops (e.g. Kamek's defeat, see main.js).
   async spawnStars(starPositions) {
     const starGlb = await this._loadStarModel();
 
@@ -99,11 +83,8 @@ export default class Collectibles {
       { x: 0, y: 2, z: -40 },
     ];
 
-    // Star size, normalized from the model's own bounding-box height
-    // instead of trusting star.glb's raw native scale (it was coming out
-    // wildly off — same class of bug as the earlier Goomba/palm-tree
-    // sizing issues), so every star reads at a consistent, readable size
-    // regardless of the source GLB's native scale.
+    // Normalized from the model's real bounding-box height — star.glb's
+    // native scale came out wildly off (same issue as Goomba sizing).
     const targetHeight = 1.6;
 
     positions.forEach((pos) => {
@@ -141,19 +122,14 @@ export default class Collectibles {
         mesh: starMesh,
         position: starMesh.position,
         collected: false,
-        // Optional identifier (see QuestManager.onStarCollected) — lets a
-        // caller recognize a *specific* star among however many are in the
-        // level, without having to compare positions. Only set for the
-        // handful of spots that matter to the quest HUD; every other star
-        // (the level defaults, boss/Toad rewards, ...) is left id: null and
-        // behaves exactly as before.
+        // Optional id (see QuestManager.onStarCollected) so a caller can
+        // recognize a specific star without comparing positions.
         id: pos.id || null,
       });
     });
   }
 
-  // Spawns the mushrooms explicitly listed in the level JSON (static
-  // pickups, as opposed to the ones dynamically spawned by "?" blocks).
+  // Spawns level-JSON mushrooms (static, unlike the "?"-block ones).
   async spawnMushrooms(mushroomPositions) {
     if (!mushroomPositions || mushroomPositions.length === 0) return;
 
@@ -204,9 +180,8 @@ export default class Collectibles {
     });
   }
 
-  // Dynamic mushroom spawned at runtime when a "?" block is hit; unlike the
-  // static ones, it has its own physics body and pops out with an initial
-  // velocity.
+  // Dynamic mushroom popped out by a "?" block hit, with its own physics
+  // body and initial velocity (unlike the static ones above).
   _spawnSingleMushroom(x, y, z) {
     if (!this.mushroomGlb) return;
 
@@ -240,8 +215,8 @@ export default class Collectibles {
     });
   }
 
-  // Spawns "?" blocks at the given positions (or a small default row),
-  // each with a static collider and a flag tracking whether it has been hit.
+  // Spawns "?" blocks (or a small default row), each with a static
+  // collider and a flag tracking whether it has been hit.
   async spawnQuestionMarkBlocks(positions) {
     let questionMarkGlb = null;
     try {
@@ -300,8 +275,8 @@ export default class Collectibles {
     });
   }
 
-  // Per-frame update: animates and checks the pickup radius for every
-  // collectible type, and handles "?" block hits.
+  // Per-frame: animates and checks pickup radius for every collectible
+  // type, and handles "?" block hits.
   update(player, onCoinCollected, onStarCollected, onMushroomCollected) {
     if (!player) return;
 
@@ -316,17 +291,8 @@ export default class Collectibles {
       const distanceSq = playerPos.distanceToSquared(coin.position);
       if (distanceSq <= coinRadiusSq) {
         coin.collected = true;
-        // Every coin is a clone of the same cached coin.glb (see
-        // Decorations._loadCoinModel) — .clone() shares the geometry AND
-        // material by reference rather than deep-copying them, so ALL
-        // coins point at the exact same GPU resources. Disposing them
-        // here (as this used to do) freed those buffers out from under
-        // every OTHER still-visible coin on the very first pickup, and
-        // kept re-disposing the same already-disposed objects on every
-        // pickup after that — exactly the kind of GPU churn that shows up
-        // as a stutter each time you grab a coin. Removing from the scene
-        // is all a single collected coin needs; the shared geometry/
-        // material stay alive for the rest.
+        // Coins share cached geometry/material by reference; disposing
+        // them here used to free buffers out from under other coins.
         this.scene.remove(coin.mesh);
         if (onCoinCollected) onCoinCollected();
       }
@@ -341,9 +307,8 @@ export default class Collectibles {
       if (distance <= this.starCollectRadius) {
         star.collected = true;
         this.scene.remove(star.mesh);
-        // Pass the star record through (id included) — existing callers
-        // that take no arguments are unaffected, since JS just ignores an
-        // extra argument they never declared a parameter for.
+        // Pass the full record (id included); callers that ignore the
+        // argument are unaffected.
         if (onStarCollected) onStarCollected(star);
       }
     }
@@ -381,8 +346,8 @@ export default class Collectibles {
       const dz = Math.abs(playerPos.z - block.position.z);
       const dy = block.position.y - playerPos.y;
 
-      // Hit test: player must be roughly underneath the block and jumping
-      // into it (dy in a narrow band above the player's head).
+      // Player must be roughly underneath the block, jumping into it
+      // (dy in a narrow band above the player's head).
       if (dx < 1.2 && dz < 1.2 && dy > 1.2 && dy < 2.8) {
         block.isHit = true;
 

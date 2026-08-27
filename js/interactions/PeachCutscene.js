@@ -1,14 +1,8 @@
 /**
- * PeachCutscene.js — the "walk up to Peach, press E" ending dialogue:
- * freezes player movement, takes over the camera with a fixed cinematic
- * framing on Peach, and steps through a short speech-bubble script advanced
- * by Space/E, ending in the final victory screen (see
- * UIManager.showDialogue/showVictoryFinale).
- *
- * Only handles Peach's OWN scripted moment — the earlier "collect every
- * star -> win screen -> REACH PRINCESS PEACH button -> teleport to the
- * ending zone" flow (main.js's ui.onReachPeach) is untouched; this is what
- * happens once the player then walks up to her there and interacts.
+ * PeachCutscene.js — "walk up to Peach, press E" ending dialogue: freezes
+ * player movement, takes a fixed cinematic camera shot, and steps through
+ * a short speech-bubble script into the victory finale. Only Peach's own
+ * scripted moment — the earlier win-screen -> teleport flow is main.js's.
  */
 export default class PeachCutscene {
   constructor(ui, camera, peachGroup, castleGroup, audio = null) {
@@ -16,15 +10,13 @@ export default class PeachCutscene {
     this.camera = camera;
     this.peach = peachGroup;
     this.castle = castleGroup;
-    // Optional, but main.js does pass it: without it the whole cutscene
-    // plays out silently (see _renderLine).
+    // Optional; without it the cutscene plays out silently.
     this.audio = audio;
 
     this.active = false;
     this.lineIndex = 0;
 
-    // ${heroName} is substituted with whatever name the player entered at
-    // the character-select screen (see UIManager._triggerStart / heroName).
+    // ${heroName} is substituted with the name entered at character-select.
     this.lines = [
       'Thank you for saving me, ${heroName}!',
       'I knew you could do it — defeating Bowser and collecting every Power Star.',
@@ -47,21 +39,14 @@ export default class PeachCutscene {
     const text = raw.replace('${heroName}', this.heroName || 'hero');
     const isLast = this.lineIndex >= this.lines.length - 1;
 
-    // Peach's voice, one clip per line: the character-specific greeting on
-    // the opening line — she calls out to Mario and to Luigi differently,
-    // hence 'peach_call' resolving through the active character (see
-    // soundConfig's mario_peach_call/luigi_peach_call) — and a short
-    // generic blip, alternated between her two takes, on every line after
-    // it. The press that CLOSES the dialogue gets nothing: it hands over to
-    // the victory finale, and a fifth blip on the way out would land on top
-    // of it (see advance(), which returns before reaching here).
+    // Character-specific greeting on the opening line, alternated generic
+    // blip on the rest. Nothing plays on the line that closes the dialogue.
     this.audio?.playSFX?.(this.lineIndex === 0 ? 'peach_call' : 'peach_talk');
 
     this.ui.showDialogue('PEACH', text, isLast);
   }
 
-  // Called once per physical Space/E press while the dialogue is active
-  // (see main.js's updateGame).
+  // Called once per physical Space/E press while active (main.js).
   advance() {
     if (!this.active) return;
 
@@ -77,10 +62,8 @@ export default class PeachCutscene {
     this._renderLine();
   }
 
-  // Called every frame while active (main.js skips the normal
-  // CameraManager.update in favor of this) — a fixed shot in front of
-  // Peach, with the look-at target nudged sideways so she reads on the
-  // right third of the frame instead of dead-center.
+  // Called every frame while active, replacing CameraManager.update: a
+  // fixed shot in front of Peach, nudged so she sits off-center.
   updateCamera() {
     if (!this.active || !this.peach || !this.camera) return;
 
@@ -88,10 +71,8 @@ export default class PeachCutscene {
     const dist = 6.5;
     const height = peachPos.y + 3.2;
 
-    // Face roughly the direction Peach herself is standing toward (away
-    // from the castle behind her), derived from castle->Peach instead of a
-    // hardcoded axis so this keeps working if peach_castle.json is ever
-    // re-laid-out.
+    // Faces away from the castle behind her, from castle->Peach rather
+    // than a hardcoded axis, so a re-laid-out zone still works.
     let dirX = 0;
     let dirZ = 1;
     if (this.castle) {
@@ -104,8 +85,7 @@ export default class PeachCutscene {
 
     this.camera.position.set(peachPos.x + dirX * dist, height, peachPos.z + dirZ * dist);
 
-    // Perpendicular to the view direction, so the shift reads as
-    // "sideways in-frame" rather than "toward/away from the camera".
+    // Perpendicular to the view direction, so the shift reads sideways.
     const perpX = -dirZ;
     const perpZ = dirX;
     const lateralShift = 1.8;

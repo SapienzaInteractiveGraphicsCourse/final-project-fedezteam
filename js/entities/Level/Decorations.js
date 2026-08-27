@@ -7,36 +7,11 @@ import { normalizeMaterials } from "../../utils/materials.js";
 import GravityField from "../../physics/GravityField.js";
 
 /**
- * Owns every purely visual, non-collectible prop in the level: trees,
- * flowers, rocks, bushes, ponds, the instanced grass field, small house
- * surroundings (fences/lamp posts), the sky planets (the main
- * color+normal+roughness "red" planet plus its orbiting satellites, and a
- * second, purely decorative blue "ocean" planet), and the Mario
- * Galaxy-style warp stars marking the island's edges. Extracted out of the
- * former monolithic GameLevel.js.
- *
- * Coin meshes are also scattered here (they share the same random layout
- * pass as trees/flowers, plus curated coin trails), but Decorations does
- * not own collectible state: every coin it creates is handed off via the
- * onCoinSpawned callback so Collectibles can register it for pickup
- * detection.
- *
- * Most props here are purely visual (no collider), but rocks, palm trees
- * and the main "red" sky planet do get a physics body (see
- * _addPlanetPhysics for the planet). That planet also gets a GravityField
- * (see PhysicsEngine.addGravityField/GravityField.js) so getting close
- * pulls the player toward it instead of straight down, letting Mario walk
- * around its surface like in Super Mario Galaxy — it's the only planet
- * with this mechanic; the blue planet and its satellites are pure
- * background dressing. Ponds apply a small cosmetic "wading" sink to the
- * player's mesh while they stand over one (see _updateWaterWading).
- *
- * Warp stars (see spawnWarpStars/_updateWarpStars) teleport the player on
- * contact to one of: the red planet, back to the level's spawn point, or
- * the entrance of one of the separate obstacle courses — Kamek's or
- * Bowser's (see entities/Level/ObstacleZone.js, wired up from main.js) —
- * see setSpawnPoint/setKamekZoneEntry/setBowserZoneEntry for how those
- * destinations get filled in.
+ * Owns every purely visual, non-collectible prop in the level: trees, flowers,
+ * rocks, bushes, ponds, instanced grass, house surroundings, the sky planets
+ * (a walkable "red" planet + satellites, plus a decorative blue one), and warp
+ * stars. Coins are scattered here too (via onCoinSpawned). Rocks, palm trees and
+ * the red planet get physics bodies; the red planet also gets a GravityField.
  */
 export default class Decorations {
   constructor(scene, physicsWorld, gltfLoader) {
@@ -52,50 +27,29 @@ export default class Decorations {
     // spawnGrassField/_updateGrassChunks. Ogni voce e' { mesh, x, z }.
     this.grassChunks = [];
     this.grassViewDistance = Decorations.GRASS_VIEW_DISTANCE;
-    // Filled in from outside (see setSpawnPoint/setKamekZoneEntry/
-    // setBowserZoneEntry, called from GameLevel.js/main.js once those
-    // points are known) so warp stars targeting "spawn", "kamek_zone" or
-    // "bowser_zone" have somewhere to send the player.
+    // Filled in from outside (setSpawnPoint/setKamekZoneEntry/
+    // setBowserZoneEntry) so warp stars targeting those names have a destination.
     this.spawnPoint = null;
     this.kamekZoneEntry = null;
     this.bowserZoneEntry = null;
     // Optional UIManager reference (see setUI), used only for the "get off
-    // Yoshi to use the Warp Star" warning in _updateWarpStars below. Left
-    // null by default so nothing changes for anyone who never calls setUI.
+    // Yoshi" warning in _updateWarpStars. Null by default.
     this.ui = null;
     this._yoshiWarpWarningActive = false;
     // Smoothed 0..1-ish sink depth applied to the player's mesh while
     // standing inside a pond's footprint (see _updateWaterWading).
     this._waterSinkDepth = 0;
+    // Whether the player is currently inside a pond's footprint — set by
+    // _updateWaterWading, read by isPlayerInPond() for the movement slowdown.
+    this._insidePond = false;
     // undefined = not attempted yet, null = attempted and failed to load.
     this._coinGlbCache = undefined;
-    // Same convention, for star_launch.glb. spawnWarpStars() is called not
-    // just once at level load but also at RUNTIME every time a boss
-    // (Kamek/Bowser) is defeated, dropping a single warp star back to spawn
-    // (see main.js); without this cache each defeat re-fetched and
-    // re-parsed star_launch.glb from scratch, which used to be A cause of
-    // the brief stutter on boss defeat (see _warpLightPool below for the
-    // other, bigger one).
+    // Same convention, for star_launch.glb — also spawned at RUNTIME on
+    // every boss defeat, so this cache avoids re-fetching/re-parsing it each time.
     this._starLaunchGlbCache = undefined;
 
-    // BUG FIX (boss-defeat/warp-star micro-freeze): fixed pool of reusable
-    // PointLights, created and added to the scene right now — i.e. well
-    // before the one-time renderer.compileAsync() warm-up in main.js runs —
-    // instead of spawnWarpStars() below doing `new THREE.PointLight(...)`
-    // on every call. Adding a NEW light to the scene forces three.js to
-    // recompile the shader of every material it now affects (light counts
-    // are baked into the shader source itself, as #define NUM_POINT_LIGHTS
-    // — confirmed via three.js's own docs/discussion of this), and that
-    // recompile is what caused the stutter: once right when a boss is
-    // defeated (a light was created for the reward star on the spot) and
-    // again moments later when the player walks up and collects it (the
-    // GPU driver can defer actually compiling/linking the new program until
-    // the next draw call that needs it, which often lands right around
-    // pickup). Every warp star from here on reuses one of these
-    // already-compiled-for lights instead, so nothing ever gets added to
-    // the scene again after startup — sized for the 4 decorative stars
-    // placed at level load (see GameLevel.js) plus one reserved slot each
-    // for Kamek's and Bowser's reward stars, with spare room to grow.
+    // BUG FIX (boss-defeat/warp-star micro-freeze): a fixed light pool created up
+    // front, since `new THREE.PointLight()` per spawn forces a shader recompile (the stutter).
     this._warpLightPool = [];
     for (let i = 0; i < Decorations.WARP_LIGHT_POOL_SIZE; i++) {
       const light = new THREE.PointLight(0xffffff, 0, 14, 2); // intensity 0 = off/unused
@@ -105,11 +59,8 @@ export default class Decorations {
     this._warpLightPoolIndex = 0;
   }
 
-  // Hands out the next free light from the pool above (see the constructor
-  // for why), growing the pool on the spot — accepting the one-time
-  // recompile that was the whole point of pooling to avoid — only if every
-  // pooled light is already in use. Logged so the pool size can be raised
-  // if this ever actually triggers.
+  // Hands out the next free light from the pool (see constructor), growing
+  // it on the spot (accepting the recompile pooling avoids) only if exhausted.
   _nextWarpLight() {
     if (this._warpLightPoolIndex >= this._warpLightPool.length) {
       console.warn(
@@ -130,10 +81,8 @@ export default class Decorations {
 
     try {
       this._starLaunchGlbCache = await this.loader.loadAsync(MAP_MODELS.starLaunch);
-      // Normalized once here, before _tintModel below clones a material
-      // per instance to tint it — the clone keeps the same (now
-      // colorSpace-fixed) texture reference, so this one call covers every
-      // warp star regardless of which spawnWarpStars() call they came from.
+      // Normalized once here — every tinted clone (see _tintModel) keeps
+      // this same fixed texture reference, covering every warp star.
       normalizeMaterials(this._starLaunchGlbCache.scene);
     } catch (e) {
       console.warn("[Decorations] star_launch.glb not found — skipping warp stars.");
@@ -144,17 +93,14 @@ export default class Decorations {
   }
 
   // Loads (and caches) the coin model, shared by every method that scatters
-  // coins so the GLTF is only fetched once regardless of how many callers
-  // need it.
+  // coins so the GLTF is only fetched once regardless of caller count.
   async _loadCoinModel() {
     if (this._coinGlbCache !== undefined) return this._coinGlbCache;
 
     try {
       this._coinGlbCache = await this.loader.loadAsync(ITEM_MODELS.coin);
-      // Normalized once here — every coin clone below shares this
-      // material by reference, so this covers all of them (see
-      // utils/materials.js for why this was needed at all: coins/stars
-      // were rendering almost black without it).
+      // Normalized once — every coin clone below shares this material by
+      // reference (see utils/materials.js: coins rendered near-black without it).
       normalizeMaterials(this._coinGlbCache.scene);
     } catch (e) {
       this._coinGlbCache = null;
@@ -163,21 +109,8 @@ export default class Decorations {
     return this._coinGlbCache;
   }
 
-  // Scatters trees, flowers and loose coins across the island, avoiding the
-  // central area reserved for buildings/NPCs.
-  //
-  // @param {{x:number,z:number,halfX:number,halfZ:number}[]} [hillFootprints]
-  //   Horizontal footprint of every HillBlock platform (block_grass_large/
-  //   hill/hill_step — see HillBlock.js), passed in from GameLevel.js
-  //   (read straight from the level JSON, since buildBuildingsAndNPCs
-  //   itself doesn't run until after this). Used below to stop a tree/
-  //   flower/coin from landing inside — or clipping through the edge of —
-  //   a platform, which used to be possible since this scatter had no idea
-  //   where the level's hills actually sat.
-  // @param {{x:number,z:number,radius?:number}[]} [avoidPoints]
-  //   Round exclusion zones (warp stars + their signs — see GameLevel.js's
-  //   `warpAvoidPoints`) a tree/flower/coin also can't land inside — see
-  //   _isNearAnyPoint.
+  // Scatters trees, flowers and loose coins across the island, avoiding the central
+  // buildings/NPCs area, HillBlock platforms and warp star zones (hillFootprints/avoidPoints).
   async spawnFieldProps(arenaSize, onCoinSpawned, hillFootprints = [], avoidPoints = []) {
     let flowerGlb = null,
       treeGlb = null;
@@ -205,9 +138,7 @@ export default class Decorations {
         const posZ = z + (Math.random() - 0.5) * 6;
 
         // BUG FIX (palm trees spawning inside HillBlock platforms): skip
-        // this grid cell entirely if the jittered position falls inside
-        // (or too close to) any hill's real footprint — see hillFootprints
-        // above and _isInsideHillFootprint below.
+        // this cell if the jittered position falls inside/near a hill's real footprint.
         if (this._isInsideHillFootprint(posX, posZ, hillFootprints)) continue;
 
         // ...or on top of (or right next to) a warp star/its sign.
@@ -225,22 +156,15 @@ export default class Decorations {
           tree.rotation.x = (Math.random() - 0.5) * 0.08;
           tree.rotation.z = (Math.random() - 0.5) * 0.08;
           tree.position.set(posX, 0, posZ);
-          // Bake the position/rotation/scale just applied into the tree's
-          // matrixWorld so the bounding box below measures the tree as it
-          // will actually appear, before it's even added to the scene.
+          // Bake the transform into matrixWorld so the bounding box below
+          // measures the tree as it will actually appear.
           tree.updateMatrixWorld(true);
 
           enableShadows(tree);
           this.scene.add(tree);
 
-          // Box collider (no cylinder-axis orientation to get wrong) sized
-          // from the tree's own real bounding box instead of a guessed
-          // constant, so it automatically matches each tree's actual
-          // height — trees range ~2.3x in visual scale, so a fixed height
-          // was either too short for the big ones or too tall for the
-          // small ones. Footprint (width) stays a fixed "trunk" size: the
-          // fronds spread much wider than the trunk, and we don't want
-          // walking near a tree to feel blocked from several units away.
+          // Box collider sized from the tree's real bounding box (trees vary ~2.3x
+          // in scale); footprint stays a fixed "trunk" size since fronds spread wider.
           if (world) {
             const TRUNK_HALF_WIDTH = 0.5;
             const bbox = new THREE.Box3().setFromObject(tree);
@@ -345,21 +269,8 @@ export default class Decorations {
       }
     }
 
-    // PERFORMANCE: a griglia, non in un blocco solo.
-    //
-    // Questo prato e' ~45.000 ciuffi da 280 triangoli l'uno: 12,7 milioni di
-    // triangoli. In un unico InstancedMesh sono anche 12,7 milioni disegnati
-    // OGNI FRAME, sempre, perche' il frustum culling lavora per oggetto e
-    // quella sfera di contenimento copre l'isola intera — la telecamera ne
-    // inquadra un ventesimo ma la GPU li processa tutti. Su un fisso non si
-    // nota, su un portatile e' la voce di spesa principale.
-    //
-    // Spezzando il prato in blocchi di GRASS_CHUNK_SIZE unita' ogni blocco
-    // ha la sua sfera: three.js scarta da solo quelli fuori inquadratura, e
-    // _updateGrassChunks() spegne anche quelli troppo lontani per essere
-    // visti (la nebbia comincia comunque a 120 unita'). Il risultato a video
-    // e' identico: stessi ciuffi, stesse matrici, stesso materiale — cambia
-    // solo quanti se ne disegnano.
+    // PERFORMANCE: split into chunks rather than one InstancedMesh (~45k blades) so
+    // three.js can frustum-cull per chunk; _updateGrassChunks() also hides far chunks.
     const chunks = new Map();
     for (const matrix of matrices) {
       const cx = Math.floor(matrix.elements[12] / Decorations.GRASS_CHUNK_SIZE);
@@ -376,8 +287,8 @@ export default class Decorations {
       chunk.castShadow = false;
 
       bucket.forEach((matrix, i) => chunk.setMatrixAt(i, matrix));
-      // Calcolata subito: three.js la calcolerebbe comunque al primo frame,
-      // ma farlo qui tiene quel costo dentro la schermata di caricamento.
+      // Computed now rather than left for three.js's first-frame default,
+      // so that cost lands during loading instead of during gameplay.
       chunk.computeBoundingSphere();
 
       const [cx, cz] = key.split(",").map(Number);
@@ -391,15 +302,8 @@ export default class Decorations {
     }
   }
 
-  /**
-   * Spegne i blocchi d'erba oltre la distanza di vista corrente. Il frustum
-   * culling di three.js pensa gia' a quelli fuori inquadratura; questo
-   * toglie anche quelli dietro le spalle e all'altro capo dell'isola.
-   *
-   * Chiamato da update() con la posizione del giocatore: la telecamera lo
-   * insegue a pochi metri, quindi la differenza non e' percepibile e non
-   * serve passare qui anche la camera.
-   */
+  // Hides grass chunks beyond grassViewDistance (frustum culling handles off-screen
+  // ones already). Uses the player's position rather than the camera's — close enough.
   _updateGrassChunks(player) {
     if (!this.grassChunks.length) return;
 
@@ -414,25 +318,14 @@ export default class Decorations {
     }
   }
 
-  /**
-   * Distanza oltre la quale il prato non viene piu' disegnato, in unita'
-   * di mondo. La usa QualityManager per alleggerire la scena quando gli
-   * fps calano (vedi core/Render/QualityManager.js).
-   */
+  // World-unit distance beyond which grass stops being drawn; QualityManager
+  // lowers this under low fps (see core/Render/QualityManager.js).
   setGrassViewDistance(distance) {
     this.grassViewDistance = Math.max(10, distance);
   }
 
-  /**
-   * Places a smooth trail of coins along a sequence of waypoints, optionally
-   * arcing upward mid-segment. Used to visually guide the player toward a
-   * point of interest (e.g. up a staircase of hills) instead of relying
-   * purely on the random field scatter from spawnFieldProps.
-   *
-   * @param {{x:number,y:number,z:number}[]} waypoints - path to follow, in order.
-   * @param {(mesh: THREE.Object3D) => void} onCoinSpawned - registers each coin for pickup.
-   * @param {{spacing?: number, arcHeight?: number}} [options]
-   */
+  // Places a smooth coin trail along waypoints, optionally arcing upward mid-segment
+  // — guides the player toward a point of interest beyond the random scatter.
   async spawnCoinTrail(waypoints, onCoinSpawned, { spacing = 2.2, arcHeight = 0 } = {}) {
     const coinGlb = await this._loadCoinModel();
     if (!coinGlb || !waypoints || waypoints.length < 2) return;
@@ -466,12 +359,8 @@ export default class Decorations {
     }
   }
 
-  /**
-   * Builds one low-poly rock mesh: an icosahedron with each vertex nudged
-   * randomly along its own direction from the center, which gives the
-   * classic faceted "low-poly rock" silhouette without needing an external
-   * model file.
-   */
+  // Builds one low-poly rock mesh: an icosahedron with each vertex nudged randomly
+  // along its own radial direction — a faceted silhouette, no external model needed.
   _createRockGeometry(radius) {
     const geometry = new THREE.IcosahedronGeometry(radius, 0);
     const posAttr = geometry.attributes.position;
@@ -488,25 +377,8 @@ export default class Decorations {
     return geometry;
   }
 
-  /**
-   * Scatters low-poly rocks in a ring hugging the island's outer edge, so
-   * the boundary reads as a natural rocky rim instead of the ground simply
-   * stopping. Each rock gets a static sphere collider approximating its
-   * visual radius (a sphere has no orientation to get wrong, unlike a
-   * cylinder/box, which is a good fit for the roughly-round rock shape).
-   *
-   * All rocks share one material already, so their (baked, static)
-   * geometries are merged into a single draw call instead of one mesh per
-   * rock — same technique spawnGrassField already uses for grass blades.
-   * Physics stays one CANNON.Body per rock (unaffected by this — only the
-   * visual mesh count changes), and shadows are unaffected too: the merged
-   * mesh still casts/receives exactly as every individual rock did.
-   */
-  // Shared by every scatter method below that takes `hillFootprints`
-  // (spawnFieldProps, spawnRocks, spawnBushes): true if (x, z) falls inside
-  // — or within `clearance` units of — any HillBlock platform's real
-  // collider footprint (see HillBlock.js and GameLevel.js's hillFootprints
-  // computation), so props can't spawn inside or clipping through one.
+  // Rocks scatter around the rim, merged into one draw call. Shared by every
+  // scatter method: true if (x, z) is inside/near a HillBlock's real footprint.
   _isInsideHillFootprint(x, z, hillFootprints = [], clearance = 2) {
     for (const h of hillFootprints) {
       if (
@@ -521,14 +393,8 @@ export default class Decorations {
     return false;
   }
 
-  // Same idea as _isInsideHillFootprint above, but for a list of round
-  // exclusion zones instead of rectangular ones — used to keep trees/
-  // flowers/rocks/bushes from spawning on top of (or right next to) a warp
-  // star or its zone sign (see GameLevel.js's `warpAvoidPoints`, passed in
-  // as `avoidPoints` below). `radius` defaults generously enough to cover
-  // both a warp star AND its sign (only ~3 units further out) with a
-  // single point per star, so callers don't need to list the signs
-  // separately.
+  // Same idea as _isInsideHillFootprint, but for round exclusion zones — keeps props
+  // off warp stars/signs. `radius` defaults wide enough to cover a star and its sign.
   _isNearAnyPoint(x, z, points = [], radius = 6) {
     for (const p of points) {
       const r = p.radius ?? radius;
@@ -568,9 +434,8 @@ export default class Decorations {
       const radius = 0.6 + Math.random() * 1.4;
       const posY = radius * 0.35;
 
-      // Bake this rock's position/rotation into its own geometry before
-      // merging, since the merged mesh below has no per-rock transform of
-      // its own.
+      // Bake this rock's transform into its own geometry before merging —
+      // the merged mesh has no per-rock transform of its own.
       const rockGeo = this._createRockGeometry(radius);
       dummy.position.set(posX, posY, posZ);
       dummy.rotation.set(
@@ -603,12 +468,8 @@ export default class Decorations {
     this.scene.add(rocks);
   }
 
-  /**
-   * Builds one low-poly bush mesh: a subdivided icosahedron with jittered,
-   * vertically flattened vertices, giving a rounded, slightly irregular
-   * bush silhouette. Same technique as _createRockGeometry, tuned for a
-   * softer/rounder shape instead of a jagged rock.
-   */
+  // Builds one low-poly bush mesh: a subdivided, jittered, vertically
+  // flattened icosahedron — same technique as _createRockGeometry, tuned softer/rounder.
   _createBushGeometry(radius) {
     const geometry = new THREE.IcosahedronGeometry(radius, 1);
     const posAttr = geometry.attributes.position;
@@ -625,20 +486,8 @@ export default class Decorations {
     return geometry;
   }
 
-  /**
-   * Scatters low-poly bushes across the island (same central-area exclusion
-   * as spawnFieldProps), cycling through a handful of different greens so
-   * they don't all read as identical clones of the rocks. Purely
-   * decorative, no collider.
-   *
-   * Unlike rocks, each bush picks its own color, which would normally mean
-   * a separate material (and draw call) per bush. Instead, the chosen
-   * color is baked into a per-vertex color attribute on each bush's
-   * geometry before merging, and the merged mesh uses a single
-   * `vertexColors: true` material — one draw call total while still
-   * keeping the 5-color variety. Shadows are unaffected: the merged mesh
-   * casts/receives exactly as every individual bush did.
-   */
+  // Scatters low-poly bushes (same central-area exclusion as spawnFieldProps), cycling
+  // greens baked as per-vertex colors so all bushes share one draw call.
   spawnBushes(arenaSize, count = 26, hillFootprints = [], avoidPoints = []) {
     const bushColors = [0x3f7d32, 0x4f9b3d, 0x2f6b28, 0x5aa83f, 0x6bb84a];
     const half = arenaSize / 2 - 15;
@@ -698,11 +547,8 @@ export default class Decorations {
     this.scene.add(bushes);
   }
 
-  /**
-   * Draws a simple flowing-water pattern onto a canvas and returns it as a
-   * repeating THREE.CanvasTexture, shared by every pond so only one texture
-   * is created regardless of pond count.
-   */
+  // Draws a simple flowing-water pattern onto a canvas, returned as a
+  // repeating CanvasTexture shared by every pond.
   _createWaterTexture() {
     const size = 128;
     const canvas = document.createElement("canvas");
@@ -730,14 +576,8 @@ export default class Decorations {
     return texture;
   }
 
-  /**
-   * Adds small flat ponds (water surface only — no depth/volume, and no
-   * collider) at hand-picked spots. Each spot is
-   * {x, z, y?: number, radius?: number}. The shared water texture slowly
-   * scrolls in update() for a subtle flowing look.
-   *
-   * @param {{x:number, z:number, y?:number, radius?:number}[]} spots
-   */
+  // Adds small flat ponds (water surface only, no depth/collider) at hand-picked
+  // spots; the shared water texture slowly scrolls in update() for a flowing look.
   spawnPonds(spots = []) {
     if (spots.length === 0) return;
 
@@ -762,18 +602,13 @@ export default class Decorations {
 
       this.scene.add(pond);
       // Radius stored alongside the mesh (rather than read back from
-      // geometry.parameters) so _updateWaterWading has an explicit,
-      // guaranteed value to test against.
+      // geometry.parameters) so _updateWaterWading has an explicit value to test.
       this.ponds.push({ mesh: pond, radius: spot.radius || 6 });
     }
   }
 
-  /**
-   * Approximate footprint radius (world units, ignoring the JSON "scale"
-   * field since it means different things per model) used to place the
-   * fence ring around each house type. Purely a visual estimate, not the
-   * house's actual collision hitbox.
-   */
+  // Approximate footprint radius (world units, ignoring the JSON "scale"
+  // field) used for each house type's fence ring — a visual estimate, not the real hitbox.
   static FOOTPRINT_RADIUS = {
     mario_house: 20, // was 13 — enlarged for a more spacious yard.
     toad_house: 8,
@@ -781,66 +616,34 @@ export default class Decorations {
     toad_house_blue: 8,
   };
 
-  /**
-   * Per-type extra rotation for the fence ring (and its entrance gap +
-   * lamp posts), applied ON TOP of the building's own JSON "rotationY" —
-   * kept separate so adjusting where the ring's opening sits never rotates
-   * the house model itself.
-   */
+  // Per-type extra fence-ring rotation, applied on top of the building's own
+  // JSON rotationY — kept separate so it never rotates the house model itself.
   static FENCE_ROTATION_OFFSET = {
     mario_house: Math.PI / 2,
   };
 
-  /**
-   * World Y of the main island's flat ground surface — see
-   * LevelLoader.buildPlatforms: the platform box sits at position.y=-1
-   * with size.y=2, so its top face is at y = -1 + 2/2 = 0. The fence ring
-   * always belongs right on this surface.
-   */
+  // World Y of the main island's ground surface (LevelLoader.buildPlatforms'
+  // platform box: y=-1, size.y=2, top face at y=0) — the fence ring sits here.
   static GROUND_LEVEL = 0;
 
-  /**
-   * Per-type vertical nudge on top of GROUND_LEVEL, for any building whose
-   * visual base still doesn't line up perfectly with it. Deliberately NOT
-   * based on the building's own JSON "y": that value exists to compensate
-   * for each house MODEL's own pivot point (mario_house needs y=4 just to
-   * render sitting on the ground — its origin isn't at its base), which
-   * has nothing to do with where the ground actually is. The previous
-   * version of this fix added a small correction on top of "y" instead of
-   * replacing it, which happened to look right for toad_house (y=0, i.e.
-   * already at ground level) but sent mario_house's ring floating ~3-4
-   * units in the air, since its y=4 pivot compensation was never meant to
-   * apply to this procedural, pivot-less fence group.
-   */
+  // Per-type vertical nudge on top of GROUND_LEVEL. Deliberately NOT based on the
+  // building's own JSON "y" (that's per-model pivot compensation; reusing it floated the ring).
   static GROUND_OFFSET = {};
 
-  /**
-   * Size of the reusable warp-star glow-light pool (see _warpLightPool /
-   * _nextWarpLight) — currently 4 decorative stars at level load
-   * (GameLevel.js) + 1 reserved each for Kamek's and Bowser's reward stars
-   * = 6, plus a couple spare so future additions don't silently fall back
-   * to the (recompile-triggering) exhausted-pool path.
-   */
+  // Size of the reusable warp-star glow-light pool — 4 decorative stars + 1 each for
+  // Kamek's/Bowser's reward stars = 6, plus spare room to avoid the exhausted-pool path.
   static WARP_LIGHT_POOL_SIZE = 8;
 
-  // Lato in unita' di mondo di un blocco d'erba (vedi spawnGrassField): piu'
-  // piccolo = culling piu' preciso ma piu' blocchi da disegnare. Misurato
-  // sull'isola da 250 con la telecamera di gioco: a 24 unita' si disegna il
-  // 30% dei ciuffi, a 16 il 26% con 46 draw call, a 12 si scende appena piu'
-  // (25%) ma le draw call diventano 81. 16 e' il punto in cui la curva si
-  // appiattisce.
+  // Lato in unita' di mondo di un blocco d'erba (vedi spawnGrassField): 16 e' il
+  // punto in cui culling e draw-call si bilanciano meglio sull'isola da 250.
   static GRASS_CHUNK_SIZE = 16;
 
-  // Distanza di vista iniziale del prato. La nebbia comincia a 120 unita'
-  // (vedi Renderer.setupFog) e la telecamera sta ~12 unita' dietro il
-  // giocatore, quindi a 90 il confine del prato non si vede. QualityManager
-  // la abbassa se la macchina non tiene il passo (vedi setGrassViewDistance).
+  // Distanza di vista iniziale del prato: la nebbia comincia a 120 unita', quindi a
+  // 90 il confine non si vede. QualityManager la abbassa se serve.
   static GRASS_VIEW_DISTANCE = 90;
 
-  // Adds a small decorated area (fence ring + a couple of lamp posts) around
-  // every house-type building in the level, using the same building JSON
-  // entries LevelLoader already consumed. Purely decorative primitives, no
-  // collider, so this can never conflict with a house's tuned hitbox.
+  // Adds a decorated area (fence ring + lamp posts) around every house-type building,
+  // from the same JSON entries LevelLoader consumed — purely decorative, no collider.
   decorateStructures(buildingsData = []) {
     for (const b of buildingsData) {
       if (b.type === "mario_house" || b.type.startsWith("toad_house")) {
@@ -876,10 +679,8 @@ export default class Decorations {
       roughness: 0.4,
     });
 
-    // Low fence posts around the house, leaving a gap facing one side so it
-    // doesn't block the entrance. The gap angle is a fixed approximation
-    // (not derived from the actual door direction) — good enough for a
-    // decorative ring, worth revisiting if it ends up facing the door.
+    // Low fence posts, leaving a gap facing one side so it doesn't block
+    // the entrance — a fixed approximate angle, not derived from the door.
     for (let i = 0; i < postCount; i++) {
       const angle = (i / postCount) * Math.PI * 2;
       if (angle > Math.PI * 0.3 && angle < Math.PI * 0.7) continue;
@@ -908,9 +709,8 @@ export default class Decorations {
       glow.position.y = 2.7;
       lamp.add(glow);
 
-      // Small local light so the lamp actually reads as a light source at
-      // night/dusk, not just an emissive bulb. Range is short and intensity
-      // low to avoid a noticeable performance or exposure impact.
+      // Small local light so the lamp reads as an actual light source at
+      // night/dusk, kept short-range/low-intensity to stay cheap.
       const light = new THREE.PointLight(0xffbf60, 0.6, 8, 2);
       light.position.y = 2.7;
       lamp.add(light);
@@ -923,18 +723,8 @@ export default class Decorations {
     this.scene.add(group);
   }
 
-  /**
-   * Gives a walkable sky planet mesh a static sphere collider (so the
-   * player can actually stand on it) and registers a matching GravityField
-   * (so getting close enough pulls the player toward its center instead of
-   * straight down, and standing on it lets them walk around its surface —
-   * see PhysicsEngine.addGravityField/getActiveGravityField and Player.js's
-   * _updateOnPlanet). Called by spawnSkyPlanet/spawnBluePlanet/
-   * spawnYoshiEggPlanet; deliberately NOT called for the orbiting
-   * satellites, which stay purely decorative (they also move every frame,
-   * which a static collider can't follow without extra per-frame body-sync
-   * code that isn't needed for background dressing).
-   */
+  // Gives a walkable planet mesh a static sphere collider plus a matching GravityField
+  // so the player can land and walk on it — not used for the purely decorative satellites.
   _addPlanetPhysics(mesh, radius, { strength = 30, influenceRadius } = {}) {
     if (!mesh) return;
 
@@ -961,12 +751,8 @@ export default class Decorations {
     }
   }
 
-  // Adds 1-2 smaller planets orbiting the main sky planet at different
-  // speeds/tilts, purely for background richness — not too big, so they
-  // read as moons rather than competing with the main planet. Colors only
-  // (no extra texture files) since the color+normal+roughness requirement
-  // is already covered by the main sky planet. Orbit radius stays outside
-  // the main planet's own radius (26) so they don't clip through it.
+  // Adds 1-2 small planets orbiting the main sky planet for background richness
+  // (colors only, no textures) — orbit radius stays outside the main planet's radius (26).
   spawnSatellitePlanets() {
     if (!this.skyPlanet) return;
 
@@ -983,27 +769,15 @@ export default class Decorations {
           roughness: cfg.roughness,
           metalness: cfg.metalness,
           // Same environment-reflection cap as every other hand-built
-          // material in the project (see spawnSkyPlanet above) — left out
-          // here too until now.
+          // material in the project (see spawnSkyPlanet).
           envMapIntensity: 0.4,
         }),
       );
       mesh.castShadow = false;
       mesh.receiveShadow = false;
 
-      // Placed on its orbit right away, with the same math update() uses
-      // every frame, instead of being left at the mesh's default (0,0,0).
-      // update() is what normally keeps this mesh moving along its orbit,
-      // but update() only runs once actual gameplay starts (main.js's
-      // updateGame() returns early during MENU_WELCOME/MENU_NAME, before
-      // entityManager.player exists) — so without this, both satellites
-      // sat at the world origin, right on top of Mario's house, for the
-      // entire main menu, and only jumped to their real orbit position the
-      // instant gameplay began. That pale sphere sitting near the house
-      // (confirmed via a scene dump: both satellites at exactly x=0,y=0,z=0)
-      // was this, not the toad house — half-buried in the ground at the
-      // origin, the light-blue satellite (#bfe9ff) reads as a plain white
-      // dome poking out of the lawn.
+      // BUG FIX: placed on its orbit right away instead of the mesh default (0,0,0) —
+      // update() only runs once gameplay starts, so both satellites sat at the origin till then.
       const angle = Math.random() * Math.PI * 2;
       const x = this.skyPlanet.position.x + Math.cos(angle) * cfg.orbitRadius;
       const z = this.skyPlanet.position.z + Math.sin(angle) * cfg.orbitRadius * Math.cos(cfg.tilt);
@@ -1022,11 +796,8 @@ export default class Decorations {
     });
   }
 
-  /**
-   * Draws a simple cloud-blob pattern onto a canvas and returns it as a
-   * repeating THREE.CanvasTexture. Used for the blue planet so it reads as
-   * an ocean-and-clouds sphere without needing a separate PNG asset.
-   */
+  // Draws a simple cloud-blob pattern onto a canvas, returned as a repeating
+  // CanvasTexture — the blue planet's ocean-and-clouds look, no PNG asset needed.
   _createCloudySphereTexture(baseColor, cloudColor) {
     const size = 256;
     const canvas = document.createElement("canvas");
@@ -1059,15 +830,8 @@ export default class Decorations {
     return texture;
   }
 
-  /**
-   * A second background planet, distinct from the main color+normal+
-   * roughness planet: an ocean-blue sphere with a procedurally drawn cloud
-   * pattern (see _createCloudySphereTexture). Purely a distant sky prop —
-   * no collider/gravity field, no warp star sends the player here — kept
-   * deliberately modest in size ("for beauty", not to walk on).
-   * Positioned on the opposite side of the world from the main sky planet,
-   * high above the ground.
-   */
+  // A second, distinct background planet: ocean-blue with procedural clouds, no
+  // collider/gravity/warp star — purely a distant sky prop on the opposite side.
   spawnBluePlanet({ position = new THREE.Vector3(260, 190, 0), radius = 10 } = {}) {
     const material = new THREE.MeshStandardMaterial({
       map: this._createCloudySphereTexture("#2f6fb0", "rgba(255,255,255,0.6)"),
@@ -1085,12 +849,8 @@ export default class Decorations {
     return this.bluePlanet;
   }
 
-  /**
-   * Scatters a handful of coins across the red planet's surface, findable
-   * while walking around it — same "hand the mesh off via onCoinSpawned so
-   * Collectibles can register it" pattern as spawnFieldProps/
-   * spawnCoinTrail. Called from GameLevel.js right after spawnSkyPlanet.
-   */
+  // Scatters findable coins across the red planet's surface — same
+  // onCoinSpawned hand-off pattern as spawnFieldProps/spawnCoinTrail.
   async spawnPlanetCoins(planetMesh, radius, count, onCoinSpawned) {
     if (!planetMesh || !radius) return;
 
@@ -1098,9 +858,8 @@ export default class Decorations {
     if (!coinGlb) return;
 
     for (let i = 0; i < count; i++) {
-      // Standard spherical -> Cartesian parametrization. Not perfectly
-      // uniform-area, but plenty good enough for scattering a handful of
-      // decorative pickups.
+      // Standard (non-uniform-area, but good enough here) spherical ->
+      // Cartesian parametrization.
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       const r = radius + 0.4; // sit just above the surface, not clipped into it
@@ -1122,9 +881,8 @@ export default class Decorations {
     }
   }
 
-  // Clones every mesh's material before tinting so the same base GLTF can
-  // be reused for multiple differently-colored instances without them
-  // sharing (and fighting over) one material.
+  // Clones every mesh's material before tinting, so the same base GLTF can
+  // be reused for multiple differently-colored instances without sharing one material.
   _tintModel(root, colorHex) {
     root.traverse((child) => {
       if (child.isMesh) {
@@ -1138,19 +896,8 @@ export default class Decorations {
     });
   }
 
-  /**
-   * Places Mario Galaxy-style "launch stars" (star_launch.glb) at the
-   * island's edges (or wherever a spot says), tinted per destination.
-   * Touching one teleports the player there — see `target` below and
-   * _updateWarpStars/_getWarpDestination.
-   *
-   * @param {{x:number,y:number,z:number,color:number,scale?:number,target?:("sky"|"spawn"|"kamek_zone"|"bowser_zone")}[]} spots
-   *   `target` picks the destination: "sky" is the walkable red planet
-   *   (see spawnSkyPlanet), "spawn" is the level's player spawn point (see
-   *   setSpawnPoint), "kamek_zone"/"bowser_zone" are the entrances to the
-   *   two separate obstacle courses (see setKamekZoneEntry/
-   *   setBowserZoneEntry). Omit `target` to keep a star purely decorative.
-   */
+  // Places Mario Galaxy-style "launch stars" tinted per destination. `target`
+  // picks where touching one sends the player; omit it for a purely decorative star.
   async spawnWarpStars(spots = []) {
     if (spots.length === 0) return;
 
@@ -1167,10 +914,8 @@ export default class Decorations {
       enableShadows(star, { castShadow: true, receiveShadow: false });
       this.scene.add(star);
 
-      // Small matching-color glow so the star reads clearly against the
-      // skybox even from a distance. Reuses a pre-warmed light from the
-      // pool instead of creating a new THREE.PointLight here — see
-      // _warpLightPool's comment in the constructor for why.
+      // Small matching-color glow so the star reads clearly from a
+      // distance; reuses a pre-warmed pool light (see constructor).
       const light = this._nextWarpLight();
       light.color.set(spot.color);
       light.intensity = 1.0;
@@ -1185,53 +930,32 @@ export default class Decorations {
     }
   }
 
-  // Sets the level's player spawn point (called once from GameLevel.js
-  // after level1.json is parsed), so a warp star with target "spawn" has
-  // somewhere to send the player back to.
+  // Sets the level's player spawn point (from GameLevel.js after
+  // level1.json is parsed), so a "spawn"-target warp star has a destination.
   setSpawnPoint(point) {
     this.spawnPoint = point;
   }
 
-  // Sets the entrance coordinates of the separate Kamek obstacle course
-  // (called from main.js once ObstacleZone.load() resolves — see
-  // entities/Level/ObstacleZone.js), so a warp star with target
-  // "kamek_zone" has somewhere to send the player.
+  // Sets the Kamek obstacle course entrance (from main.js once
+  // ObstacleZone.load() resolves), so a "kamek_zone" warp star has a destination.
   setKamekZoneEntry(point) {
     this.kamekZoneEntry = point;
   }
 
   // Same as setKamekZoneEntry, for the separate Bowser obstacle course
-  // (bowser_zone.json, loaded via its own ObstacleZone instance in main.js), so
-  // a warp star with target "bowser_zone" has somewhere to send the player.
+  // (bowser_zone.json, its own ObstacleZone instance in main.js).
   setBowserZoneEntry(point) {
     this.bowserZoneEntry = point;
   }
 
-  // Optional UIManager hookup (see the `ui` field above) — lets
-  // _updateWarpStars show/hide the "get off Yoshi" warning without this
-  // class needing `ui` passed through its constructor (which every existing
-  // caller would otherwise need updating for).
+  // Optional UIManager hookup — lets _updateWarpStars show/hide the "get
+  // off Yoshi" warning without threading `ui` through every constructor call.
   setUI(ui) {
     this.ui = ui;
   }
 
-  /**
-   * Places a small Minecraft "Oak Sign" prop (minecraft_sign.glb, a
-   * Mineways export) bearing a logo texture near a warp star that leads to
-   * a separate zone, so the destination is marked before the player steps
-   * on the star. Used for both the Kamek zone (kamekLogo) and the Bowser
-   * zone (gameoverLogo) — see GameLevel.js for the call sites. The sign's
-   * own baked material samples a shared Minecraft block-texture atlas with
-   * no blank area to draw on (confirmed by inspecting the GLB directly),
-   * so the logo can't be applied by editing that texture — instead it's a
-   * small separate plane overlaid just in front of the sign's face, the
-   * same "decal" technique used for posters on top of baked models.
-   *
-   * @param {{x:number,y:number,z:number,rotationY?:number,logo?:string}[]} spots
-   *   `rotationY` orients the sign so its face reads clearly to an
-   *   approaching player; omit for the model's default facing. `logo` is a
-   *   texture path (see TEXTURES in manifest.js), defaulting to kamekLogo.
-   */
+  // Places a Minecraft "Oak Sign" prop bearing a logo texture near a warp star to
+  // a separate zone. The sign has no blank area to draw on, so the logo is a decal plane.
   async spawnZoneSigns(spots = []) {
     if (spots.length === 0) return;
 
@@ -1261,12 +985,8 @@ export default class Decorations {
       return tex;
     };
 
-    // Normalized from the model's own bounding-box height rather than its
-    // raw native scale (same pattern as spawnStars in Collectibles.js) —
-    // the sign is a tiny, thin Minecraft plank model of unknown native
-    // scale, so trusting scale:1 would render it either invisible-small or
-    // enormous. Was 2.2 (read as small/hard to notice from a distance);
-    // 3.6 reads as a proper landmark-sized sign next to the player.
+    // Normalized from the model's own bounding-box height, not its raw native scale
+    // (unknown for this tiny model, same pattern as Collectibles.spawnStars).
     const targetHeight = 3.6;
 
     for (const spot of spots) {
@@ -1283,10 +1003,8 @@ export default class Decorations {
       }
       sign.updateMatrixWorld(true);
 
-      // Recenter the (now correctly scaled) sign on its own local origin —
-      // horizontally centered, depth centered, base sitting at y=0 — so
-      // the group's position below places its base on the ground and the
-      // logo plane can be positioned purely from its bounding box.
+      // Recenter the scaled sign on its own local origin (base at y=0) so the group
+      // below places its base on the ground and the logo plane positions from its bbox.
       const scaledBbox = new THREE.Box3().setFromObject(sign);
       const centerX = (scaledBbox.min.x + scaledBbox.max.x) / 2;
       const centerZ = (scaledBbox.min.z + scaledBbox.max.z) / 2;
@@ -1306,13 +1024,8 @@ export default class Decorations {
       group.add(sign);
 
       if (logoTexture) {
-        // Both kamekLogo and gameoverLogo (see manifest.js) are
-        // pre-cropped, pre-centered, alpha-masked PNGs — the badge itself
-        // already fills its square canvas edge-to-edge with a transparent
-        // background. 0.92 of the sign's own face made the badge bigger
-        // than the board itself (it stuck out past the wooden edges) —
-        // 0.45 keeps it clearly inset within the board while still
-        // reading as a big, centered badge.
+        // Logo PNGs are pre-cropped/alpha-masked badges filling their canvas edge-to-edge;
+        // 0.45 of the sign's face keeps the badge clearly inset.
         const logoSize = Math.min(faceWidth, faceHeight) * 0.45;
         const logoPlane = new THREE.Mesh(
           new THREE.PlaneGeometry(logoSize, logoSize),
@@ -1327,12 +1040,8 @@ export default class Decorations {
             envMapIntensity: 0.4,
           }),
         );
-        // A hair off the sign's face (0.01) to avoid z-fighting, centered
-        // horizontally (local x=0, matching the sign's own recentered
-        // origin). Vertically nudged above the board's exact center
-        // (faceHeight * 0.5 would be dead-center) toward the top — 0.62
-        // reads better than dead-center once the small post sticking out
-        // below the board is taken into account.
+        // 0.01 off the face to avoid z-fighting; 0.775 (above dead-center) reads
+        // better once the sign's post is accounted for.
         logoPlane.position.set(0, faceHeight * 0.775, faceZ + 0.01);
         logoPlane.castShadow = false;
         logoPlane.receiveShadow = false;
@@ -1343,11 +1052,8 @@ export default class Decorations {
     }
   }
 
-  // Resolves a warp star's `target` into an actual world-space landing
-  // spot, or null if that destination isn't available yet (e.g.
-  // setKamekZoneEntry hasn't been called, or the target planet failed to
-  // load) — _updateWarpStars simply skips the star in that case rather
-  // than teleporting the player into empty space.
+  // Resolves a warp star's `target` into a world-space landing spot, or null if
+  // unavailable yet — _updateWarpStars simply skips rather than teleporting into empty space.
   _getWarpDestination(target, playerRadius) {
     if (target === "spawn") {
       if (!this.spawnPoint) return null;
@@ -1368,9 +1074,8 @@ export default class Decorations {
 
     if (target === "sky") {
       if (!this.skyPlanet || !this.skyPlanetRadius) return null;
-      // Directly "above" the planet's own local up (its +Y from center),
-      // so the player lands with a predictable initial orientation — see
-      // Player.js's _updateOnPlanet.
+      // Directly "above" the planet's local up (+Y from center), for a
+      // predictable landing orientation — see Player.js's _updateOnPlanet.
       return {
         x: this.skyPlanet.position.x,
         y: this.skyPlanet.position.y + this.skyPlanetRadius + (playerRadius || 1) + 0.5,
@@ -1381,25 +1086,13 @@ export default class Decorations {
     return null;
   }
 
-  /**
-   * Mario Galaxy-style warp: getting close to a launch star teleports the
-   * player to just above the planet it's tinted to match, landing them
-   * directly inside that planet's gravity field (see
-   * PhysicsEngine.getActiveGravityField) so they immediately start falling
-   * toward — and can walk around on — its surface. Same "poke the body
-   * directly from outside" pattern used elsewhere in this codebase for
-   * player-affecting effects (EntityManager's void-fall respawn, Enemy's
-   * stomp bounce) — never touches Player.js's own update logic.
-   */
+  // Mario Galaxy-style warp: nearing a launch star teleports the player just above
+  // the planet it's tinted to match, inside its gravity field — pokes the body directly.
   _updateWarpStars(player) {
     if (!player || !player.body || this.warpStars.length === 0) return;
 
-    // Not while riding Yoshi. Every destination is somewhere Yoshi has no
-    // business being taken — the two boss courses and the sky planets —
-    // and walking into a star by accident on his back would drop the pair
-    // of them into a fight or onto a curved surface neither the mount
-    // logic nor the planet-gravity path was built for. Stepping off him
-    // first is the price of admission; the star is simply inert until then.
+    // Not while riding Yoshi: every destination is somewhere the mount/planet-gravity
+    // logic wasn't built for — the star stays inert until the player steps off him.
     if (player.mountedOnYoshi) {
       this._updateYoshiWarpWarning(player);
       return;
@@ -1431,12 +1124,8 @@ export default class Decorations {
     }
   }
 
-  // Companion to _updateWarpStars' early-return above: while the player IS
-  // mounted on Yoshi, shows a warning the moment they get close enough to a
-  // (real, targeted) warp star that they'd otherwise have triggered it — a
-  // slightly bigger radius than the actual warp trigger, so the hint shows
-  // up just before they'd bump into the now-inert star. No-op if setUI was
-  // never called.
+  // Companion to _updateWarpStars' early-return: while mounted on Yoshi, warns the
+  // player as they near a targeted star — a wider radius than the actual trigger.
   _updateYoshiWarpWarning(player) {
     if (!this.ui) return;
 
@@ -1464,16 +1153,8 @@ export default class Decorations {
     }
   }
 
-  /**
-   * Adds a stylized "mini-planet" floating in the sky, in the same spirit
-   * as the background planetoids in Super Mario Galaxy. It exists partly
-   * to demonstrate a surface with color + normal + roughness maps together
-   * (the course requires "textures of different kinds"). Also gets a static
-   * sphere collider plus a GravityField via _addPlanetPhysics, so the
-   * player can actually land on and walk around it (see Player.js's
-   * _updateOnPlanet) — reachable via the matching warp star, see
-   * spawnWarpStars.
-   */
+  // A stylized floating "mini-planet" with a color+normal+roughness textured surface.
+  // Gets a static collider + GravityField via _addPlanetPhysics so the player can walk on it.
   spawnSkyPlanet({ position = new THREE.Vector3(-260, 190, 0), radius = 26 } = {}) {
     const textureLoader = new THREE.TextureLoader();
 
@@ -1495,9 +1176,8 @@ export default class Decorations {
     this.skyPlanet = new THREE.Mesh(geometry, material);
     this.skyPlanet.position.copy(position);
 
-    // A background prop lit by the scene's directional light; it doesn't
-    // need to receive shadows from the level geometry, but it does cast
-    // its own silhouette if anything is ever placed near it.
+    // A background prop lit by the scene's directional light — doesn't
+    // need to receive shadows, but casts its own silhouette.
     this.skyPlanet.castShadow = false;
     this.skyPlanet.receiveShadow = false;
 
@@ -1507,15 +1187,8 @@ export default class Decorations {
     return this.skyPlanet;
   }
 
-  /**
-   * Purely visual "wading" effect: while the player's horizontal position
-   * is over a pond, nudge their rendered mesh down a little so they look
-   * like they're standing in shallow water. This intentionally never
-   * touches the physics body (player.body) — it only offsets the mesh
-   * AFTER Player.update() has already synced it from the body for this
-   * frame, so next frame's physics step is completely unaffected and there
-   * is nothing for gravity/collision to fight against.
-   */
+  // Purely visual "wading" effect over a pond: nudges the rendered mesh down a
+  // little, applied AFTER Player.update()'s own body sync so physics is unaffected.
   _updateWaterWading(player, delta) {
     if (!player || !player.mesh || this.ponds.length === 0) return;
 
@@ -1531,6 +1204,8 @@ export default class Decorations {
       }
     }
 
+    this._insidePond = insidePond;
+
     const targetDepth = insidePond ? 0.35 : 0;
     // Smoothly ease toward the target depth instead of snapping, so
     // entering/leaving a pond doesn't look like a sudden step.
@@ -1539,6 +1214,12 @@ export default class Decorations {
     if (this._waterSinkDepth > 0.001) {
       player.mesh.position.y -= this._waterSinkDepth;
     }
+  }
+
+  // True while the player is standing inside a pond's footprint — read by
+  // GameLevel.update() and forwarded to Player.js for the movement slowdown.
+  isPlayerInPond() {
+    return this._insidePond === true;
   }
 
   // Slow, constant self-rotation for the sky planet, plus orbital motion

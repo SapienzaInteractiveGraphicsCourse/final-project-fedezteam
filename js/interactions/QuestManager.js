@@ -1,86 +1,17 @@
 /**
- * QuestManager.js — the game's progression: ONE ordered chain of quests,
- * handed out by Toad and tracked on the top-right objective panel (see
- * UIManager.showQuestObjective, driven by _renderObjective).
- *
- * The chain (QUESTS below, in order):
- *
- *   1. Red Planet — ride the yellow Warp Star up to the red planet and
- *      collect its star (see GameLevel's `id: "redPlanetStar"`).
- *   2. Yoshi — hatch his egg, then use his boosted jump to reach the high
- *      star on Passerella Est (`id: "yoshiHighStar"`).
- *   3. Kamek — beat him in his arena; the star drops right there (see
- *      main.js's kamek.onDefeated).
- *   4. Coins — collect 25 coins and hand them to Toad, who gives this
- *      star himself: it's the only one with no arena to drop it at.
- *   5. Bowser — same as Kamek, at the other arena.
- *
- * HOW A QUEST ARRIVES. Only ever from Toad, face to face. The player
- * starts with "Talk to Toad" on the panel; that conversation opens quest 1.
- * Finishing a quest does NOT reveal the next one — it flips the panel to
- * "return to Toad", and the next quest is only named once the player is
- * standing in front of him again (reportPending / _handOverNext). One
- * conversation moves the chain forward exactly one step.
- *
- * Reporting back is a CONVERSATION, not a collection trip: Kamek's and
- * Bowser's stars are waiting out at their arenas and are picked up there,
- * and quest 4 is the only one whose star Toad hands over — it has no arena
- * to drop one at, so turning the coins in and being given the next quest
- * happen in the same breath.
- *
- * WHAT A QUEST DOES NOT DO. Assignment is bookkeeping, not gating: every
- * warp star, egg and boss arena in the level stays reachable from the first
- * frame. A player who beats Kamek before Toad has even mentioned him is not
- * punished for it — the world flags below are recorded whenever they
- * happen, so a quest handed over for something already done reads as
- * finished the moment it is assigned, and the next conversation moves on
- * from it. Toad's lines cover that case explicitly rather than pretending
- * it didn't happen (see each quest's assignLine).
- *
- * Toad's lines are shown as a proper speech-bubble dialogue
- * (ui.showDialogue/hideDialogue, the same widget Peach's cutscene uses) and
- * closed with E only — see main.js's updateGame. Progress that happens out
- * in the world (a quest finished, the egg hatching, enough coins) is a
- * toast instead: there's no "E press" moment to hang a blocking dialogue on
- * for those.
- *
- * Every line is also SPOKEN when an AudioManager is passed in (see
- * _showToadDialogue): the welcome clip the first time the player ever talks
- * to him, a dedicated clip for the scripted beats ("go and deal with
- * Kamek", "go and deal with Bowser", "here's your star"), and the generic
- * two-take blip — toad_1/toad_2, alternated by AudioManager — otherwise.
+ * QuestManager.js — the game's single ordered quest chain (see QUESTS),
+ * handed out by Toad and shown on the top-right objective panel. Order:
+ * Red Planet star -> Yoshi egg/high star -> Kamek -> 25 coins -> Bowser.
+ * Quests are assigned/reported only face-to-face with Toad; world events
+ * are recorded as flags regardless of order, so out-of-order play still counts.
  */
 
-// How many coins quest 4 asks for. They are really SPENT on turn-in (see
-// ui.spendCoins), not just checked off, and what's counted is the player's
-// whole wallet rather than "coins collected since the quest opened" — so
-// someone who already had 25 in the bank can hand them over right away.
+// How many coins quest 4 asks for. Coins are SPENT on turn-in (ui.spendCoins)
+// and checked against the player's whole wallet, not just post-quest pickups.
 const COIN_TARGET = 25;
 
-/**
- * The chain itself. Each entry is data + small functions taking the manager
- * (`qm`), so the class below stays a generic runner and adding or
- * reordering a quest never means touching its logic:
- *
- *   objective(qm)   -> the panel's text while this quest is being worked
- *                      on (the "Quest n/N:" prefix comes from
- *                      _renderObjective).
- *   isDone(qm)      -> finished, read off qm.flags. Checked whenever a flag
- *                      changes AND right after the quest is handed over.
- *   assignLine(qm)  -> what Toad SAYS when he hands it over, and which
- *   assignVoice(qm)    clips go with it. Every quest is assigned in person,
- *                      so every quest has these.
- *   reminder(qm)    -> what he says if you talk to him while it's active.
- *   reminderVoice(qm)
- *   doneToast(qm)   -> the "you did it" toast, out in the world, at the
- *                      moment it's finished. Never names what comes next:
- *                      that's Toad's to tell.
- *   reportLine(qm)  -> how he opens the conversation where it's reported,
- *                      immediately followed by the next quest's assignLine.
- *
- * Quest 4 additionally uses the turn-in fields (needsTurnIn, isReady,
- * onProgress, turnInLine/turnInVoice, onTurnIn) — see onToadInteract.
- */
+// The chain itself: data + small functions taking the manager (`qm`). Each
+// entry: objective/isDone/assignLine/reminder/doneToast/reportLine (+voice).
 const QUESTS = [
   {
     id: "redPlanet",
@@ -132,10 +63,8 @@ const QUESTS = [
   },
   {
     id: "coins",
-    // The one quest that ends at Toad rather than out in the world: no
-    // arena drops this star, he hands it over himself. So it never goes
-    // through the report-back path — handing the coins over IS the report,
-    // and it comes with the next quest attached (see _handOverNext).
+    // Ends at Toad, not out in the world: no arena drops this star, so
+    // handing the coins over IS the report (see _handOverNext).
     needsTurnIn: true,
     objective: (qm) =>
       qm.isCoinQuestReady()
@@ -148,9 +77,8 @@ const QUESTS = [
     assignLine: () => `Now, bring me ${COIN_TARGET} coins and a reward is yours!`,
     assignVoice: () => [],
     reminder: (qm) => `You are still ${Math.max(0, COIN_TARGET - qm.ui.coins)} short!`,
-    // Runs when the quest is handed over and on every coin picked up
-    // afterwards: keeps the separate COINS n/25 counter (ui.showQuestHud)
-    // in step.
+    // Runs on assignment and every coin pickup after: keeps the COINS n/25
+    // HUD counter (ui.showQuestHud) in step.
     onProgress: (qm) => qm._syncCoinHud(),
     turnInLine: () => "Thank you! Here is a Power Star for you!",
     turnInVoice: () => ["toad_give_star"],
@@ -183,19 +111,16 @@ export default class QuestManager {
     // Optional: without it every line still shows, it just goes unspoken.
     this.audio = audio;
 
-    // Position in QUESTS. -1 is the opening state, before Toad has been
-    // spoken to at all (the panel says so); QUESTS.length means the whole
-    // chain is done.
+    // Position in QUESTS. -1 = opening state (before Toad); QUESTS.length =
+    // whole chain done.
     this.questIndex = -1;
 
-    // The active quest is finished but Toad hasn't heard about it yet. The
-    // panel points back at him and the next quest stays unnamed until he
-    // hands it over — see _handOverNext.
+    // Active quest is finished but Toad hasn't heard yet — panel points back
+    // at him, next quest stays unnamed until handed over (see _handOverNext).
     this.reportPending = false;
 
-    // What the world has seen happen, recorded whether or not the matching
-    // quest is the active one — see the "not gating" note in the class
-    // comment. Everything a quest's isDone() reads lives here.
+    // What the world has seen happen, recorded regardless of whether the
+    // matching quest is active (see the class comment's out-of-order note).
     this.flags = {
       redPlanetStar: false,
       yoshiEggHatched: false,
@@ -211,14 +136,12 @@ export default class QuestManager {
     // Latches the "you have enough coins" toast to once (see _syncCoinHud).
     this.coinsReadyAnnounced = false;
 
-    // True while a Toad line is up (ui.dialogueActive mirrors this, but
-    // main.js needs to tell Toad's single-line "close" apart from Peach's
-    // multi-line "advance" — see closeToadDialogue).
+    // True while a Toad line is up (mirrors ui.dialogueActive, but lets
+    // main.js tell Toad's single-line close apart from Peach's multi-line one).
     this.dialogueOpen = false;
 
     // Set from main.js once Toad's position is known: spawns the coin
-    // quest's Power Star next to him on turn-in. It is the only star this
-    // class ever hands out — the other four are picked up out in the level.
+    // quest's Power Star next to him on turn-in, the only star this class hands out.
     this.onRewardStar = null;
 
     this._renderObjective();
@@ -237,9 +160,8 @@ export default class QuestManager {
     return !!(quest && quest.needsTurnIn && quest.isReady(this));
   }
 
-  // Text for the "Press E ..." prompt while standing near Toad — read
-  // fresh every frame (see InteractionManager), so it always matches the
-  // current state without needing to be pushed.
+  // Text for the "Press E ..." prompt near Toad, read fresh every frame
+  // (see InteractionManager) so it always matches current state.
   getToadPrompt() {
     if (this.questIndex < 0) return "Press E to get your first quest";
     if (this.reportPending) return "Press E to report back to Toad";
@@ -286,14 +208,10 @@ export default class QuestManager {
   }
 
   // --- WORLD EVENTS (all wired from main.js / EntityManager) -------------
-  //
-  // Each one records a flag and then asks the active quest whether that
-  // finished it. Recording happens even when the matching quest hasn't been
-  // assigned yet, which is what makes playing out of order work.
+  // Each records a flag and re-checks the active quest, even unassigned.
 
-  // Every star picked up anywhere in the level (see
-  // EntityManager.onStarCollected / Collectibles' star `id`); stars with no
-  // id — the level defaults, the boss and Toad rewards — are ignored here.
+  // Every star picked up anywhere in the level (Collectibles' star `id`);
+  // stars with no id (defaults, boss/Toad rewards) are ignored here.
   onStarCollected(id) {
     if (id === "redPlanetStar") this.flags.redPlanetStar = true;
     else if (id === "yoshiHighStar") this.flags.yoshiHighStar = true;
@@ -331,15 +249,8 @@ export default class QuestManager {
 
   // --- CHAIN MACHINERY ---------------------------------------------------
 
-  /**
-   * Closes the current quest inside a conversation and hands over the next
-   * one in the same line: `closing` is Toad acknowledging what was just
-   * done (a report, or the coin turn-in), immediately followed by the next
-   * quest's own assignLine, so one E press = one step of the chain.
-   *
-   * On the last quest there is nothing to append and the acknowledgement
-   * stands alone as the ending line.
-   */
+  // Closes the current quest inside one conversation and appends the next
+  // quest's assignLine in the same breath (nothing appended on the last quest).
   _handOverNext(closing, closingVoice = []) {
     const next = QUESTS[this.questIndex + 1];
 
@@ -357,14 +268,8 @@ export default class QuestManager {
     this._setQuest(this.questIndex + 1);
   }
 
-  /**
-   * Makes QUESTS[index] the active quest (or ends the chain when past the
-   * last one), refreshes the panel, and re-checks it straight away: it may
-   * ALREADY be satisfied — a boss beaten before Toad ever mentioned him —
-   * in which case it lands on "return to Toad" immediately and the NEXT
-   * conversation moves past it. Deliberately one step at a time: the chain
-   * never runs several quests forward while the player stands there.
-   */
+  // Makes QUESTS[index] active (or ends the chain past the last one),
+  // refreshes the panel, and re-checks it in case it's already satisfied.
   _setQuest(index) {
     this.questIndex = Math.min(index, QUESTS.length);
     this.reportPending = false;
@@ -380,9 +285,8 @@ export default class QuestManager {
     this._checkActiveQuest();
   }
 
-  // Re-evaluates the active quest against the world flags: keeps its
-  // progress display current and, the moment its condition holds, flips to
-  // "report back to Toad" — WITHOUT revealing what comes next.
+  // Re-evaluates the active quest against the world flags, and the moment
+  // its condition holds flips to "report back to Toad" (without naming what's next).
   _checkActiveQuest() {
     const quest = this.activeQuest;
     if (!quest || this.reportPending) return;
@@ -400,9 +304,8 @@ export default class QuestManager {
     this._renderObjective();
   }
 
-  // Keeps the separate COINS n/25 counter (a different widget from the
-  // objective panel — see UIManager.showQuestHud) in step with the wallet,
-  // and says so once when the target is reached.
+  // Keeps the separate COINS n/25 HUD counter (UIManager.showQuestHud) in
+  // step with the wallet, and announces once when the target is reached.
   _syncCoinHud() {
     const shown = Math.min(this.ui.coins, COIN_TARGET);
     this.ui.showQuestHud(`COINS: ${shown}/${COIN_TARGET}`);
@@ -413,17 +316,8 @@ export default class QuestManager {
     }
   }
 
-  /**
-   * Puts one of Toad's lines on screen and gives it a voice.
-   *
-   * `cues` are AudioManager sound names for THIS line, played in order (see
-   * AudioManager.playSFXSequence): most lines pass none and fall back to
-   * the generic two-take blip, while the scripted beats name their own clip
-   * — and a line that both closes one quest and opens the next ("here's
-   * your star, now go and get Bowser") names both, one after the other. The
-   * welcome clip is prepended to whichever line the player hears first, so
-   * meeting Toad always opens with a greeting.
-   */
+  // Puts one of Toad's lines on screen and voices it via AudioManager
+  // (`cues`, falling back to the generic blip); prepends the welcome clip.
   _showToadDialogue(text, ...cues) {
     this.dialogueOpen = true;
     this.ui.dialogueActive = true;
@@ -448,9 +342,8 @@ export default class QuestManager {
     this.ui.dialogueActive = false;
   }
 
-  // Top-right panel: where the player is in the chain. Shown from the very
-  // first frame — before quest 1 exists it's what points at Toad, and
-  // between quests it points back at him again.
+  // Top-right panel: where the player is in the chain — points at Toad
+  // before quest 1 exists and again between every quest.
   _renderObjective() {
     const total = QUESTS.length;
     let text;

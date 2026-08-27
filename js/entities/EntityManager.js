@@ -14,42 +14,35 @@ export default class EntityManager {
     this.spaceWasPressed = false;
     this.isFallingScreamPlaying = false;
 
-    // Optional hook, set from main.js (see QuestManager.onCoinCollected) —
-    // called every time ANY coin is picked up anywhere in the level, on top
-    // of the existing ui.addCoin()/SFX handling below. Left null by default
-    // so nothing changes for anyone who never sets it.
+    // Optional hooks set from main.js; onStarCollected receives the
+    // picked-up star record (with its optional `id`).
     this.onCoinCollected = null;
-
-    // Same idea, for stars (see QuestManager.onStarCollected) — called with
-    // the star record that was just picked up (see Collectibles.spawnStars/
-    // update), so a caller can tell WHICH star it was via its optional
-    // `id`. Left null by default so nothing changes for anyone who never
-    // sets it.
     this.onStarCollected = null;
+    // Fired when a ridden Yoshi falls into the void with the player on his
+    // back (see update()'s Yoshi void-fall check) — main.js uses it to lay
+    // the egg back down for a fresh hatch.
+    this.onYoshiLost = null;
 
-    // Classic void-fall respawn point (see setSpawnPoint) — defaults to the
-    // old hardcoded value so nothing changes for anyone who never calls it.
+    // Yoshi's own void-fall respawn point — his egg's hatch spot, captured
+    // in setYoshi() below.
+    this.yoshiRespawnPoint = null;
+
+    // Classic void-fall respawn point (see setSpawnPoint).
     this.spawnPoint = { x: 0, y: 2, z: 0 };
 
-    // Extra void-fall respawn zones (see setVoidFallZones), checked before
-    // falling back to spawnPoint — e.g. falling into the void during a boss
-    // fight respawns at that zone's own entrance instead of the main island.
+    // Extra void-fall respawn zones (see setVoidFallZones), checked
+    // before falling back to spawnPoint.
     this.voidFallZones = [];
   }
 
-  // Sets the classic void-fall respawn point (called from main.js with
-  // mapEntity.playerSpawn once level1.json is parsed) — used whenever a
-  // fall doesn't land inside any zone registered via setVoidFallZones.
+  // Called from main.js with mapEntity.playerSpawn once level1.json is
+  // parsed — used when a fall doesn't land inside any void-fall zone.
   setSpawnPoint(point) {
     if (point) this.spawnPoint = point;
   }
 
-  // Registers extra void-fall respawn zones: an array of
-  // { zone, respawn }, where `zone` exposes containsPoint(pos) (an
-  // ObstacleZone instance already does — see there) and `respawn` is the
-  // {x,y,z} to send the player back to. Checked in order, first match wins;
-  // falls back to spawnPoint if nothing matches. Called from main.js once
-  // the Kamek/Bowser zones have finished loading.
+  // Array of { zone, respawn }: `zone` exposes containsPoint(pos). First
+  // match wins; falls back to spawnPoint otherwise.
   setVoidFallZones(zones) {
     this.voidFallZones = zones || [];
   }
@@ -65,53 +58,42 @@ export default class EntityManager {
     this.yoshi = yoshiEntity;
     if (this.yoshi && this.yoshi.mesh) {
       this.scene.add(this.yoshi.mesh);
+      // His hatch spot doubles as his own void-fall respawn point ("il
+      // punto di respawn per yoshi e' dove sta l'uovo").
+      this.yoshiRespawnPoint = {
+        x: this.yoshi.mesh.position.x,
+        y: this.yoshi.mesh.position.y,
+        z: this.yoshi.mesh.position.z,
+      };
     }
   }
 
-  // `characterName` no longer picks movement stats (the two characters
-  // share one set — see below); it's kept because callers pass it and it
-  // documents which model is being spawned.
+  // `characterName` no longer picks movement stats (both share one set);
+  // kept because callers pass it and it documents which model is spawned.
   spawnPlayer(model, startX, startY, startZ, characterName = "mario") {
     if (this.player && this.player.mesh) {
       this.player.disposeAnimation();
       this.scene.remove(this.player.mesh);
       if (this.player.body) {
         this.physicsEngine.world.removeBody(this.player.body);
-        // Also drop the old body from the planet-gravity registry (see
-        // PhysicsEngine.registerGravityBody) — it's about to be replaced,
-        // and a stale removed body sitting in that set would be harmless
-        // but pointless to keep iterating every frame.
+        // Also drop the old body from the gravity registry — it's about
+        // to be replaced, no point keeping a stale one around.
         if (this.physicsEngine.unregisterGravityBody) {
           this.physicsEngine.unregisterGravityBody(this.player.body);
         }
       }
     }
 
-    // Both characters handle IDENTICALLY: same speed, same jump, same grip.
-    // Picking one is a purely visual choice — the difference is the model,
-    // Luigi being the taller and thinner of the two (1.771 against Mario's
-    // 1.639 units, set at export time in tools/fix_character_export.py).
-    //
-    // Luigi used to carry his own numbers, and the one that mattered was
-    // `control` at 0.1 against Mario's 0.6: that value is how sharply the
-    // velocity eases toward the target each frame (see Player._updateFlat),
-    // so at 0.1 he took roughly six times as long to get up to speed and
-    // kept sliding for as long after letting go. It was meant to read as
-    // "slippery", but what it actually read as was Luigi struggling to
-    // walk. His higher jump (19.5 against 18) also cleared scenery Mario
-    // can't, the castle fence included (see EndingZone's FENCE) — one more
-    // reason for the two to share a single set of numbers rather than
-    // drift apart.
+    // Mario and Luigi handle identically now (same speed/jump/grip); the
+    // choice is purely visual (they used to diverge, which read as broken).
     const stats = { moveSpeed: 11, jumpVelocity: 18, control: 0.6 };
 
     this.player = new Player(model, this.physicsEngine, stats);
     this.player.spawn(startX, startY, startZ);
     this.scene.add(this.player.mesh);
 
-    // Opt the player into Mario Galaxy-style planet gravity (see
-    // PhysicsEngine.registerGravityBody / GravityField.js). Harmless
-    // everywhere in the normal level — this only changes anything once the
-    // body gets close enough to a planet's registered gravity field.
+    // Opt into Mario Galaxy-style planet gravity — harmless everywhere
+    // until the body gets close to a registered gravity field.
     if (this.physicsEngine.registerGravityBody) {
       this.physicsEngine.registerGravityBody(this.player.body);
     }
@@ -125,17 +107,12 @@ export default class EntityManager {
   }
 
   update(delta, input, ui, audio, camera) {
-    // "ENDING" is the epilogue that follows the win screen: the player is
-    // walking around Peach's castle (see UIManager.reachPeach and
-    // entities/Level/EndingZone.js). The run is over, but the character is
-    // still under the player's control, so it has to keep updating exactly
-    // like PLAYING — everything else (menus, pause, the win/game-over
-    // screens themselves) stays frozen as before.
+    // "ENDING" (post-win epilogue) still updates like PLAYING; everything
+    // else (menus, win/game-over screens) stays frozen.
     if (ui && ui.gameState !== "PLAYING" && ui.gameState !== "ENDING") return;
 
-    // Frozen during Peach's cutscene dialogue (see PeachCutscene.js /
-    // main.js): gameState stays "ENDING" throughout it, so this extra check
-    // is what actually stops the player from walking around mid-dialogue.
+    // Frozen during Peach's cutscene dialogue (gameState stays "ENDING"
+    // throughout it — this check is what actually stops movement).
     if (ui && ui.dialogueActive) return;
 
     if (this.physicsEngine) {
@@ -165,8 +142,8 @@ export default class EntityManager {
           this.isFallingScreamPlaying = true;
         }
       } else {
-        // Player climbed back above the threshold without falling into
-        // the void: allow the scream to play again next time they fall.
+        // Climbed back above threshold without falling: allow the scream
+        // to play again next time.
         this.isFallingScreamPlaying = false;
       }
 
@@ -176,14 +153,8 @@ export default class EntityManager {
           ui && ui.removeLife ? ui.removeLife(1, audio) : false;
         if (isGameOver) return;
 
-        // Zone-aware respawn: falling into the void while inside a boss
-        // zone (Kamek's or Bowser's obstacle course, including its arena)
-        // sends the player back to THAT zone's own entrance instead of the
-        // main island — see setVoidFallZones (wired from main.js). Falls
-        // back to the level's classic spawn point (see setSpawnPoint)
-        // everywhere else, e.g. the main map (level1.json). player.position
-        // is read here BEFORE it's overwritten below, so it still reflects
-        // where the player actually fell from.
+        // Zone-aware respawn: falling inside a boss zone sends the player
+        // back to that zone's entrance, else to the level's spawn point.
         let target = this.spawnPoint;
         for (const entry of this.voidFallZones) {
           if (entry.zone && entry.zone.containsPoint(this.player.position)) {
@@ -194,6 +165,39 @@ export default class EntityManager {
 
         this.player.body.position.set(target.x, target.y, target.z);
         this.player.body.velocity.set(0, 0, 0);
+      });
+    }
+
+    // Yoshi has his own physics body, independent of the player's, so he
+    // needs his own void-fall check — without it he just kept falling
+    // forever (and, while ridden, kept dragging the rider's mesh down with
+    // him, since Yoshi.update()'s isRidden branch overwrites it every frame).
+    if (this.yoshi && this.yoshi.body && this.physicsEngine && this.physicsEngine.checkVoidFall) {
+      this.physicsEngine.checkVoidFall(this.yoshi.position, () => {
+        if (this.yoshi.isRidden) {
+          // Lost together with the rider: dismount, drop Yoshi entirely,
+          // and hand off to main.js's onYoshiLost (lays the egg back down
+          // so he can be hatched again). The player's own fall is handled
+          // by the void-fall check above, independently.
+          if (this.player && this.player.setMountedOnYoshi) {
+            this.player.setMountedOnYoshi(false);
+          }
+          // BUG FIX: the rider kept Yoshi's jump/fall voice after being
+          // separated this way — the manual "Press E to get off" path
+          // already resets it (see main.js), this one didn't.
+          if (audio && audio.setVoice) audio.setVoice(null);
+          const mesh = this.yoshi.mesh;
+          this.yoshi.despawn();
+          if (mesh && mesh.parent) mesh.parent.remove(mesh);
+          this.yoshi = null;
+          if (this.onYoshiLost) this.onYoshiLost();
+        } else {
+          // Wandered off the edge on his own: just send him back to his
+          // egg's spot rather than losing him entirely.
+          const target = this.yoshiRespawnPoint || this.spawnPoint;
+          this.yoshi.body.position.set(target.x, target.y, target.z);
+          this.yoshi.body.velocity.set(0, 0, 0);
+        }
       });
     }
 
@@ -208,9 +212,8 @@ export default class EntityManager {
         },
         (star) => {
           if (audio && audio.playSFX) audio.playSFX("star");
-          // Passing audio through lets addStar() stop the BGM itself if
-          // this pickup happens to be the one that reaches maxStars and
-          // triggers the win screen (see UIManager.addStar/showWin).
+          // audio is passed through so addStar() can stop the BGM itself
+          // if this pickup triggers the win screen.
           if (ui && ui.addStar) ui.addStar(1, audio);
           if (this.onStarCollected) this.onStarCollected(star);
         },

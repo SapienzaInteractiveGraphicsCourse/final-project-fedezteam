@@ -3,34 +3,23 @@ import { enableShadows } from "../../utils/shadows.js";
 import { normalizeMaterials } from "../../utils/materials.js";
 
 /**
- * AssetLoader.js — thin wrapper around three.js' GLTFLoader that loads a
- * batch of named models, applies the shared shadow/material fixups to each
- * one, and caches the results by key so callers can fetch them back later
- * (see initGameModels/initEnemyModels in assetConfig.js).
+ * AssetLoader.js — wraps GLTFLoader to load a batch of named models,
+ * apply the shared shadow/material fixups, and cache results by key.
  */
 export default class AssetLoader {
-  // Creates the underlying GLTFLoader and the empty model cache.
   constructor() {
     this.loader = new GLTFLoader();
     this.assets = {};
   }
 
-  // Applies the fixups every loaded model needs: shadow flags on every
-  // mesh, plus the shared material normalization (color space, eye
-  // transparency, metalness/roughness clamps — see utils/materials.js).
+  // Shadow flags + shared material normalization (see utils/materials.js).
   setupModelProperties(model) {
-    // 1. Base shadows for every mesh in the hierarchy.
     enableShadows(model);
-
-    // 2. Per-material tweaks (eye transparency, color space, ...) — see
-    // utils/materials.js (this used to be duplicated inline here; every
-    // other GLTF loader in the game now shares the same fix).
     normalizeMaterials(model);
   }
 
   // Loads one GLTF/GLB, applies setupModelProperties, caches it under
-  // `key`, and resolves with the loaded scene. Rejects (after logging) on
-  // load failure.
+  // `key`. Rejects (after logging) on load failure.
   loadModel(key, path) {
     return new Promise((resolve, reject) => {
       this.loader.load(
@@ -53,8 +42,7 @@ export default class AssetLoader {
     });
   }
 
-  // Loads every entry of `assetsToLoad` (a {key: path} map) in parallel,
-  // and resolves with the full assets cache once all of them are ready.
+  // Loads every entry of `assetsToLoad` ({key: path}) in parallel.
   loadAll(assetsToLoad) {
     const promises = [];
     for (const [key, path] of Object.entries(assetsToLoad)) {
@@ -65,7 +53,6 @@ export default class AssetLoader {
     });
   }
 
-  // Returns a previously loaded model by key, or undefined if not loaded.
   getAsset(key) {
     return this.assets[key];
   }

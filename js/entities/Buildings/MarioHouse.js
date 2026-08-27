@@ -31,9 +31,8 @@ export default class MarioHouse {
       material: this.physicsEngine.defaultMaterial,
     });
 
-    // MANUAL TUNING (local offsets).
-    // The 3D model's pivot isn't centered, so these offsets are used to push
-    // all hitboxes toward the visual center of the house.
+    // MANUAL TUNING: the model's pivot isn't centered, so these offsets
+    // push all hitboxes toward the visual center of the house.
     const offX = -2.0; // depth
     const offY = -3.0; // negative pushes down toward the ground
     const offZ = -1.6; // shifts left/right

@@ -1,17 +1,11 @@
 import * as THREE from "three";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { TEXTURES } from "../Assets/manifest.js";
 
-/**
- * Renderer.js — owns the Scene, PerspectiveCamera and WebGLRenderer, plus
- * the one-time environment setup around them: skybox, lights, shadow
- * camera tuning, fog, resize. Numeric tuning comments below record values
- * tried during manual brightness calibration, kept as notes for later.
- */
 export default class RendererManager {
   constructor(canvasId = "#webgl-canvas") {
     this.canvas = document.querySelector(canvasId);
+    
 
+    // Canvas styling for full-screen rendering
     if (this.canvas) {
       this.canvas.style.position = "fixed";
       this.canvas.style.top = "0";
@@ -21,8 +15,10 @@ export default class RendererManager {
       this.canvas.style.zIndex = "0";
     }
 
+    // 1. MAIN SCENE
     this.scene = new THREE.Scene();
 
+    // 2. CAMERA
     this.camera = new THREE.PerspectiveCamera(
       60,
       window.innerWidth / window.innerHeight,
@@ -30,6 +26,7 @@ export default class RendererManager {
       2000,
     );
 
+    // 3. RENDERER
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       antialias: true,
@@ -39,43 +36,36 @@ export default class RendererManager {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
+    // Set rendering properties for better visual quality
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping = THREE.LinearToneMapping; // preserves texture saturation
-    // Main global brightness lever — scales the whole rendered result,
-    // env map included. Was 1.5, then 1.0, still too bright.
-    this.renderer.toneMappingExposure = 0.85;
+    this.renderer.toneMapping = THREE.LinearToneMapping; // Mantiene la saturazione originale delle texture
+    this.renderer.toneMappingExposure = 1.5; // Aumenta la brillantezza generale
 
-    // PBR materials with real metalness render almost black with nothing to
-    // reflect; RoomEnvironment is three.js' built-in fallback for that.
-    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmremGenerator.dispose();
-
+    // Directional light for shadows and illumination
     this.dirLight = null;
 
+    // 4. Setup the scene with skybox, lights, and resize handling
     this.setupSkybox();
     this.setupLights();
-    this.setupFog();
     this.setupResize();
   }
 
-  // Loads the sky texture into a custom shader (darkens sky, boosts cloud
-  // contrast) on a huge inward sphere rendered first so it never z-fights.
-  setupSkybox() {
+setupSkybox() {
     const textureLoader = new THREE.TextureLoader();
-    const skyTexture = textureLoader.load(TEXTURES.skyBox);
+    const skyTexture = textureLoader.load("assets/textures/sky/skyBox.png");
 
     skyTexture.colorSpace = THREE.SRGBColorSpace;
     skyTexture.magFilter = THREE.LinearFilter;
     skyTexture.minFilter = THREE.LinearFilter;
 
+    // Custom Shader for the skybox to enhance cloud contrast and darken the sky
     const customSkyMaterial = new THREE.ShaderMaterial({
       uniforms: {
         skyTexture: { value: skyTexture },
-        skyDarkness: { value: 1 },     // higher = darker sky
-        cloudContrast: { value: 1.6 }, // higher = more defined clouds
+        skyDarkness: { value: 1 },  // Increase to darken the sky (e.g., 1.2 or 1.5)
+        cloudContrast: { value: 1.6 }, // Increase to make clouds more defined (e.g., 1.5 or 2.0)
       },
       vertexShader: `
         varying vec2 textureCoord;
@@ -83,7 +73,8 @@ export default class RendererManager {
          textureCoord = uv;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
-      `,
+      `, 
+      // Fragment Shader for the skybox with enhanced cloud contrast and darker sky
       fragmentShader: `
         uniform sampler2D skyTexture;
         uniform float skyDarkness;
@@ -92,38 +83,40 @@ export default class RendererManager {
 
         void main() {
           vec4 texColor = texture2D(skyTexture, textureCoord);
-
-          // Luminance drives cloud brightness and sky darkness independently.
-          float luminance = dot(texColor.rgb, vec3(0.299, 0.587, 0.114));
-
-          vec3 brightClouds = pow(texColor.rgb, vec3(1.0 / cloudContrast));
+          
+          // Separate luminance from the texture color to adjust cloud brightness and sky darkness independently
+          float luminance = dot(texColor.rgb, vec3(0.299, 0.587, 0.114)); // dot product to get luminance
+          
+          // Increase contrast for clouds while keeping the base sky color darker
+          vec3 brightClouds = pow(texColor.rgb, vec3(1.0 / cloudContrast)); // txclr^(1/cloudContrast) to enhance contrast
+          
+          // Darken the sky while keeping clouds bright
           vec3 finalColor = mix(texColor.rgb * skyDarkness, brightClouds, luminance * 0.5);
-
+          
           gl_FragColor = vec4(finalColor, 1.0);
         }
       `,
-      depthWrite: false, // never occludes real scene objects
-      side: THREE.BackSide, // camera sits inside the sphere
+      // I dont want the skybox depth to interfere with other objects in the scene, so I disable depth writing
+      depthWrite: false,
+      // Since the skybox is a sphere and the camera is inside it, we need to render the inside of the sphere
+      side: THREE.BackSide,
     });
-
+    
+    // Create a large sphere geometry for the skybox
     const geometry = new THREE.SphereGeometry(1000, 64, 32);
 
     this.skyBox = new THREE.Mesh(geometry, customSkyMaterial);
+    // Prioritize the skybox rendering to ensure it is always rendered first before other objects in the scene, preventing any potential z-fighting or rendering issues
     this.skyBox.renderOrder = -1;
 
     this.scene.add(this.skyBox);
   }
 
-  // Ambient + shadow-casting directional light, with the shadow camera
-  // tuned tight around the player (see SHADOW_AREA) instead of the island.
-  setupLights() {
-    // Slight warm tint instead of pure white. Was 0.9, then 0.65, still
-    // too bright, lowered further.
-    const ambientLight = new THREE.AmbientLight(0xfff1de, 0.4);
+setupLights() {
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9); 
     this.scene.add(ambientLight);
 
-    // Kept higher than ambient to preserve shadow contrast. Was 1.3.
-    this.dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    this.dirLight = new THREE.DirectionalLight(0xffffff, 1.3);
 
     this.dirLight.position.set(40, 60, 40);
     this.dirLight.target.position.set(0, 0, 0);
@@ -132,8 +125,9 @@ export default class RendererManager {
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target);
 
-    // The light follows the player, so the shadow map only needs to cover
-    // the area around them; SHADOW_AREA is the ortho box half-width.
+
+    // --- OMBRE --- La shadow map copre solo l'area attorno al giocatore,
+    // non tutta l'isola: SHADOW_AREA/SHADOW_RES = nitidezza in unità/texel.
     const SHADOW_AREA = 30;
     const SHADOW_RES = 2048;
 
@@ -143,27 +137,20 @@ export default class RendererManager {
     shadowCam.top = SHADOW_AREA;
     shadowCam.bottom = -SHADOW_AREA;
 
-    // Light sits ~66 units above the player — covers anything that can
-    // cast a shadow while keeping depth precision tight.
+    // La luce sta ~66 unità sopra il player: questo range copre tutto ciò che
+    // può proiettare ombra, e tenerlo stretto migliora la precisione in profondità.
     shadowCam.near = 1;
     shadowCam.far = 200;
 
-    // three.js does NOT auto-update this for directional lights — without
-    // it, the box above is silently ignored (default +/-5).
+    // ⚠️ INDISPENSABILE: three.js non aggiorna da solo la projection matrix
+    // delle luci direzionali; senza questa riga i limiti sopra sono ignorati.
     shadowCam.updateProjectionMatrix();
 
     this.dirLight.shadow.mapSize.width = SHADOW_RES;
     this.dirLight.shadow.mapSize.height = SHADOW_RES;
   }
 
-  // Soft distance fog so the island's edges fade into the sky instead of
-  // cutting off sharply. Kept well outside gameplay range (~60 units wide).
-  setupFog() {
-    const fogColor = 0xcfe8ff;
-    this.scene.fog = new THREE.Fog(fogColor, 120, 550);
-  }
-
-  // Keeps camera aspect and renderer size/pixel-ratio synced to the window.
+  // Resize when the window is resized, we need to update the camera aspect ratio and the renderer size
   setupResize() {
     window.addEventListener("resize", () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -173,9 +160,8 @@ export default class RendererManager {
     });
   }
 
-  // Renders one frame; the skybox is re-centered on the camera first so
-  // it reads as an infinite backdrop rather than a fixed-size sphere.
   render() {
+    // The sky is always centered on the camera to give the illusion of an infinite sky
     if (this.skyBox) {
       this.skyBox.position.copy(this.camera.position);
     }

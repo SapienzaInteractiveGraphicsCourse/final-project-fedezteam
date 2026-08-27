@@ -15,13 +15,8 @@ export default class UIManager {
     this.winPeachBtn = document.getElementById("win-peach-btn");
 
     this.heroNameInput = document.getElementById("hero-name-input");
-    // Two ways of finding the same <h1>, because losing it is silent: the
-    // title has a hardcoded "THANK YOU, HERO!" in the markup, so if the
-    // lookup comes back null showVictoryFinale simply leaves that in place
-    // and the screen looks fine while quietly not greeting anyone by name.
-    // That already happened once when an editor round-trip dropped the id
-    // from index.html. The fallback keys off the screen's own id plus the
-    // title class instead, so both would have to go for it to break.
+    // Two lookups for the same <h1>: falls back to id+class in case the
+    // markup's hardcoded "THANK YOU, HERO!" id ever gets dropped again.
     this.victoryFinaleTitle =
       document.getElementById("victory-finale-title") ||
       document.querySelector("#victory-finale-screen .win-title");
@@ -50,32 +45,25 @@ export default class UIManager {
     this.btnMario = document.getElementById("btn-mario");
     this.btnLuigi = document.getElementById("btn-luigi");
 
-    // Boss health bar (see showBossHealthBar/updateBossHealthBar/
-    // hideBossHealthBar below) — driven from main.js while the player is on
-    // Bowser's or Kamek's arena.
+    // Boss health bar (showBossHealthBar/updateBossHealthBar/
+    // hideBossHealthBar below), driven from main.js on Bowser's/Kamek's arena.
     this.bossHpBar = document.getElementById("boss-hp-bar");
     this.bossHpNameEl = document.getElementById("boss-hp-name");
     this.bossHpBlocksEl = document.getElementById("boss-hp-blocks");
     this._bossHpBlockEls = [];
-    // Tracks which boss the bar is currently built for, so main.js's
-    // per-frame showBossHealthBar call only rebuilds the segments when it
-    // changed — see showBossHealthBar.
+    // Which boss the bar is currently built for, so main.js's per-frame
+    // showBossHealthBar call only rebuilds segments when it changed.
     this.activeBossHpKey = null;
 
-    // Interaction prompt ("Press E to ..."), quest HUD (Toad's 25-coin
-    // quest progress) and toast (brief quest feedback messages) — see
-    // js/interactions/. All optional in the DOM: every method below checks
-    // its element before touching it, so nothing breaks if index.html is
-    // ever loaded without these.
+    // Interaction prompt, quest HUD, and toast (see js/interactions/) — all
+    // optional in the DOM, every method below checks its element first.
     this.interactionPromptEl = document.getElementById("interaction-prompt");
     this.questHudEl = document.getElementById("quest-hud");
     this.toastEl = document.getElementById("toast");
     this._toastTimer = null;
 
-    // Sequential quest objective panel (top-right, under the pause button)
-    // and the "get off Yoshi" warp-star warning — see QuestManager and
-    // Decorations._updateYoshiWarpWarning. Same "optional, checked before
-    // every use" convention as the elements above.
+    // Quest objective panel and "get off Yoshi" warp-star warning (see
+    // QuestManager and Decorations._updateYoshiWarpWarning) — same optional-DOM convention.
     this.questObjectiveEl = document.getElementById("quest-objective");
     this.yoshiWarpWarningEl = document.getElementById("yoshi-warp-warning");
 
@@ -87,10 +75,8 @@ export default class UIManager {
     this.dialogueHintEl = document.getElementById("dialogue-hint");
     this.victoryFinaleScreen = document.getElementById("victory-finale-screen");
     this.victoryFinaleMenuBtn = document.getElementById("victory-finale-menu-btn");
-    // True for the whole span of Peach's cutscene (from the E press that
-    // starts it to the last dialogue line) — EntityManager checks this to
-    // freeze the player, and main.js checks it to hand the camera over to
-    // PeachCutscene.updateCamera() instead of the normal follow-cam.
+    // True for the whole span of Peach's cutscene — EntityManager freezes
+    // the player and main.js hands the camera to PeachCutscene while this is true.
     this.dialogueActive = false;
 
     if (this.victoryFinaleMenuBtn) {
@@ -245,24 +231,15 @@ export default class UIManager {
     if (this.coinsCountEl) this.coinsCountEl.textContent = this.coins;
   }
 
-  // Deducts coins (used by Toad's quest turn-in: the 25 coins the player
-  // hands over are actually spent, not just "checked off" — see
-  // QuestManager.onToadInteract). Never goes below 0.
+  // Deducts coins (Toad's quest turn-in actually spends the 25 coins rather
+  // than just checking them off — see QuestManager.onToadInteract). Never below 0.
   spendCoins(amount) {
     this.coins = Math.max(0, this.coins - amount);
     if (this.coinsCountEl) this.coinsCountEl.textContent = this.coins;
   }
 
-  /**
-   * Shows the boss health bar for `key` (a stable id like "bowser"/"kamek",
-   * used only to detect "is this already the active boss" — never shown to
-   * the player) with `name` as the label and `maxHits` segments, so the
-   * bar's segment count always matches that boss' actual hit count (5 for
-   * Bowser, 3 for Kamek — see Bowser.js/Kamek.js's hitsToDefeat). Safe to
-   * call every frame the player is inside the arena — rebuilding the
-   * block elements only happens the first time (or if a different boss
-   * becomes active), everything else is just un-hiding the bar.
-   */
+  // Shows the boss bar for `key` (a stable id) with `name` and `maxHits`
+  // segments. Safe every frame — blocks only rebuild when the boss changes.
   showBossHealthBar(key, name, maxHits) {
     if (!this.bossHpBar) return;
 
@@ -285,10 +262,8 @@ export default class UIManager {
     this.bossHpBar.classList.remove("hidden");
   }
 
-  // Blackens `hitsTaken` blocks starting from the RIGHT end (the boss'
-  // health draining left-to-right as it takes hits), leaving the remaining
-  // blocks their normal yellow — called from main.js's onStomped handlers,
-  // right when Enemy._onStomped reports a new hit.
+  // Blackens `hitsTaken` blocks from the RIGHT end (health drains
+  // left-to-right), called from main.js's onStomped handlers on each new hit.
   updateBossHealthBar(hitsTaken, maxHits) {
     const blocks = this._bossHpBlockEls;
     if (!blocks || blocks.length === 0) return;
@@ -300,9 +275,8 @@ export default class UIManager {
     });
   }
 
-  // Hides the bar (called once the player leaves the arena, or the boss is
-  // defeated). Doesn't reset activeBossHpKey: re-entering the SAME boss'
-  // arena via showBossHealthBar doesn't need to rebuild them.
+  // Hides the bar (arena exited or boss defeated). Doesn't reset
+  // activeBossHpKey — re-entering the SAME boss' arena skips the rebuild.
   hideBossHealthBar() {
     if (this.bossHpBar) this.bossHpBar.classList.add("hidden");
   }
@@ -358,10 +332,8 @@ export default class UIManager {
     if (this.yoshiWarpWarningEl) this.yoshiWarpWarningEl.classList.add("hidden");
   }
 
-  // Brief feedback message (quest assigned/updated/completed, ...), shown
-  // for `duration` ms then auto-hidden. Restarts its own timer on every
-  // call, so a second toast while one is already showing just replaces the
-  // text and keeps the clock from there instead of stacking/flickering.
+  // Brief feedback message shown for `duration` ms then auto-hidden.
+  // Restarts its own timer each call, so overlapping toasts replace text.
   showToast(text, duration = 3200) {
     if (!this.toastEl) return;
     this.toastEl.textContent = text;
@@ -397,31 +369,18 @@ export default class UIManager {
     if (this.dialogueBoxEl) this.dialogueBoxEl.classList.add("hidden");
   }
 
-  // The final "you win" screen shown once Peach's dialogue finishes — a
-  // separate screen from showWin()'s star-collection win screen: that one
-  // leads INTO the ending zone, this one is what closes it out.
+  // The final "you win" screen shown once Peach's dialogue finishes —
+  // distinct from showWin()'s star-collection screen, which leads into it.
   showVictoryFinale() {
-    // A distinct terminal state (not "ENDING" anymore) — this is what
-    // actually stops the player from walking around under the final popup:
-    // EntityManager.update() only keeps updating the player while
-    // gameState is "PLAYING" or "ENDING", so anything else (this included)
-    // freezes movement/physics automatically, and the Escape/P pause
-    // shortcut is gated the same way (see _setupListeners), so the whole
-    // game is inert behind this screen. dialogueActive is already false by
-    // the time this runs (see PeachCutscene.advance), so that alone was NOT
-    // enough to keep the player frozen once the dialogue closed — this is
-    // the actual fix.
+    // A distinct terminal state: EntityManager.update() only updates the
+    // player while gameState is "PLAYING"/"ENDING", freezing movement here.
     this.gameState = "VICTORY_FINALE";
 
     if (this.hud) this.hud.style.display = "none";
     if (this.pauseBtn) this.pauseBtn.style.display = "none";
 
-    // Addressed to the player by the name they typed at the character
-    // select screen, the same one Peach uses in her dialogue and the HUD
-    // shows all game (see _triggerStart, which already uppercases it and
-    // falls back to MARIO/LUIGI when the field is left blank). "HERO" is
-    // only reached if this screen is somehow shown without a game having
-    // been started. textContent, not innerHTML: the name is player input.
+    // Addressed by the name typed at character select (see _triggerStart).
+    // textContent, not innerHTML: the name is player input.
     if (this.victoryFinaleTitle) {
       this.victoryFinaleTitle.textContent = `THANK YOU, ${this.heroName || "HERO"}!`;
     }
@@ -434,19 +393,15 @@ export default class UIManager {
     if (this.starsCountEl)
       this.starsCountEl.textContent = `${this.stars}/${this.maxStars}`;
 
-    // Win condition: collecting maxStars ends the game — same
-    // stop-everything-and-show-an-overlay flow as showGameOver(), just for
-    // a win instead of a loss. Guarded on gameState so picking up further
-    // stars afterward (there are more than maxStars scattered around the
-    // level) can't re-trigger it.
+    // Win condition, same stop-everything-and-show-an-overlay flow as
+    // showGameOver(). Guarded on gameState so stars picked up after can't retrigger it.
     if (this.stars >= this.maxStars && this.gameState === "PLAYING") {
       this.showWin(audio);
     }
   }
 
-  // Shows the victory screen once the player reaches maxStars, swapping the
-  // background music for the ending theme — mirrors showGameOver()'s flow,
-  // just for a win.
+  // Shows the victory screen at maxStars, swapping BGM for the ending theme
+  // — mirrors showGameOver()'s flow, just for a win.
   showWin(audio = null) {
     this.gameState = "WIN";
 
@@ -461,10 +416,8 @@ export default class UIManager {
         else if (typeof soundManager.stop === "function") soundManager.stop("bgm");
       } catch (e) {}
 
-      // The ending theme takes the BGM's place, the way the game-over jingle
-      // does on a loss. playTrack() rather than playSFX(): it's a long
-      // music file, and playSFX's clone-then-play would leave it silent
-      // until a second download of it finished — see AudioManager.playTrack.
+      // playTrack() rather than playSFX(): it's a long music file and
+      // playSFX's clone-then-play would sit silent until a second download.
       try {
         if (typeof soundManager.playTrack === "function") {
           soundManager.playTrack("ending");
@@ -475,31 +428,19 @@ export default class UIManager {
     }
   }
 
-  /**
-   * "REACH PRINCESS PEACH": closes the win screen and hands control back to
-   * the player, now standing in front of Peach's castle — the teleport
-   * itself is done by the onReachPeach callback wired up in main.js (see
-   * entities/Level/EndingZone.js).
-   *
-   * The ending theme started by showWin() is left alone on purpose: it has
-   * to carry over into the final scene, so nothing here touches the audio.
-   */
+  // "REACH PRINCESS PEACH": closes the win screen and hands control back,
+  // now in front of Peach's castle (teleport is main.js's onReachPeach).
   reachPeach() {
     // If the ending zone didn't load, teleporting would drop the player
-    // into empty space — better to leave the win screen up than to strand
-    // them somewhere they can't get out of.
+    // into empty space — better to leave the win screen up instead.
     if (!this.onReachPeach || this.onReachPeach() !== true) return;
 
     if (this.winScreen) this.winScreen.classList.add("hidden");
     if (this.hud) this.hud.style.display = "block";
     if (this.pauseBtn) this.pauseBtn.style.display = "block";
 
-    // Not "PLAYING": addStar() would then be free to fire showWin() all
-    // over again if the player walks over another star (there are more of
-    // them scattered around than maxStars). The pause menu is still
-    // reachable in this state — see the keydown handler in _setupListeners
-    // — so "RETURN TO MENU" remains available once the credits have
-    // played out.
+    // Not "PLAYING": otherwise addStar() could fire showWin() again from
+    // an extra scattered star. Pause stays reachable, so menu stays available.
     this.gameState = "ENDING";
   }
 

@@ -4,40 +4,13 @@ import BossArena from "./BossArena.js";
 import { assetUrl } from "../../core/Assets/basePath.js";
 
 /**
- * ObstacleZone.js — a small, self-contained bonus zone far from the main
- * island: a short chain of stepping-stone platforms with gaps between them,
- * a couple of lava hazard patches, and a big circular boss arena at the end
- * (built by BossArena.js — see the "arena" field below), where a boss
- * waits (spawned separately in main.js, see bossSpawn).
- *
- * Generic — this same class loads both the Kamek zone
- * (assets/levels/kamek_zone.json) and the Bowser zone
- * (assets/levels/bowser_zone.json, wider platforms with bigger height gaps
- * between them, see that file), same "pure data" spirit as level1.json.
- *
- * Reached via warp star teleport (see Decorations._updateWarpStars /
- * setKamekZoneEntry / setBowserZoneEntry) rather than a real scene/level
- * switch — it's just more of the same physics world, placed somewhere far
- * from the main island so nobody wanders into it by accident.
- *
- * Falling off a platform (or the arena) here is handled entirely by the
- * existing void-fall mechanic (EntityManager.update -> checkVoidFall): same
- * lose-a-life-and-respawn-at-spawn behavior as falling off the main island,
- * no separate logic needed — this is also why the arena's fire poles (see
- * BossArena._buildFirePoles) are purely a visual boundary marker with no
- * collider of their own, rather than an actual wall. Lava is a different,
- * additional hazard: it has no collider (the player can walk straight into
- * it, unlike a wall), so it's checked as a simple overlap trigger every
- * frame instead — see update().
- *
- * The stepping-stone platforms stay deliberately simple geometry (plain
- * boxes, no models to load); the arena itself is textured/circular/lined
- * with fire poles (see BossArena.js) since that's the stage the actual
- * fight happens on.
+ * ObstacleZone.js — a self-contained bonus zone far from the main island:
+ * stepping-stone platforms with gaps, lava hazards, and a circular boss
+ * arena at the end (BossArena.js). Generic — loads both kamek_zone.json
+ * and bowser_zone.json. Reached via warp star, not a real level switch.
+ * Lava is a separate overlap-trigger hazard with no collider.
  */
 export default class ObstacleZone {
-  // Stores the scene/physics references and resets zone state. Nothing is
-  // built yet — call load() to actually populate the zone from a JSON file.
   constructor(scene, physicsEngine) {
     this.scene = scene;
     this.physicsEngine = physicsEngine;
@@ -46,29 +19,22 @@ export default class ObstacleZone {
     this.bossSpawn = null;
     this.lavaBlocks = []; // { mesh, halfX, halfZ }
     this._lavaCooldown = 0;
+    // Shared procedural texture for every lava block in this zone (see
+    // _createLavaTexture) — scrolled slowly in update() for a bubbling look.
+    this._lavaTexture = null;
 
-    // Horizontal (x/z) bounding box covering every platform and the arena,
-    // computed in load() below — see containsPoint(). Used by
-    // EntityManager.setVoidFallZones (wired from main.js) to tell whether a
-    // void fall happened inside THIS zone, so it can respawn the player at
-    // this zone's own entrance instead of the main island's spawn point.
-    // Stays null if load() never ran or the zone had no platforms/arena.
+    // Horizontal (x/z) bounds covering every platform + the arena, set in
+    // load() — used by setVoidFallZones to respawn at this zone's entrance.
     this.bounds = null;
 
-    // Circular footprint of just the boss arena itself (a subset of
-    // `bounds` above, which also covers the approach platforms) — see
-    // isPlayerInArena() below, used by main.js to show/hide the boss health
-    // bar specifically while the player is on the arena, not the whole
-    // course. `y` (arena platform height) is included too so main.js can
-    // also use this as the fixed drop point for the post-victory Power
-    // Star/Warp Star, instead of wherever the boss happened to die.
+    // Circular footprint of just the arena, used by main.js to show/hide
+    // the boss health bar and as the drop point for the post-victory star.
     this.arenaCenter = null; // {x, y, z}
     this.arenaRadius = 0;
   }
 
-  // Fetches a zone JSON file and builds its platforms/lava/entry point into
-  // the scene and physics world. Returns the parsed data (or null on
-  // fetch/parse failure, logged via console.warn).
+  // Fetches a zone JSON and builds its platforms/lava/entry point.
+  // Returns the parsed data, or null on fetch/parse failure.
   async load(jsonPath = "./assets/levels/kamek_zone.json") {
     let data;
     try {
@@ -80,15 +46,12 @@ export default class ObstacleZone {
     }
 
     this.entryPoint = data.entryPoint || { x: 260, y: 9, z: 260 };
-    // "bossSpawn" is the generic field name (used by bowser_zone.json); older
-    // zone files may still use "kamekSpawn" (kamek_zone.json) — accept
-    // either so that file doesn't need to be touched.
+    // "bossSpawn" is the generic field name; older files may still use
+    // "kamekSpawn" — accept either.
     this.bossSpawn = data.bossSpawn || data.kamekSpawn || null;
 
-    // Accumulates the horizontal footprint of everything built below, so
-    // `this.bounds` (see containsPoint()) ends up covering the whole zone —
-    // stepping-stone platforms and the arena alike — without hardcoding any
-    // coordinates here that would drift out of sync with the JSON.
+    // Accumulates the footprint of everything built below into
+    // this.bounds, rather than hardcoding coordinates here.
     const boundsAcc = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
     const expandBounds = (x, z, half) => {
       boundsAcc.minX = Math.min(boundsAcc.minX, x - half);
@@ -129,9 +92,16 @@ export default class ObstacleZone {
       }
     }
 
+    this._lavaTexture = this._createLavaTexture();
+    // Fixed tiling shared by every block in this zone (they're all a
+    // similar ~2-3 unit size) — one repeat setting keeps the crack/vein
+    // pattern at a consistent scale without needing a texture per block.
+    this._lavaTexture.repeat.set(2, 2);
+
     const lavaMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff4400,
-      emissive: 0xff2200,
+      map: this._lavaTexture,
+      emissiveMap: this._lavaTexture,
+      emissive: 0xff3300,
       emissiveIntensity: 1.3,
       roughness: 0.35,
     });
@@ -147,15 +117,12 @@ export default class ObstacleZone {
       mesh.castShadow = false;
       this.scene.add(mesh);
 
-      // No physics body on purpose — see the class doc: lava is a trigger
-      // hazard the player should be able to step into, not a solid wall.
+      // No physics body: lava is a trigger hazard, not a solid wall.
       this.lavaBlocks.push({ mesh, halfX: size.x / 2, halfZ: size.z / 2 });
     }
 
-    // The boss arena (round platform + fire poles + center logo) — see
-    // BossArena.js. Optional so older/simpler zone files without an
-    // "arena" field still load fine with just their stepping-stone
-    // platforms.
+    // Optional: older zone files without an "arena" field still load
+    // fine with just their stepping-stone platforms.
     if (data.arena) {
       const arena = new BossArena(this.scene, this.physicsEngine);
       await arena.build(data.arena);
@@ -164,10 +131,8 @@ export default class ObstacleZone {
       this.arenaRadius = data.arena.radius;
     }
 
-    // Pad the accumulated footprint generously (well past a single jump)
-    // so falling just past an edge platform or the arena's fire poles still
-    // counts as "inside this zone" for respawn purposes, rather than
-    // falling through to the main island's spawn point.
+    // Padded well past a single jump, so falling just past an edge or the
+    // arena's fire poles still counts as "inside this zone".
     const ZONE_BOUNDS_MARGIN = 6;
     if (boundsAcc.minX !== Infinity) {
       this.bounds = {
@@ -181,13 +146,55 @@ export default class ObstacleZone {
     return data;
   }
 
-  /**
-   * Horizontal-only containment check (x/z) against the bounds computed in
-   * load() — used by EntityManager's void-fall respawn (see
-   * setVoidFallZones in main.js). Void falls are always detected once y
-   * drops far below every platform here, so only x/z need checking.
-   * Returns false if the zone never loaded or ended up with no bounds.
-   */
+  // Draws a cracked-rock pattern with glowing magma veins onto a canvas —
+  // same in-code procedural approach as Decorations' water/cloud textures,
+  // so the lava hazard doesn't depend on an external image asset.
+  _createLavaTexture() {
+    const size = 128;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = "#1a0800";
+    ctx.fillRect(0, 0, size, size);
+
+    // Glowing veins: soft orange/yellow radial blobs, like magma showing
+    // through cracked rock.
+    for (let i = 0; i < 16; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = 8 + Math.random() * 20;
+
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
+      gradient.addColorStop(0, "#fff2b0");
+      gradient.addColorStop(0.35, "#ff9a1f");
+      gradient.addColorStop(1, "rgba(255,60,0,0)");
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Thin bright crack lines threading between the veins.
+    ctx.strokeStyle = "rgba(255,180,60,0.6)";
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 10; i++) {
+      ctx.beginPath();
+      ctx.moveTo(Math.random() * size, Math.random() * size);
+      ctx.lineTo(Math.random() * size, Math.random() * size);
+      ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
+
+  // Horizontal-only (x/z) containment check against load()'s bounds —
+  // used by EntityManager's void-fall respawn.
   containsPoint(pos) {
     if (!this.bounds || !pos) return false;
     return (
@@ -198,15 +205,8 @@ export default class ObstacleZone {
     );
   }
 
-  /**
-   * True once the player's horizontal position is within the boss arena's
-   * circular footprint (plus a small margin, so the health bar appears
-   * right as the player steps onto the platform rather than exactly at its
-   * mathematical edge). False if this zone has no arena (data.arena was
-   * missing) or the player hasn't reached it yet. Used by main.js to show/
-   * hide the boss health bar — deliberately narrower than containsPoint()
-   * above, which also covers the approach platforms leading up to it.
-   */
+  // True once the player is within the arena's circular footprint (plus
+  // a small margin) — narrower than containsPoint(), which also covers the approach.
   isPlayerInArena(pos) {
     if (!this.arenaCenter || !pos) return false;
     const dx = pos.x - this.arenaCenter.x;
@@ -216,15 +216,17 @@ export default class ObstacleZone {
     return dx * dx + dz * dz <= r * r;
   }
 
-  /**
-   * Checks whether the player's feet are currently over a lava patch and,
-   * if so (and not already on cooldown from a previous hit), costs them a
-   * life via onLavaHit. Deliberately never touches player.body/mesh itself
-   * — same "poke the game state from outside, not the player" pattern used
-   * for Enemy contact damage and the pond wading effect.
-   */
+  // Costs a life via onLavaHit if the player's feet are over a lava patch
+  // and not already on cooldown. Never touches player.body/mesh directly.
   update(delta, player, onLavaHit) {
     if (this._lavaCooldown > 0) this._lavaCooldown -= delta;
+
+    // Gentle flow for the shared lava texture, purely decorative.
+    if (this._lavaTexture) {
+      this._lavaTexture.offset.x += 0.012 * delta;
+      this._lavaTexture.offset.y += 0.007 * delta;
+    }
+
     if (!player || !player.mesh || this.lavaBlocks.length === 0) return;
 
     const pos = player.mesh.position;
@@ -234,8 +236,7 @@ export default class ObstacleZone {
       const dz = Math.abs(pos.z - lava.mesh.position.z);
       const dy = pos.y - lava.mesh.position.y;
 
-      // Within the patch's footprint and roughly at its height (not just
-      // passing far overhead mid-jump).
+      // Within footprint and roughly at height (not passing far overhead).
       if (dx <= lava.halfX && dz <= lava.halfZ && dy > -1.5 && dy < 2) {
         if (this._lavaCooldown <= 0) {
           this._lavaCooldown = 1.5;

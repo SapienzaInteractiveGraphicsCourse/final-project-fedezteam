@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm";
-// Casing matches the actual folder name ("Buildings", capital B) so the
-// import also resolves on case-sensitive hosts such as GitHub Pages.
+// Casing matches the actual folder name ("Buildings") for case-sensitive hosts.
 import BuildingFactory from "../Buildings/BuildingFactory.js";
 import { BUILDING_MODEL_DIR, NPC_MODEL_DIR, MAP_MODELS, TEXTURES } from "../../core/Assets/manifest.js";
 import { assetUrl } from "../../core/Assets/basePath.js";
@@ -9,13 +8,10 @@ import { normalizeMaterials } from "../../utils/materials.js";
 import NPC from "../NPC.js";
 
 /**
- * Owns everything about the STATIC part of a level: parsing the level JSON,
- * building ground platforms, and spawning buildings/hills/NPCs via
- * BuildingFactory. Extracted out of the former monolithic GameLevel.js.
- *
- * Collectibles (coins/stars/mushrooms/"?" blocks) and purely visual
- * decorations (trees/flowers/grass/sky planet) live in their own modules;
- * see Collectibles.js and Decorations.js.
+ * Owns the STATIC part of a level: parsing the level JSON, building ground
+ * platforms, and spawning buildings/hills/NPCs via BuildingFactory.
+ * Collectibles and decorations live in their own modules (see
+ * Collectibles.js, Decorations.js).
  */
 export default class LevelLoader {
   constructor(scene, physicsWorld, gltfLoader) {
@@ -24,11 +20,8 @@ export default class LevelLoader {
     this.loader = gltfLoader;
   }
 
-  /**
-   * Fetches and parses the level JSON. Returns null (with a console warning)
-   * if the file is missing or malformed, so callers can fall back to
-   * sensible defaults instead of throwing.
-   */
+  // Fetches/parses the level JSON. Returns null (with a warning) if
+  // missing or malformed, so callers can fall back to sensible defaults.
   async loadLevelData(levelJsonPath) {
     try {
       const response = await fetch(assetUrl(levelJsonPath));
@@ -39,10 +32,8 @@ export default class LevelLoader {
     }
   }
 
-  /**
-   * Builds one static box (visual mesh + collider) per platform entry.
-   * Returns the shared ground texture in case callers want to reuse it.
-   */
+  // Builds one static box (mesh + collider) per platform entry. Returns
+  // nothing; the shared ground texture is built fresh here.
   buildPlatforms(platformsData = []) {
     const textureLoader = new THREE.TextureLoader();
     const grassTexture = textureLoader.load(TEXTURES.groundGrass);
@@ -58,13 +49,8 @@ export default class LevelLoader {
       const mat = new THREE.MeshStandardMaterial({
         map: grassTexture,
         roughness: 0.8,
-        // Slightly darken the base texture (it's the single biggest
-        // surface on screen, so full brightness here reads as the whole
-        // level being overexposed) and cap how strongly it reflects the
-        // scene's environment map, same cap used everywhere else via
-        // normalizeMaterials — this material is built directly rather
-        // than loaded from a GLTF, so it never went through that shared
-        // fix.
+        // Darkened and capped envMapIntensity — same fix normalizeMaterials
+        // applies to GLTFs, done manually since this isn't loaded from one.
         color: 0xcccccc,
         envMapIntensity: 0.4,
       });
@@ -98,8 +84,6 @@ export default class LevelLoader {
   async buildBuildingsAndNPCs(buildingsData = [], npcsData = [], hillsData = []) {
     const worldCheck = this.physicsWorld?.world || this.physicsWorld;
     if (!worldCheck) {
-      // If this fires, every structure below is spawned visually but with
-      // no collider.
       console.warn(
         "[LevelLoader] physicsWorld is missing — structures will have no collider.",
       );
@@ -122,9 +106,7 @@ export default class LevelLoader {
         if (b.type.includes("hill") || b.type === "block_grass_large") {
           glbPath = MAP_MODELS.blockGrassLarge;
         } else if (b.type.includes("toad_house")) {
-          // NOTE: every Toad House variant currently shares the same red
-          // model file. If "toad_house_blue" appears in the JSON, it will
-          // still render red.
+          // Every Toad House variant currently shares this same red model.
           glbPath = MAP_MODELS.toadHouseRed;
         } else {
           glbPath = `${BUILDING_MODEL_DIR}${b.type}.glb`;
@@ -151,9 +133,8 @@ export default class LevelLoader {
       }
     }
 
-    // Returned to the caller (see GameLevel.loadLevel's this.npcs) so
-    // main.js can look NPCs up by type and register their interactions
-    // (e.g. Toad's quest dialogue) — see js/interactions/.
+    // Returned so main.js can look NPCs up by type and register their
+    // interactions (e.g. Toad's quest dialogue) — see js/interactions/.
     const npcInstances = [];
 
     for (const npc of npcsData) {
@@ -162,10 +143,8 @@ export default class LevelLoader {
         const mesh = glb.scene.clone();
         normalizeMaterials(mesh);
 
-        // BUG FIX (missing NPC collision): a bare mesh here used to mean
-        // nothing stopped the player from walking straight through an NPC
-        // (Toad, ...) — NPC gives it the same static box-collider treatment
-        // ToadHouse.js already uses for its own structure. See NPC.js.
+        // Static box collider (see NPC.js) — without it nothing stopped
+        // the player from walking straight through an NPC.
         const instance = new NPC(mesh, this.physicsWorld, npc);
         this.scene.add(instance.mesh);
         npcInstances.push(instance);

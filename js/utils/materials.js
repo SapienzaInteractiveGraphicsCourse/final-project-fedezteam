@@ -1,21 +1,11 @@
 import * as THREE from "three";
 
 /**
- * Normalizes GLTF-imported materials so they render with correct, vivid
- * colors and sane transparency defaults.
- *
- * AssetLoader.setupModelProperties() already did this for every model
- * loaded through AssetLoader (the characters and enemies), but every other
- * GLTF in the game — coins, stars, mushrooms, "?" blocks, buildings, hills,
- * NPCs, palm trees, flowers, warp stars — is loaded through a raw
- * GLTFLoader instance instead (see GameLevel/Decorations/Collectibles/
- * LevelLoader) and never got this fix. The main symptom: an un-flagged
- * base color texture gets treated as linear data instead of sRGB, which
- * renders it noticeably darker/duller than intended — this is what was
- * making coins and stars look almost black in-game despite looking bright
- * gold in a model viewer.
- *
- * @param {THREE.Object3D} object3D - root of the hierarchy to normalize.
+ * Normalizes GLTF-imported materials for correct color and transparency.
+ * AssetLoader already did this for characters/enemies; everything else
+ * (coins, stars, buildings, NPCs, ...) loads through a raw GLTFLoader and
+ * needs it applied here — mainly the sRGB color-space flag that was making
+ * bright-gold models render almost black.
  */
 export function normalizeMaterials(object3D) {
   if (!object3D) return;
@@ -28,8 +18,7 @@ export function normalizeMaterials(object3D) {
     materials.forEach((mat) => {
       const matName = mat.name ? mat.name.toLowerCase() : "";
 
-      // Eye materials (mainly character models): keep them transparent so
-      // the white/iris layering reads correctly, and never self-shadow.
+      // Eye materials: transparent, no self-shadow, so iris layering reads.
       if (matName.includes("eye")) {
         mat.visible = true;
         mat.transparent = true;
@@ -48,17 +37,8 @@ export function normalizeMaterials(object3D) {
         mat.map.colorSpace = THREE.SRGBColorSpace;
       }
 
-      // Second safety net for the same "renders almost black" problem: the
-      // glTF spec defaults an unset metallicFactor to 1.0 (fully metallic)
-      // and unset roughnessFactor to 1.0. Several of this project's item
-      // models (coin.glb, star.glb, ...) never set these explicitly, so
-      // they import as fully metallic + fully rough — with no diffuse
-      // response and barely any visible specular, that's essentially
-      // black regardless of lighting. This low-poly Mario-style art was
-      // never meant to look like photorealistic chrome, so clamping is a
-      // safe, conservative choice project-wide (RendererManager's new
-      // environment map is the other half of this fix — this clamp makes
-      // sure these models still look right even if that weren't enough).
+      // glTF defaults unset metallic/roughness to 1.0, rendering near-black.
+      // Clamped since this low-poly art was never meant to look like chrome.
       if (mat.metalness !== undefined && mat.metalness > 0.5) {
         mat.metalness = 0.35;
       }
@@ -66,9 +46,8 @@ export function normalizeMaterials(object3D) {
         mat.roughness = 0.35;
       }
 
-      // Tone down how strongly the environment map (see RendererManager)
-      // reflects off every material — full-strength (the default 1) was
-      // part of what was reading as overexposed. Was 0.6, lowered further.
+      // Tone down environment-map reflection (see RendererManager) — full
+      // strength was part of what read as overexposed.
       if (mat.envMapIntensity !== undefined) {
         mat.envMapIntensity = 0.4;
       }

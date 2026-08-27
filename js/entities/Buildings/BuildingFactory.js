@@ -3,16 +3,8 @@ import HillBlock from "./HillBlock.js";
 import ToadHouse from "./ToadHouse.js";
 
 export default class BuildingFactory {
-  /**
-   * Creates the correct wrapper class (mesh + physics body) for a given
-   * building/structure type coming from the level JSON.
-   *
-   * @param {string} type - e.g. "mario_house", "toad_house_red", "hill"
-   * @param {THREE.Object3D} mesh - already loaded/cloned GLB scene
-   * @param {*} physicsEngine - the physics world wrapper (must expose `.world` or be the world itself)
-   * @param {object} data - raw entry from level JSON (position, scale, rotation, ...)
-   * @returns {object|null} the created instance, or null if the type is unknown
-   */
+  // Creates the wrapper class (mesh + physics body) for a building type
+  // coming from the level JSON. Returns null if the type is unknown.
   static create(type, mesh, physicsEngine, data) {
     switch (type) {
       case "mario_house":

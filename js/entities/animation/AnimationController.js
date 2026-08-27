@@ -3,31 +3,18 @@ import BoneMap from "./BoneMap.js";
 import { buildCharacterClips } from "./clipFactory.js";
 
 /**
- * AnimationController.js — per-character animation state machine.
- *
- * Owns the AnimationMixer, keeps one action per state, and cross-fades
- * between states. The state is inferred from the character's motion: it
- * never touches physics or input, so enabling/disabling it doesn't change
- * how the player is driven in the slightest.
- *
- * If the model's skeleton isn't usable (see BoneMap.isUsable), the whole
- * controller stays inert — the game keeps working exactly as before, just
- * without a walk cycle. That's a deliberately silent failure mode: no
- * console error, no blocked loading screen.
+ * AnimationController.js — per-character animation state machine. Owns
+ * the AnimationMixer, cross-fades between motion-derived states, and
+ * never touches physics/input. Stays silently inert (no error) if the
+ * model's skeleton isn't usable (BoneMap.isUsable) — no walk cycle, but
+ * the game still works.
  */
 export default class AnimationController {
-  // Builds the mixer and BoneMap for `root`, and — if the skeleton is
-  // usable — snapshots the bind pose and builds every clip immediately.
-  // @param {THREE.Object3D} root - the model's scene graph (must contain the bones)
-  // @param {object} [opts]
-  // @param {number} [opts.runSpeed] - speed above which the state becomes "run"
+  // opts.buildClips: which clip set to build (default full idle/walk/run/
+  // jump/fall; Yoshi passes buildYoshiClips). opts.runSpeed: run threshold.
   constructor(root, opts = {}) {
     this.root = root;
 
-    // Which clip set to build. Defaults to the full character one
-    // (idle/walk/run/jump/fall/...); Yoshi passes buildYoshiClips, which
-    // animates his legs and leaves the rest of him alone. Anything with the
-    // same shape — boneMap in, {name: AnimationClip} out — works here.
     this._buildClips = opts.buildClips || buildCharacterClips;
     this.mixer = new THREE.AnimationMixer(root);
     this.boneMap = new BoneMap(root);
@@ -35,26 +22,22 @@ export default class AnimationController {
     this.actions = {};
     this.current = null;
 
-    // While locked, update() advances the mixer but stops choosing states
-    // from the character's motion — see lock().
+    // While locked, update() advances the mixer but stops picking states
+    // from motion — see lock().
     this._locked = false;
 
-    // See the file header: an unusable skeleton leaves the controller
-    // inert rather than throwing.
     this.enabled = this.boneMap.isUsable;
 
     this.walkSpeed = opts.walkSpeed ?? 2.0;
     this.runSpeed = opts.runSpeed ?? 12.0;
 
     if (this.enabled) {
-      // Clips are built by reading the bones' WORLD positions/orientations
-      // in bind pose, so world matrices must be current first.
+      // Clips read bone WORLD positions in bind pose, so world matrices
+      // must be current first.
       root.updateMatrixWorld(true);
 
-      // Snapshot of the resting pose, taken NOW before any animation has
-      // touched the bones. Without it, a later rebuild() would read the
-      // ANIMATED pose as if it were the bind pose, and each re-tuning pass
-      // would compound deformation on top of the last.
+      // Snapshot of the resting pose, taken before any animation runs — else
+      // rebuild() would treat an animated pose as bind and compound it.
       this._bindPose = [];
       root.traverse((n) => {
         if (n.isBone) {
@@ -70,8 +53,8 @@ export default class AnimationController {
     }
   }
 
-  // Builds one AnimationMixer action per clip from clipFactory, marking
-  // the held poses as one-shots that stay on their last frame.
+  // Builds one action per clip; "jump"/"charge" are held poses (play once,
+  // clamp on last frame) rather than looping cycles.
   _buildActions() {
     const clips = this._buildClips(this.boneMap);
 
@@ -79,10 +62,6 @@ export default class AnimationController {
       const action = this.mixer.clipAction(clip);
 
       if (name === "jump" || name === "charge") {
-        // Both are held poses rather than cycles: they play once and stay
-        // on their last frame. The takeoff would otherwise "bounce" while
-        // the character is still airborne, and a boss' wind-up has to sit
-        // still for as long as it keeps charging.
         action.setLoop(THREE.LoopOnce, 1);
         action.clampWhenFinished = true;
       }
@@ -90,9 +69,7 @@ export default class AnimationController {
     }
   }
 
-  // Cross-fades into a named state's action, fading the previous one out.
-  // @param {string} name
-  // @param {number} [fade] - crossfade duration, in seconds
+  // Cross-fades into a named state, fading the previous one out.
   play(name, fade = 0.18) {
     if (!this.enabled) return;
 
@@ -111,13 +88,8 @@ export default class AnimationController {
     this.current = name;
   }
 
-  // Picks the right state from the character's current motion and plays
-  // it, then advances the mixer by `delta`.
-  // @param {number} delta
-  // @param {object} motion
-  // @param {number} motion.speed - horizontal speed
-  // @param {number} motion.verticalVelocity
-  // @param {boolean} motion.grounded
+  // Picks a state from `motion` ({speed, verticalVelocity, grounded}) and
+  // plays it, then advances the mixer by `delta`.
   update(delta, motion) {
     if (!this.enabled) return;
 
@@ -133,8 +105,7 @@ export default class AnimationController {
 
       this.play(state);
 
-      // The step rate follows the real speed, so the character never
-      // "skates": slowing down also slows the walk cycle.
+      // Step rate follows real speed so the character never "skates".
       if (state === "walk" || state === "run") {
         const reference = state === "run" ? this.runSpeed : this.walkSpeed * 2.2;
         const ratio = THREE.MathUtils.clamp(speed / reference, 0.55, 1.8);
@@ -145,29 +116,20 @@ export default class AnimationController {
     this.mixer.update(delta);
   }
 
-  /**
-   * Holds one state on screen until unlock(), ignoring whatever the motion
-   * passed to update() would otherwise select.
-   *
-   * For a pose the game logic owns rather than the character's movement:
-   * Bowser's fire-breathing wind-up (see Bowser.js) has to stay put even
-   * though he is standing perfectly still while he charges, which the state
-   * machine would quite reasonably call "idle". Safe to call every frame —
-   * play() ignores a request for the state already running.
-   */
+  // Holds one state until unlock(), ignoring update()'s motion pick — used
+  // for a game-owned pose (Bowser's wind-up). Safe to call every frame.
   lock(name) {
     if (!this.enabled) return;
     this.play(name);
     this._locked = true;
   }
 
-  // Hands the state back to update()'s motion-driven choice, which
-  // cross-fades out of the held pose on the next frame.
+  // Hands control back to update()'s motion-driven pick.
   unlock() {
     this._locked = false;
   }
 
-  // Resets every bone back to exactly its recorded bind pose.
+  // Resets every bone to its recorded bind pose.
   restoreBindPose() {
     if (!this._bindPose) return;
     for (const s of this._bindPose) {
@@ -177,9 +139,8 @@ export default class AnimationController {
     this.root.updateMatrixWorld(true);
   }
 
-  // Rebuilds every clip after POSE values changed (used for live/by-eye
-  // tuning). Restores the bind pose first so the new clips aren't computed
-  // starting from an already-animated skeleton.
+  // Rebuilds every clip after POSE values changed (live tuning). Restores
+  // bind pose first so clips aren't computed from an animated skeleton.
   rebuild() {
     if (!this.enabled) return;
 
