@@ -88,5 +88,7 @@ Built on [Three.js](https://threejs.org/) and [cannon-es](https://pmndrs.github.
 
 ## Authors
 
-- **Alessandro Brighenti**
-- **Lorenzo Francescotti**
+| Student | Matricola |
+| :--- | :--- |
+| **Alessandro Brighenti** | 1783767 |
+| **Lorenzo Francescotti** | 1956162 |
