@@ -1,4 +1,11 @@
-import { getStoredMuteState, setStoredMuteState } from "../utils/storage.js";
+import {
+  getStoredMuteState,
+  setStoredMuteState,
+  getStoredCameraInvertX,
+  setStoredCameraInvertX,
+  getStoredCameraInvertY,
+  setStoredCameraInvertY,
+} from "../utils/storage.js";
 import { assetUrl } from "../core/Assets/basePath.js";
 
 export default class UIManager {
@@ -118,6 +125,32 @@ export default class UIManager {
         }
 
         if (this.onMuteToggle) this.onMuteToggle(this.isMuted);
+      });
+    }
+
+    // --- CAMERA INVERT TOGGLES / LOCALSTORAGE LOGIC ---
+    // Read directly by CameraManager every frame (see storage.js), so all
+    // this button needs to do is flip + persist the flag.
+    this.btnInvertCamX = document.getElementById("btn-invert-cam-x");
+    this.btnInvertCamY = document.getElementById("btn-invert-cam-y");
+
+    this.isCameraInvertedX = getStoredCameraInvertX();
+    this.isCameraInvertedY = getStoredCameraInvertY();
+    this._updateCameraInvertButtonsUI();
+
+    if (this.btnInvertCamX) {
+      this.btnInvertCamX.addEventListener("click", () => {
+        this.isCameraInvertedX = !this.isCameraInvertedX;
+        setStoredCameraInvertX(this.isCameraInvertedX);
+        this._updateCameraInvertButtonsUI();
+      });
+    }
+
+    if (this.btnInvertCamY) {
+      this.btnInvertCamY.addEventListener("click", () => {
+        this.isCameraInvertedY = !this.isCameraInvertedY;
+        setStoredCameraInvertY(this.isCameraInvertedY);
+        this._updateCameraInvertButtonsUI();
       });
     }
 
@@ -568,6 +601,15 @@ export default class UIManager {
   _updateMuteButtonUI() {
     if (this.btnMute) {
       this.btnMute.innerText = this.isMuted ? "🔇 MUTED" : "🔊 UNMUTED";
+    }
+  }
+
+  _updateCameraInvertButtonsUI() {
+    if (this.btnInvertCamX) {
+      this.btnInvertCamX.innerText = this.isCameraInvertedX ? "INVERTED" : "NORMAL";
+    }
+    if (this.btnInvertCamY) {
+      this.btnInvertCamY.innerText = this.isCameraInvertedY ? "INVERTED" : "NORMAL";
     }
   }
 

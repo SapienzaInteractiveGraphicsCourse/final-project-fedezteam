@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { getStoredCameraInvertX, getStoredCameraInvertY } from "../../utils/storage.js";
 
 /**
  * Third-person follow camera, two modes picked per frame like Player's
@@ -56,10 +57,16 @@ export default class CameraManager {
 
     let isManualControl = false;
 
-    if (inputManager.isPressed("j")) { this.cameraAngleX -= this.camRotationSpeed * delta; isManualControl = true; }
-    if (inputManager.isPressed("l")) { this.cameraAngleX += this.camRotationSpeed * delta; isManualControl = true; }
-    if (inputManager.isPressed("i")) { this.cameraAngleY -= this.camRotationSpeed * delta; isManualControl = true; }
-    if (inputManager.isPressed("k")) { this.cameraAngleY += this.camRotationSpeed * delta; isManualControl = true; }
+    // Pause-menu toggles (see storage.js) — read live each frame so a
+    // toggle applies instantly, no extra wiring needed between UIManager
+    // and this class.
+    const invertX = getStoredCameraInvertX() ? -1 : 1;
+    const invertY = getStoredCameraInvertY() ? -1 : 1;
+
+    if (inputManager.isPressed("j")) { this.cameraAngleX -= invertX * this.camRotationSpeed * delta; isManualControl = true; }
+    if (inputManager.isPressed("l")) { this.cameraAngleX += invertX * this.camRotationSpeed * delta; isManualControl = true; }
+    if (inputManager.isPressed("i")) { this.cameraAngleY -= invertY * this.camRotationSpeed * delta; isManualControl = true; }
+    if (inputManager.isPressed("k")) { this.cameraAngleY += invertY * this.camRotationSpeed * delta; isManualControl = true; }
 
     const isMoving =
         inputManager.isPressed("w") || inputManager.isPressed("arrowup") ||
