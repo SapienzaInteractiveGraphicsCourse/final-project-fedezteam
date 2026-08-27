@@ -19,7 +19,35 @@
  * /<repo>/ on GitHub Pages. Write the entries themselves as plain relative
  * paths; the resolution is the module's job, not the reader's.
  */
+import * as THREE from "three";
 import { assetUrl } from "./basePath.js";
+
+// Every model/texture loader in the game (AssetLoader's and GameLevel's
+// GLTFLoaders, and every ad-hoc THREE.TextureLoader across Renderer.js,
+// Decorations.js, LevelLoader.js, EndingZone.js, BossArena.js) is
+// constructed with no manager argument, so all of them share
+// THREE.DefaultLoadingManager. Setting the URL modifier once, here, is
+// therefore enough to cover every texture request in the game — including
+// ones this file never even sees, like a "Textures/colormap.png" URI baked
+// directly inside a .glb's own material definition (resolved via
+// GameLevel's resourcePath, not through this file at all — see
+// block-grass-large.glb, whose exported material referenced the
+// capitalized folder name and 404'd on GitHub Pages).
+//
+// WHY. GitHub Pages is case-sensitive; the folder on disk is lowercase
+// "textures/", same convention as its siblings (audio/, images/, levels/,
+// models/). Nothing stops a future Blender export, or a stray manual
+// rename, from baking in a different casing again — that's exactly what
+// happened with the HillBlocks grass texture. Rather than chasing every
+// offending reference by hand each time it happens, this normalizes ANY
+// casing of that one path segment to the canonical lowercase form before
+// the browser ever fetches it, so the actual on-disk folder only has to be
+// right in one place for every loader, present and future, to keep
+// working — see the matching NPC_MODEL_DIR comment below for the same
+// class of bug, hit once already on that folder.
+THREE.DefaultLoadingManager.setURLModifier((url) => {
+  return url.replace(/\/[Tt]extures?(?=\/)/, "/textures");
+});
 
 const MODELS_ROOT = assetUrl("assets/models/Super_Mario");
 
@@ -108,12 +136,12 @@ export const BUILDING_MODEL_DIR = `${MODELS_ROOT}/Map/`;
 export const NPC_MODEL_DIR = `${MODELS_ROOT}/npc/`;
 
 export const TEXTURES = {
-  skyBox: assetUrl("assets/Textures/sky/skyBox.png"),
-  groundGrass: assetUrl("assets/Textures/field/grass2.jpg"),
-  colorMap: assetUrl("assets/Textures/colormap.png"),
-  planetColor: assetUrl("assets/Textures/planet/planet_color.png"),
-  planetNormal: assetUrl("assets/Textures/planet/planet_normal.png"),
-  planetRoughness: assetUrl("assets/Textures/planet/planet_roughness.png"),
+  skyBox: assetUrl("assets/textures/sky/skyBox.png"),
+  groundGrass: assetUrl("assets/textures/field/grass2.jpg"),
+  colorMap: assetUrl("assets/textures/colormap.png"),
+  planetColor: assetUrl("assets/textures/planet/planet_color.png"),
+  planetNormal: assetUrl("assets/textures/planet/planet_normal.png"),
+  planetRoughness: assetUrl("assets/textures/planet/planet_roughness.png"),
   // Kamek's logo, overlaid as a small plane on the Kamek sign prop (see
   // Decorations.spawnKamekSigns). The source file the user dropped in,
   // assets/images/kamek.png, is actually a JPEG despite the extension (no
