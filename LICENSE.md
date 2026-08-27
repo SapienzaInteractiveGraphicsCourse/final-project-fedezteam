@@ -22,10 +22,11 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Fire Flower**: Created by [Yanez-Designs](https://sketchfab.com/Yanez-Designs) — [Model Link](https://sketchfab.com/3d-models/fire-flower-super-mario-bros-1465bc069efa437b999669c6db5a01ee)
 - **Go-Kart**: Created by [SamuelTea](https://sketchfab.com/SamuelTea) — [Model Link](https://sketchfab.com/3d-models/go-kart-2338810f0b1e444bace9bd7796b8c9e4)
 - **Star**: Created by [jkimmel694](https://sketchfab.com/jkimmel694) — [Model Link](https://sketchfab.com/3d-models/wii-mario-kart-wii-star-605d03622b334f4695ee7fa5a00d9dc9)
-- **Super Mushroom**: Created by [smarthug](https://sketchfab.com/smarthug) — [Model Link](https://sketchfab.com/3d-models/mario-super-mushroom-bfecb0aee2984ddca543ea90dcb270cc)
+- **Super Mushroom**: Created by [smarthug](https://smarthug.sketchfab.com/) — [Model Link](https://sketchfab.com/3d-models/mario-super-mushroom-bfecb0aee2984ddca543ea90dcb270cc)
 - **Yoshi Egg**: Created by [Yanez-Designs](https://sketchfab.com/Yanez-Designs) — [Model Link](https://sketchfab.com/3d-models/yoshi-egg-2125c39434ed4b3696bdff0a0bdb6fb2)
 - **Warp Pipe**: Created by [vanc3d](https://sketchfab.com/vanc3d) — [Model Link](https://sketchfab.com/3d-models/super-mario-pipe-for-free-470f2e1ef78d4c4bb35969909adf90ce)
-- https://sketchfab.com/3d-models/yoshi-egg-2125c39434ed4b3696bdff0a0bdb6fb2#download
+- **Minecraft Sign**: Created by [Red Fox](https://sketchfab.com/RedFox24) — [Model Link](https://sketchfab.com/3d-models/minecraft-sign-483093c29032437594e86b792dced8d4)
+
 ### Textures & Environments
 - **Skyboxes**: Provided by [Kenney](https://kenney.nl/assets/skyboxes)
 - **Palm Tree**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/3ds-mario-kart-7-palm-tree-4f27fab359e74e9b82c6a061bc782a18)
@@ -34,6 +35,12 @@ All 3D models used in this project are used under the [Creative Commons Attribut
 - **Mario's House Exterior**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/nintendo-64-paper-mario-marios-house-exterio-6eaf1353a8a34de4a9a1d74a41445f2d)
 - **Egg Planet**: Created by [AustinZimmermann](https://sketchfab.com/AustinZimmermann) — [Model Link](https://sketchfab.com/3d-models/egg-planet-8e5dba7af88e487ea61992f804b91eb8)
 - **Grass**: Created by [Quaternius](https://poly.pizza/m/3tyh15Fbmsx) — [Model Link](https://poly.pizza/m/3tyh15Fbmsx) (CC0)
-https://sketchfab.com/3d-models/minecraft-sign-483093c29032437594e86b792dced8d4
-https://sounds.spriters-resource.com/wii/supermariogalaxy/asset/395356/
-https://sounds.spriters-resource.com/wii/supermariogalaxy/asset/395355/
+
+---
+
+## 🎵 Audio & SFX Credits
+
+All audio assets, sound effects, and music are property of **Nintendo** and are used non-commercially under fair use / educational purposes.
+
+- **Super Mario Galaxy Sound Effects**: Sourced via [The Sounds Resource](https://sounds.spriters-resource.com/wii/supermariogalaxy/asset/395356/)
+- **Super Mario 64 Remastered Soundtrack**: Sourced via [KHInsider](https://downloads.khinsider.com/game-soundtracks/album/super-mario-64-remastered-soundtrack)
